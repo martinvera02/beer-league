@@ -171,9 +171,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         {selectedLeague && (
           <div className="flex bg-gray-800 rounded-xl p-1">
             {[
-              { id: 'ranking',  label: '🏆 Ranking' },
-              { id: 'members',  label: '👥 Miembros' },
-              { id: 'chat',     label: '💬 Chat' },
+              { id: 'ranking', label: '🏆 Ranking' },
+              { id: 'members', label: '👥 Miembros' },
+              { id: 'chat',    label: '💬 Chat' },
             ].map(t => (
               <button
                 key={t.id}
@@ -204,16 +204,49 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             <div className="space-y-3 pt-4">
               {rankings.map((entry, index) => {
                 const isMe = entry.user_id === user.id
+
+                const drinkCounts = (entry.drinks_detail || []).reduce((acc, d) => {
+                  const key = d.name
+                  if (!acc[key]) acc[key] = { emoji: d.emoji, count: 0 }
+                  acc[key].count += 1
+                  return acc
+                }, {})
+
                 return (
-                  <div key={entry.user_id} className={`rounded-2xl p-4 flex items-center gap-4 ${isMe ? 'bg-amber-500' : 'bg-gray-900'}`}>
-                    <span className="text-2xl w-8 text-center">{medals[index] || `${index + 1}`}</span>
-                    <div className="flex-1">
-                      <p className="font-bold">{entry.username} {isMe && '(tú)'}</p>
-                      <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>{entry.total_drinks} consumiciones</p>
+                  <div key={entry.user_id} className={`rounded-2xl p-4 ${isMe ? 'bg-amber-500' : 'bg-gray-900'}`}>
+
+                    {/* Fila principal */}
+                    <div className="flex items-center gap-4 mb-3">
+                      <span className="text-2xl w-8 text-center">{medals[index] || `${index + 1}`}</span>
+                      <div className="flex-1">
+                        <p className="font-bold">{entry.username} {isMe && '(tú)'}</p>
+                        <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>
+                          {entry.total_drinks} consumiciones
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>
+                          {entry.total_points}
+                        </p>
+                        <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>puntos</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>{entry.total_points}</p>
-                      <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>puntos</p>
+
+                    {/* Desglose por bebida */}
+                    <div className={`flex flex-wrap gap-2 pt-2 border-t ${isMe ? 'border-amber-400' : 'border-gray-800'}`}>
+                      {Object.entries(drinkCounts)
+                        .sort(([, a], [, b]) => b.count - a.count)
+                        .map(([name, { emoji, count }]) => (
+                          <div
+                            key={name}
+                            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                              isMe ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-300'
+                            }`}
+                          >
+                            <span>{emoji}</span>
+                            <span>{count}</span>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 )
@@ -264,9 +297,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               Object.entries(groupedMessages).map(([date, msgs]) => (
                 <div key={date}>
                   <div className="flex items-center gap-3 my-4">
-                    <div className="flex-1 h-px bg-gray-800"/>
+                    <div className="flex-1 h-px bg-gray-800" />
                     <span className="text-xs text-gray-500">{formatDate(msgs[0].created_at)}</span>
-                    <div className="flex-1 h-px bg-gray-800"/>
+                    <div className="flex-1 h-px bg-gray-800" />
                   </div>
                   {msgs.map((msg, index) => {
                     const isMe = msg.user_id === user.id
@@ -293,7 +326,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
+          {/* Input chat */}
           <div className="px-4 py-3 pb-24 border-t border-gray-800 flex-shrink-0">
             <div className="flex gap-2 items-end">
               <textarea
