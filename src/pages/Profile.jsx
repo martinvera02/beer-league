@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -7,13 +7,13 @@ export default function Profile() {
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+  const fileInputRef = useRef(null)
 
-  useEffect(() => {
-    fetchProfile()
-  }, [])
+  useEffect(() => { fetchProfile() }, [])
 
   const fetchProfile = async () => {
     const [{ data: profileData }, { data: drinksData }] = await Promise.all([
@@ -36,19 +36,48 @@ export default function Profile() {
     setLoading(false)
   }
 
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setUploadingAvatar(true)
+    setError('')
+
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/avatar.${ext}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true })
+
+    if (uploadError) {
+      setError('Error al subir la imagen')
+      setUploadingAvatar(false)
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(path)
+
+    await supabase.from('profiles')
+      .update({ avatar_url: publicUrl })
+      .eq('id', user.id)
+
+    setProfile(prev => ({ ...prev, avatar_url: publicUrl }))
+    setUploadingAvatar(false)
+  }
+
   const handleDeleteAccount = async () => {
     setDeleting(true)
     setError('')
-
     const { error } = await supabase.rpc('delete_user')
-
     if (error) {
       setError('Error al eliminar la cuenta: ' + error.message)
       setDeleting(false)
       setShowConfirm(false)
       return
     }
-
     await logout()
   }
 
@@ -64,14 +93,43 @@ export default function Profile() {
 
         <h1 className="text-2xl font-bold mb-6">Tu perfil 👤</h1>
 
-        {/* Tarjeta de usuario */}
+        {/* Tarjeta de usuario con avatar */}
         <div className="bg-gray-900 rounded-2xl p-6 mb-4 text-center">
-          <div className="text-6xl mb-3">🍺</div>
+          <div className="relative inline-block mb-3">
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt="Avatar"
+                className="w-24 h-24 rounded-full object-cover border-4 border-amber-500"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-gray-700 border-4 border-gray-600 flex items-center justify-center text-4xl">
+                🍺
+              </div>
+            )}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute bottom-0 right-0 bg-amber-500 hover:bg-amber-400 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm transition-colors"
+            >
+              {uploadingAvatar ? '⏳' : '📷'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+          </div>
           <p className="text-xl font-bold">{profile?.username}</p>
           <p className="text-gray-500 text-sm">{user.email}</p>
+          <p className="text-xs text-gray-600 mt-1">
+            {uploadingAvatar ? 'Subiendo imagen...' : 'Toca 📷 para cambiar tu foto'}
+          </p>
         </div>
 
-        {/* Stats globales */}
+        {/* Stats */}
         {stats && (
           <>
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -85,7 +143,6 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Desglose por bebida */}
             <div className="bg-gray-900 rounded-2xl p-4 mb-6">
               <p className="text-sm text-gray-400 mb-3 font-medium">Desglose por bebida</p>
               {Object.entries(stats.byType).length === 0 ? (
@@ -93,7 +150,7 @@ export default function Profile() {
               ) : (
                 <div className="space-y-2">
                   {Object.entries(stats.byType)
-                    .sort(([,a], [,b]) => b - a)
+                    .sort(([, a], [, b]) => b - a)
                     .map(([name, count]) => (
                       <div key={name} className="flex justify-between items-center">
                         <span className="text-gray-300 text-sm">{name}</span>
@@ -123,10 +180,9 @@ export default function Profile() {
         >
           Eliminar cuenta 🗑️
         </button>
-
       </div>
 
-      {/* Modal de confirmación */}
+      {/* Modal confirmación */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm">

@@ -10,9 +10,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [tab, setTab] = useState('ranking')
   const [loading, setLoading] = useState(true)
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const bottomRef = useRef(null)
+  const imageInputRef = useRef(null)
 
   useEffect(() => { fetchLeagues() }, [])
 
@@ -29,10 +32,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `league_id=eq.${selectedLeague.id}` },
         async (payload) => {
           const { data: profile } = await supabase
-            .from('profiles').select('username').eq('id', payload.new.user_id).single()
+            .from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
           setMessages(prev => [...prev, {
             ...payload.new,
-            profiles: { username: profile?.username || 'Desconocido' }
+            profiles: { username: profile?.username || 'Desconocido', avatar_url: profile?.avatar_url }
           }])
         }
       )
@@ -68,7 +71,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchMembers = async (leagueId) => {
     const { data } = await supabase
       .from('league_members')
-      .select('joined_at, profiles(id, username)')
+      .select('joined_at, profiles(id, username, avatar_url)')
       .eq('league_id', leagueId)
       .order('joined_at', { ascending: true })
     setMembers(data?.map(m => ({ ...m.profiles, joined_at: m.joined_at })) || [])
@@ -77,7 +80,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchMessages = async (leagueId) => {
     const { data } = await supabase
       .from('messages')
-      .select('*, profiles(username)')
+      .select('*, profiles(username, avatar_url)')
       .eq('league_id', leagueId)
       .order('created_at', { ascending: true })
       .limit(100)
@@ -94,6 +97,35 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     })
     setNewMessage('')
     setSending(false)
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file || !selectedLeague) return
+
+    setUploadingImage(true)
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/${Date.now()}.${ext}`
+
+    const { error } = await supabase.storage
+      .from('chat-images')
+      .upload(path, file)
+
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(path)
+
+      await supabase.from('messages').insert({
+        league_id: selectedLeague.id,
+        user_id: user.id,
+        content: '',
+        image_url: publicUrl,
+      })
+    }
+
+    setUploadingImage(false)
+    e.target.value = ''
   }
 
   const handleKeyDown = (e) => {
@@ -124,6 +156,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
   const medals = ['🥇', '🥈', '🥉']
 
+  const Avatar = ({ url, username, size = 'sm' }) => {
+    const dim = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-base'
+    return url ? (
+      <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
+    ) : (
+      <div className={`${dim} rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0`}>
+        🍺
+      </div>
+    )
+  }
+
   return (
     <div className={`text-white flex flex-col bg-gray-950 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`}>
 
@@ -132,7 +175,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         <h1 className="text-2xl font-bold mb-1">Liga 🏆</h1>
         <p className="text-gray-400 text-sm mb-4">¿Quién va ganando?</p>
 
-        {/* Selector de liga */}
         {leagues.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-4">
             {leagues.map(league => (
@@ -151,7 +193,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* ID para compartir */}
         {selectedLeague && (
           <div className="bg-gray-900 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between">
             <div>
@@ -167,7 +208,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Pestañas */}
         {selectedLeague && (
           <div className="flex bg-gray-800 rounded-xl p-1">
             {[
@@ -204,20 +244,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             <div className="space-y-3 pt-4">
               {rankings.map((entry, index) => {
                 const isMe = entry.user_id === user.id
-
                 const drinkCounts = (entry.drinks_detail || []).reduce((acc, d) => {
-                  const key = d.name
-                  if (!acc[key]) acc[key] = { emoji: d.emoji, count: 0 }
-                  acc[key].count += 1
+                  if (!acc[d.name]) acc[d.name] = { emoji: d.emoji, count: 0 }
+                  acc[d.name].count += 1
                   return acc
                 }, {})
 
                 return (
                   <div key={entry.user_id} className={`rounded-2xl p-4 ${isMe ? 'bg-amber-500' : 'bg-gray-900'}`}>
-
-                    {/* Fila principal */}
-                    <div className="flex items-center gap-4 mb-3">
+                    <div className="flex items-center gap-3 mb-3">
                       <span className="text-2xl w-8 text-center">{medals[index] || `${index + 1}`}</span>
+                      <Avatar url={entry.avatar_url} username={entry.username} size="md" />
                       <div className="flex-1">
                         <p className="font-bold">{entry.username} {isMe && '(tú)'}</p>
                         <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>
@@ -231,8 +268,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                         <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>puntos</p>
                       </div>
                     </div>
-
-                    {/* Desglose por bebida */}
                     <div className={`flex flex-wrap gap-2 pt-2 border-t ${isMe ? 'border-amber-400' : 'border-gray-800'}`}>
                       {Object.entries(drinkCounts)
                         .sort(([, a], [, b]) => b.count - a.count)
@@ -265,10 +300,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               const isOwner = selectedLeague?.created_by === member.id
               return (
                 <div key={member.id} className={`rounded-2xl p-4 flex items-center gap-4 ${isMe ? 'bg-gray-800 border border-amber-500' : 'bg-gray-900'}`}>
-                  <div className="text-3xl">{isOwner ? '👑' : '🍺'}</div>
+                  <Avatar url={member.avatar_url} username={member.username} size="md" />
                   <div className="flex-1">
                     <p className="font-bold">{member.username} {isMe && '(tú)'}</p>
-                    <p className="text-xs text-gray-500">{isOwner ? 'Creador de la liga' : 'Miembro'}</p>
+                    <p className="text-xs text-gray-500">{isOwner ? '👑 Creador de la liga' : 'Miembro'}</p>
                   </div>
                 </div>
               )
@@ -305,17 +340,49 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     const isMe = msg.user_id === user.id
                     const isSameUser = msgs[index - 1]?.user_id === msg.user_id
                     return (
-                      <div key={msg.id} className={`flex mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                      <div key={msg.id} className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {/* Avatar izquierda para mensajes ajenos */}
+                        {!isMe && (
+                          <div className="flex-shrink-0 self-end">
+                            {!isSameUser ? (
+                              <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} size="sm" />
+                            ) : (
+                              <div className="w-8" />
+                            )}
+                          </div>
+                        )}
+
                         <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                           {!isMe && !isSameUser && (
                             <span className="text-xs text-amber-400 font-medium mb-1 ml-1">
                               {msg.profiles?.username}
                             </span>
                           )}
-                          <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-amber-500 text-white rounded-br-sm' : 'bg-gray-800 text-white rounded-bl-sm'}`}>
-                            {msg.content}
-                          </div>
-                          <span className="text-xs text-gray-600 mt-0.5 mx-1">{formatTime(msg.created_at)}</span>
+
+                          {/* Imagen */}
+                          {msg.image_url && (
+                            <img
+                              src={msg.image_url}
+                              alt="Imagen"
+                              onClick={() => setLightboxUrl(msg.image_url)}
+                              className={`max-w-52 rounded-2xl cursor-pointer object-cover ${
+                                isMe ? 'rounded-br-sm' : 'rounded-bl-sm'
+                              }`}
+                            />
+                          )}
+
+                          {/* Texto */}
+                          {msg.content && (
+                            <div className={`px-4 py-2 rounded-2xl text-sm ${
+                              isMe ? 'bg-amber-500 text-white rounded-br-sm' : 'bg-gray-800 text-white rounded-bl-sm'
+                            }`}>
+                              {msg.content}
+                            </div>
+                          )}
+
+                          <span className="text-xs text-gray-600 mt-0.5 mx-1">
+                            {formatTime(msg.created_at)}
+                          </span>
                         </div>
                       </div>
                     )
@@ -329,6 +396,20 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           {/* Input chat */}
           <div className="px-4 py-3 pb-24 border-t border-gray-800 flex-shrink-0">
             <div className="flex gap-2 items-end">
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors flex-shrink-0"
+              >
+                {uploadingImage ? '⏳' : '📷'}
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
               <textarea
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
@@ -350,6 +431,20 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </div>
           </div>
         </>
+      )}
+
+      {/* Lightbox imagen */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img
+            src={lightboxUrl}
+            alt="Imagen ampliada"
+            className="max-w-full max-h-full rounded-2xl object-contain"
+          />
+        </div>
       )}
     </div>
   )
