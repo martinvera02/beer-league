@@ -1,0 +1,56 @@
+import { useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import Login from './pages/Login'
+import Home from './pages/Home'
+import AddDrink from './pages/AddDrink'
+import Ranking from './pages/Ranking'
+import Profile from './pages/Profile'
+import Navbar from './components/Navbar'
+
+function Dashboard() {
+  const [currentPage, setCurrentPage] = useState('home')
+  const [selectedLeague, setSelectedLeague] = useState(null)
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'home':    return <Home setCurrentPage={setCurrentPage} setSelectedLeague={setSelectedLeague} />
+      case 'add':     return <AddDrink />
+      case 'ranking': return <Ranking selectedLeague={selectedLeague} setSelectedLeague={setSelectedLeague} />
+      case 'profile': return <Profile />
+      default:        return null
+    }
+  }
+
+  return (
+    <div>
+      {renderPage()}
+      <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
+    </div>
+  )
+}
+
+function PrivateRoute({ children }) {
+  const { user } = useAuth()
+  return user ? children : <Navigate to="/login" />
+}
+
+function AppRoutes() {
+  const { user } = useAuth()
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+      <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
