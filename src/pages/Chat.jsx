@@ -9,6 +9,7 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [replyTo, setReplyTo] = useState(null)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -20,7 +21,6 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
 
     fetchMessages(selectedLeague.id)
 
-    // Suscripción realtime
     const channel = supabase
       .channel(`chat:${selectedLeague.id}`)
       .on(
@@ -32,16 +32,28 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
           filter: `league_id=eq.${selectedLeague.id}`,
         },
         async (payload) => {
-          // Obtener el username del nuevo mensaje
           const { data: profile } = await supabase
             .from('profiles')
             .select('username')
             .eq('id', payload.new.user_id)
             .single()
 
+          // obtener mensaje respondido si existe
+          let replyData = null
+          if (payload.new.reply_to) {
+            const { data } = await supabase
+              .from('messages')
+              .select(`id, content, user_id, profiles(username)`)
+              .eq('id', payload.new.reply_to)
+              .single()
+
+            replyData = data
+          }
+
           const fullMessage = {
             ...payload.new,
-            profiles: { username: profile?.username || 'Desconocido' }
+            profiles: { username: profile?.username || 'Desconocido' },
+            reply: replyData
           }
 
           setMessages(prev => [...prev, fullMessage])
@@ -69,9 +81,19 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
 
   const fetchMessages = async (leagueId) => {
     setLoading(true)
+
     const { data } = await supabase
       .from('messages')
-      .select('*, profiles(username)')
+      .select(`
+        *,
+        profiles(username),
+        reply:reply_to (
+          id,
+          content,
+          user_id,
+          profiles(username)
+        )
+      `)
       .eq('league_id', leagueId)
       .order('created_at', { ascending: true })
       .limit(100)
@@ -88,9 +110,11 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
       league_id: selectedLeague.id,
       user_id: user.id,
       content: newMessage.trim(),
+      reply_to: replyTo?.id || null
     })
 
     setNewMessage('')
+    setReplyTo(null)
     setSending(false)
   }
 
@@ -115,7 +139,6 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
     })
   }
 
-  // Agrupar mensajes por fecha
   const groupedMessages = messages.reduce((groups, message) => {
     const date = new Date(message.created_at).toDateString()
     if (!groups[date]) groups[date] = []
@@ -157,12 +180,10 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
           <div className="text-center py-16 text-gray-500">
             <div className="text-5xl mb-3">💬</div>
             <p>Aún no hay mensajes</p>
-            <p className="text-sm mt-1">¡Sé el primero en escribir!</p>
           </div>
         ) : (
           Object.entries(groupedMessages).map(([date, msgs]) => (
             <div key={date}>
-              {/* Separador de fecha */}
               <div className="flex items-center gap-3 my-4">
                 <div className="flex-1 h-px bg-gray-800"/>
                 <span className="text-xs text-gray-500">
@@ -183,20 +204,37 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
                     className={`flex mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+                      
                       {showUsername && (
                         <span className="text-xs text-amber-400 font-medium mb-1 ml-1">
                           {msg.profiles?.username}
                         </span>
                       )}
+
                       <div
-                        className={`px-4 py-2 rounded-2xl text-sm ${
+                        onClick={() => setReplyTo(msg)}
+                        className={`px-4 py-2 rounded-2xl text-sm cursor-pointer ${
                           isMe
                             ? 'bg-amber-500 text-white rounded-br-sm'
                             : 'bg-gray-800 text-white rounded-bl-sm'
                         }`}
                       >
+
+                        {/* Mensaje citado */}
+                        {msg.reply && (
+                          <div className="mb-1 px-2 py-1 rounded bg-black/30 border-l-2 border-amber-400 text-xs">
+                            <span className="text-amber-400 font-medium">
+                              {msg.reply.profiles?.username || 'Usuario'}
+                            </span>
+                            <p className="truncate opacity-80">
+                              {msg.reply.content}
+                            </p>
+                          </div>
+                        )}
+
                         {msg.content}
                       </div>
+
                       <span className="text-xs text-gray-600 mt-0.5 mx-1">
                         {formatTime(msg.created_at)}
                       </span>
@@ -210,31 +248,53 @@ export default function Chat({ selectedLeague, setSelectedLeague }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input mensaje */}
+      {/* Input */}
       <div className="px-4 py-3 pb-24 border-t border-gray-800 flex-shrink-0">
         {!selectedLeague ? (
-          <p className="text-gray-500 text-center text-sm">Selecciona una liga para chatear</p>
+          <p className="text-gray-500 text-center text-sm">
+            Selecciona una liga para chatear
+          </p>
         ) : (
-          <div className="flex gap-2 items-end">
-            <textarea
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Escribe un mensaje..."
-              rows={1}
-              className="flex-1 bg-gray-800 text-white rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
-              style={{ maxHeight: '120px' }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!newMessage.trim() || sending}
-              className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors flex-shrink-0"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-              </svg>
-            </button>
-          </div>
+          <>
+            {/* Preview reply */}
+            {replyTo && (
+              <div className="mb-2 px-3 py-2 bg-gray-800 rounded-xl border-l-4 border-amber-500 flex justify-between items-center">
+                <div className="text-xs">
+                  <span className="text-amber-400 font-medium">
+                    {replyTo.profiles?.username}
+                  </span>
+                  <p className="truncate">{replyTo.content}</p>
+                </div>
+
+                <button
+                  onClick={() => setReplyTo(null)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Escribe un mensaje..."
+                rows={1}
+                className="flex-1 bg-gray-800 text-white rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
+                style={{ maxHeight: '120px' }}
+              />
+
+              <button
+                onClick={sendMessage}
+                disabled={!newMessage.trim() || sending}
+                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl"
+              >
+                ➤
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
