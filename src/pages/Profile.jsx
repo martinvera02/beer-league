@@ -7,6 +7,9 @@ export default function Profile() {
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     fetchProfile()
@@ -31,6 +34,22 @@ export default function Profile() {
     }
 
     setLoading(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true)
+    setError('')
+
+    const { error } = await supabase.rpc('delete_user')
+
+    if (error) {
+      setError('Error al eliminar la cuenta: ' + error.message)
+      setDeleting(false)
+      setShowConfirm(false)
+      return
+    }
+
+    await logout()
   }
 
   if (loading) return (
@@ -87,13 +106,53 @@ export default function Profile() {
           </>
         )}
 
+        {error && (
+          <p className="text-red-400 text-sm bg-red-950 rounded-lg px-4 py-2 mb-4">{error}</p>
+        )}
+
         <button
           onClick={logout}
-          className="w-full bg-gray-800 hover:bg-red-900 text-gray-300 hover:text-red-300 font-semibold py-3 rounded-2xl transition-colors"
+          className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-2xl transition-colors mb-3"
         >
           Cerrar sesión 🚪
         </button>
+
+        <button
+          onClick={() => setShowConfirm(true)}
+          className="w-full bg-transparent hover:bg-red-950 text-red-500 hover:text-red-400 font-semibold py-3 rounded-2xl border border-red-900 transition-colors"
+        >
+          Eliminar cuenta 🗑️
+        </button>
+
       </div>
+
+      {/* Modal de confirmación */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-xl font-bold text-white mb-2">¿Eliminar cuenta?</h2>
+            <p className="text-gray-400 text-sm mb-6">
+              Se borrarán todos tus datos, consumiciones y puntos de forma permanente. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                disabled={deleting}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-colors"
+              >
+                {deleting ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
