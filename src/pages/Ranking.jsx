@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
@@ -7,26 +7,49 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [leagues, setLeagues] = useState([])
   const [rankings, setRankings] = useState([])
   const [members, setMembers] = useState([])
+  const [messages, setMessages] = useState([])
+  const [newMessage, setNewMessage] = useState('')
+  const [sending, setSending] = useState(false)
   const [tab, setTab] = useState('ranking')
   const [loading, setLoading] = useState(true)
+  const bottomRef = useRef(null)
+
+  useEffect(() => { fetchLeagues() }, [])
 
   useEffect(() => {
-    fetchLeagues()
-  }, [])
+    if (!selectedLeague) return
+    fetchRanking(selectedLeague.id)
+    fetchMembers(selectedLeague.id)
+    fetchMessages(selectedLeague.id)
 
-  useEffect(() => {
-    if (selectedLeague) {
-      fetchRanking(selectedLeague.id)
-      fetchMembers(selectedLeague.id)
-    }
+    const channel = supabase
+      .channel(`chat:${selectedLeague.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `league_id=eq.${selectedLeague.id}` },
+        async (payload) => {
+          const { data: profile } = await supabase
+            .from('profiles').select('username').eq('id', payload.new.user_id).single()
+          setMessages(prev => [...prev, {
+            ...payload.new,
+            profiles: { username: profile?.username || 'Desconocido' }
+          }])
+        }
+      )
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
   }, [selectedLeague])
+
+  useEffect(() => {
+    if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, tab])
 
   const fetchLeagues = async () => {
     const { data } = await supabase
       .from('league_members')
       .select('league_id, leagues(id, name, created_by)')
       .eq('user_id', user.id)
-
     const userLeagues = data?.map(d => d.leagues) || []
     setLeagues(userLeagues)
     if (!selectedLeague && userLeagues.length > 0) setSelectedLeague(userLeagues[0])
@@ -35,8 +58,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchRanking = async (leagueId) => {
     setLoading(true)
     const { data } = await supabase
-      .from('league_rankings')
-      .select('*')
+      .from('league_rankings').select('*')
       .eq('league_id', leagueId)
       .order('total_points', { ascending: false })
     setRankings(data || [])
@@ -52,25 +74,62 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setMembers(data?.map(m => ({ ...m.profiles, joined_at: m.joined_at })) || [])
   }
 
+  const fetchMessages = async (leagueId) => {
+    const { data } = await supabase
+      .from('messages')
+      .select('*, profiles(username)')
+      .eq('league_id', leagueId)
+      .order('created_at', { ascending: true })
+      .limit(100)
+    setMessages(data || [])
+  }
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedLeague || sending) return
+    setSending(true)
+    await supabase.from('messages').insert({
+      league_id: selectedLeague.id,
+      user_id: user.id,
+      content: newMessage.trim(),
+    })
+    setNewMessage('')
+    setSending(false)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
+
   const leaveLeague = async () => {
     if (!selectedLeague) return
-    await supabase
-      .from('league_members')
-      .delete()
-      .eq('league_id', selectedLeague.id)
-      .eq('user_id', user.id)
+    await supabase.from('league_members').delete()
+      .eq('league_id', selectedLeague.id).eq('user_id', user.id)
     setSelectedLeague(null)
     fetchLeagues()
     setTab('ranking')
   }
 
+  const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+
+  const groupedMessages = messages.reduce((groups, msg) => {
+    const date = new Date(msg.created_at).toDateString()
+    if (!groups[date]) groups[date] = []
+    groups[date].push(msg)
+    return groups
+  }, {})
+
   const medals = ['🥇', '🥈', '🥉']
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-24 px-4 pt-6">
-      <div className="max-w-md mx-auto">
+    <div className={`text-white flex flex-col bg-gray-950 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`}>
 
-        <h1 className="text-2xl font-bold mb-1">Ranking 🏆</h1>
+      {/* Header */}
+      <div className="px-4 pt-6 pb-3 flex-shrink-0">
+        <h1 className="text-2xl font-bold mb-1">Liga 🏆</h1>
         <p className="text-gray-400 text-sm mb-4">¿Quién va ganando?</p>
 
         {/* Selector de liga */}
@@ -108,32 +167,33 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Pestañas ranking / participantes */}
+        {/* Pestañas */}
         {selectedLeague && (
-          <div className="flex bg-gray-800 rounded-xl p-1 mb-6">
-            <button
-              onClick={() => setTab('ranking')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === 'ranking' ? 'bg-amber-500 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              🏆 Ranking
-            </button>
-            <button
-              onClick={() => setTab('members')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === 'members' ? 'bg-amber-500 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              👥 Participantes
-            </button>
+          <div className="flex bg-gray-800 rounded-xl p-1">
+            {[
+              { id: 'ranking',  label: '🏆 Ranking' },
+              { id: 'members',  label: '👥 Miembros' },
+              { id: 'chat',     label: '💬 Chat' },
+            ].map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  tab === t.id ? 'bg-amber-500 text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         )}
+      </div>
 
-        {/* Contenido ranking */}
-        {tab === 'ranking' && (
-          loading ? (
-            <p className="text-gray-500 text-center py-10">Cargando ranking...</p>
+      {/* ── RANKING ── */}
+      {tab === 'ranking' && (
+        <div className="flex-1 overflow-y-auto px-4 pb-24">
+          {loading ? (
+            <p className="text-gray-500 text-center py-10">Cargando...</p>
           ) : rankings.length === 0 ? (
             <div className="text-center py-16 text-gray-500">
               <div className="text-5xl mb-3">🍺</div>
@@ -141,76 +201,123 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <p className="text-sm mt-1">¡Sé el primero en anotar!</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 pt-4">
               {rankings.map((entry, index) => {
                 const isMe = entry.user_id === user.id
                 return (
-                  <div
-                    key={entry.user_id}
-                    className={`rounded-2xl p-4 flex items-center gap-4 ${
-                      isMe ? 'bg-amber-500' : 'bg-gray-900'
-                    }`}
-                  >
-                    <span className="text-2xl w-8 text-center">
-                      {medals[index] || `${index + 1}`}
-                    </span>
+                  <div key={entry.user_id} className={`rounded-2xl p-4 flex items-center gap-4 ${isMe ? 'bg-amber-500' : 'bg-gray-900'}`}>
+                    <span className="text-2xl w-8 text-center">{medals[index] || `${index + 1}`}</span>
                     <div className="flex-1">
                       <p className="font-bold">{entry.username} {isMe && '(tú)'}</p>
-                      <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>
-                        {entry.total_drinks} consumiciones
-                      </p>
+                      <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>{entry.total_drinks} consumiciones</p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>
-                        {entry.total_points}
-                      </p>
+                      <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>{entry.total_points}</p>
                       <p className={`text-xs ${isMe ? 'text-amber-100' : 'text-gray-500'}`}>puntos</p>
                     </div>
                   </div>
                 )
               })}
             </div>
-          )
-        )}
+          )}
+        </div>
+      )}
 
-        {/* Contenido participantes */}
-        {tab === 'members' && (
-          <div className="space-y-3">
+      {/* ── MIEMBROS ── */}
+      {tab === 'members' && (
+        <div className="flex-1 overflow-y-auto px-4 pb-24">
+          <div className="space-y-3 pt-4">
             {members.map(member => {
               const isMe = member.id === user.id
               const isOwner = selectedLeague?.created_by === member.id
               return (
-                <div
-                  key={member.id}
-                  className={`rounded-2xl p-4 flex items-center gap-4 ${
-                    isMe ? 'bg-gray-800 border border-amber-500' : 'bg-gray-900'
-                  }`}
-                >
-                  <div className="text-3xl">
-                    {isOwner ? '👑' : '🍺'}
-                  </div>
+                <div key={member.id} className={`rounded-2xl p-4 flex items-center gap-4 ${isMe ? 'bg-gray-800 border border-amber-500' : 'bg-gray-900'}`}>
+                  <div className="text-3xl">{isOwner ? '👑' : '🍺'}</div>
                   <div className="flex-1">
-                    <p className="font-bold">
-                      {member.username} {isMe && '(tú)'}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {isOwner ? 'Creador de la liga' : 'Miembro'}
-                    </p>
+                    <p className="font-bold">{member.username} {isMe && '(tú)'}</p>
+                    <p className="text-xs text-gray-500">{isOwner ? 'Creador de la liga' : 'Miembro'}</p>
                   </div>
                 </div>
               )
             })}
-
             <button
               onClick={leaveLeague}
-              className="w-full mt-4 bg-transparent hover:bg-red-950 text-red-500 hover:text-red-400 font-semibold py-3 rounded-2xl border border-red-900 transition-colors"
+              className="w-full mt-2 bg-transparent hover:bg-red-950 text-red-500 hover:text-red-400 font-semibold py-3 rounded-2xl border border-red-900 transition-colors"
             >
               Abandonar liga 🚪
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+      {/* ── CHAT ── */}
+      {tab === 'chat' && (
+        <>
+          <div className="flex-1 overflow-y-auto px-4 py-2">
+            {messages.length === 0 ? (
+              <div className="text-center py-16 text-gray-500">
+                <div className="text-5xl mb-3">💬</div>
+                <p>Aún no hay mensajes</p>
+                <p className="text-sm mt-1">¡Sé el primero en escribir!</p>
+              </div>
+            ) : (
+              Object.entries(groupedMessages).map(([date, msgs]) => (
+                <div key={date}>
+                  <div className="flex items-center gap-3 my-4">
+                    <div className="flex-1 h-px bg-gray-800"/>
+                    <span className="text-xs text-gray-500">{formatDate(msgs[0].created_at)}</span>
+                    <div className="flex-1 h-px bg-gray-800"/>
+                  </div>
+                  {msgs.map((msg, index) => {
+                    const isMe = msg.user_id === user.id
+                    const isSameUser = msgs[index - 1]?.user_id === msg.user_id
+                    return (
+                      <div key={msg.id} className={`flex mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                          {!isMe && !isSameUser && (
+                            <span className="text-xs text-amber-400 font-medium mb-1 ml-1">
+                              {msg.profiles?.username}
+                            </span>
+                          )}
+                          <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-amber-500 text-white rounded-br-sm' : 'bg-gray-800 text-white rounded-bl-sm'}`}>
+                            {msg.content}
+                          </div>
+                          <span className="text-xs text-gray-600 mt-0.5 mx-1">{formatTime(msg.created_at)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Input */}
+          <div className="px-4 py-3 pb-24 border-t border-gray-800 flex-shrink-0">
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Escribe un mensaje..."
+                rows={1}
+                className="flex-1 bg-gray-800 text-white rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
+                style={{ maxHeight: '120px' }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!newMessage.trim() || sending}
+                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors flex-shrink-0"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
