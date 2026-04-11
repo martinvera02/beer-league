@@ -1,16 +1,52 @@
-# React + Vite
+# 🍺 Beer League
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación web para crear rankings de consumiciones entre amigos y convertir cualquier quedada en una competición divertida.
 
-Currently, two official plugins are available:
+## 🚀 Descripción
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**Beer League** es una web app desarrollada con **React + Vite** que permite a grupos de amigos registrar sus consumiciones y competir en rankings en tiempo real.
 
-## React Compiler
+Gracias a la integración con **Supabase**, los datos se almacenan en la nube, permitiendo acceso compartido y sincronización entre usuarios.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## ✨ Características
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- 🍻 Registro de consumiciones
+- 🏆 Ranking dinámico entre amigos
+- 👥 Gestión de participantes
+- ☁️ Persistencia de datos con Supabase
+- ⚡ Interfaz rápida gracias a Vite
+- 🎨 Estilos modernos con TailwindCSS
+
+---
+
+## 🛠️ Tecnologías
+
+- **Frontend**
+  - React 19
+  - React Router DOM
+  - Vite
+
+- **Backend / BaaS**
+  - Supabase
+
+- **Estilos**
+  - TailwindCSS
+
+- **Linting**
+  - ESLint
+
+---
+
+## 📦 Instalación
+
+```bash
+# Clonar el repositorio
+git clone https://github.com/martinvera02/beer-league.git
+
+# Entrar en la carpeta
+cd beer-league
+
+# Instalar dependencias
+npm install
