@@ -1,0 +1,21 @@
+name: Delete Expired Stories
+
+on:
+  schedule:
+    # Se ejecuta cada hora
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete expired stories
+        run: |
+          curl -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/delete_expired_stories" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json"
+
+      - name: Confirm
+        run: echo "✅ Historias expiradas eliminadas"
