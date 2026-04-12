@@ -5,6 +5,8 @@ import Login from './pages/Login'
 import Home from './pages/Home'
 import AddDrink from './pages/AddDrink'
 import Ranking from './pages/Ranking'
+import GlobalRanking from './pages/GlobalRanking'
+import Social from './pages/Social'
 import Profile from './pages/Profile'
 import Navbar from './components/Navbar'
 
@@ -14,11 +16,13 @@ function Dashboard() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'home':    return <Home setCurrentPage={setCurrentPage} setSelectedLeague={setSelectedLeague} />
-      case 'add':     return <AddDrink />
-      case 'ranking': return <Ranking selectedLeague={selectedLeague} setSelectedLeague={setSelectedLeague} />
-      case 'profile': return <Profile />
-      default:        return null
+      case 'home':          return <Home setCurrentPage={setCurrentPage} setSelectedLeague={setSelectedLeague} />
+      case 'add':           return <AddDrink />
+      case 'leagues':       return <Ranking selectedLeague={selectedLeague} setSelectedLeague={setSelectedLeague} />
+      case 'globalranking': return <GlobalRanking />
+      case 'social':        return <Social />
+      case 'profile':       return <Profile />
+      default:              return null
     }
   }
 
