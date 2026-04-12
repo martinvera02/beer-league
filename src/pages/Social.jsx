@@ -23,16 +23,22 @@ export default function Social() {
   const [comments, setComments] = useState([])
   const postImageRef = useRef(null)
   const storyImageRef = useRef(null)
+  const textareaRef = useRef(null)
 
   useEffect(() => { fetchFeed() }, [])
+
+  useEffect(() => {
+    if (showNewPost && textareaRef.current) {
+      setTimeout(() => textareaRef.current?.focus(), 100)
+    }
+  }, [showNewPost])
 
   const fetchFeed = async () => {
     setLoading(true)
     const [{ data: postsData }, { data: storiesData }] = await Promise.all([
       supabase.from('posts')
         .select('*, profiles(username, avatar_url), post_likes(user_id), post_comments(id)')
-        .order('created_at', { ascending: false })
-        .limit(50),
+        .order('created_at', { ascending: false }).limit(50),
       supabase.from('stories')
         .select('*, profiles(username, avatar_url)')
         .gt('expires_at', new Date().toISOString())
@@ -64,10 +70,7 @@ export default function Social() {
       }
     }
     await supabase.from('posts').insert({ user_id: user.id, content: newPostContent.trim(), image_url: imageUrl })
-    setNewPostContent('')
-    setNewPostImage(null)
-    setNewPostPreview(null)
-    setShowNewPost(false)
+    closeNewPost()
     setUploadingPost(false)
     fetchFeed()
   }
@@ -107,10 +110,8 @@ export default function Social() {
   const openCommentsPanel = async (post) => {
     setOpenComments(post)
     const { data } = await supabase
-      .from('post_comments')
-      .select('*, profiles(username, avatar_url)')
-      .eq('post_id', post.id)
-      .order('created_at', { ascending: true })
+      .from('post_comments').select('*, profiles(username, avatar_url)')
+      .eq('post_id', post.id).order('created_at', { ascending: true })
     setComments(data || [])
   }
 
@@ -118,13 +119,22 @@ export default function Social() {
     if (!commentText.trim() || !openComments) return
     soundMessage()
     await supabase.from('post_comments').insert({
-      post_id: openComments.id,
-      user_id: user.id,
-      content: commentText.trim(),
+      post_id: openComments.id, user_id: user.id, content: commentText.trim(),
     })
     setCommentText('')
     openCommentsPanel(openComments)
     fetchFeed()
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() }
+  }
+
+  const closeNewPost = () => {
+    setShowNewPost(false)
+    setNewPostContent('')
+    setNewPostImage(null)
+    setNewPostPreview(null)
   }
 
   const formatTime = (ts) => {
@@ -143,7 +153,8 @@ export default function Social() {
     return url ? (
       <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
     ) : (
-      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`}
+        style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
     )
   }
 
@@ -153,39 +164,26 @@ export default function Social() {
     return acc
   }, {})
 
+  const canPublish = (newPostContent.trim().length > 0 || newPostImage !== null) && !uploadingPost
+
   return (
-    <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen pb-24 transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Social 🍻</h1>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowNewPost(true)}
-            className="bg-amber-500 hover:bg-amber-400 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors"
-          >
-            + Post
-          </motion.button>
-        </div>
+        <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
             { id: 'feed',    label: '📰 Feed' },
             { id: 'stories', label: '⭕ Historias' },
           ].map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+            <button key={t.id} onClick={() => setTab(t.id)}
               className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
-              style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}
-            >
+              style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
               {tab === t.id && (
-                <motion.div
-                  layoutId="social-tab"
-                  className="absolute inset-0 bg-amber-500 rounded-lg"
-                  style={{ zIndex: -1 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                />
+                <motion.div layoutId="social-tab" className="absolute inset-0 bg-amber-500 rounded-lg"
+                  style={{ zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
               {t.label}
             </button>
@@ -196,25 +194,40 @@ export default function Social() {
       {/* ── FEED ── */}
       {tab === 'feed' && (
         <div className="max-w-md mx-auto px-4 pt-4">
+
+          {/* Historias en miniatura */}
           {Object.keys(storiesByUser).length > 0 && (
             <div className="flex gap-3 overflow-x-auto pb-3 mb-4">
               {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
-                <motion.button
-                  key={userStories[0].user_id}
-                  whileTap={{ scale: 0.95 }}
+                <motion.button key={userStories[0].user_id} whileTap={{ scale: 0.95 }}
                   onClick={() => setSelectedStory(userStories[0])}
-                  className="flex flex-col items-center gap-1 flex-shrink-0"
-                >
+                  className="flex flex-col items-center gap-1 flex-shrink-0">
                   <div className="p-0.5 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600">
                     <div className="p-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-base)' }}>
                       <Avatar url={profile?.avatar_url} username={profile?.username} size="sm" />
                     </div>
                   </div>
-                  <span className="text-xs truncate w-14 text-center" style={{ color: 'var(--text-muted)' }}>{profile?.username}</span>
+                  <span className="text-xs truncate w-14 text-center" style={{ color: 'var(--text-muted)' }}>
+                    {profile?.username}
+                  </span>
                 </motion.button>
               ))}
             </div>
           )}
+
+          {/* Box crear post */}
+          <motion.div
+            {...fadeIn}
+            className="rounded-2xl p-3 mb-4 flex items-center gap-3 cursor-pointer"
+            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}
+            onClick={() => setShowNewPost(true)}
+          >
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg"
+              style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+            <div className="flex-1 rounded-xl px-4 py-2.5 text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
+              ¿Qué estás bebiendo?
+            </div>
+          </motion.div>
 
           {loading ? (
             <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando feed...</p>
@@ -231,16 +244,9 @@ export default function Social() {
                 const liked = post.post_likes?.some(l => l.user_id === user.id)
                 const likesCount = post.post_likes?.length || 0
                 const commentsCount = post.post_comments?.length || 0
-
                 return (
-                  <motion.div
-                    key={post.id}
-                    variants={staggerItem}
-                    initial="initial"
-                    animate="animate"
-                    className="rounded-2xl overflow-hidden"
-                    style={{ backgroundColor: 'var(--bg-card)' }}
-                  >
+                  <motion.div key={post.id} variants={staggerItem} initial="initial" animate="animate"
+                    className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
                     <div className="flex items-center gap-3 p-4 pb-3">
                       <Avatar url={post.profiles?.avatar_url} username={post.profiles?.username} />
                       <div className="flex-1">
@@ -248,7 +254,8 @@ export default function Social() {
                         <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(post.created_at)}</p>
                       </div>
                       {isMe && (
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)} className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)}
+                          className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>
                       )}
                     </div>
                     {post.content && <p className="px-4 pb-3 text-sm leading-relaxed">{post.content}</p>}
@@ -262,7 +269,8 @@ export default function Social() {
                           {likesCount}
                         </span>
                       </motion.button>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => openCommentsPanel(post)} className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => openCommentsPanel(post)}
+                        className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
                         <span className="text-xl">💬</span>
                         <span>{commentsCount}</span>
                       </motion.button>
@@ -278,15 +286,13 @@ export default function Social() {
       {/* ── HISTORIAS ── */}
       {tab === 'stories' && (
         <div className="max-w-md mx-auto px-4 pt-4">
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={() => storyImageRef.current?.click()}
+          <motion.button whileTap={{ scale: 0.96 }} onClick={() => storyImageRef.current?.click()}
             disabled={uploadingStory}
             className="w-full border-2 border-dashed rounded-2xl py-6 flex flex-col items-center gap-2 mb-6 transition-colors"
-            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-          >
+            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
             <span className="text-3xl">{uploadingStory ? '⏳' : '⭕'}</span>
             <span className="text-sm">{uploadingStory ? 'Subiendo historia...' : 'Añadir historia'}</span>
+            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Desaparece en 24 horas</span>
           </motion.button>
           <input ref={storyImageRef} type="file" accept="image/*" onChange={submitStory} className="hidden" />
 
@@ -299,16 +305,10 @@ export default function Social() {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
-                <motion.button
-                  key={userStories[0].user_id}
-                  variants={staggerItem}
-                  initial="initial"
-                  animate="animate"
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedStory(userStories[0])}
+                <motion.button key={userStories[0].user_id} variants={staggerItem} initial="initial" animate="animate"
+                  whileTap={{ scale: 0.95 }} onClick={() => setSelectedStory(userStories[0])}
                   className="relative rounded-2xl overflow-hidden aspect-[3/4]"
-                  style={{ backgroundColor: 'var(--bg-card)' }}
-                >
+                  style={{ backgroundColor: 'var(--bg-card)' }}>
                   <img src={userStories[0].image_url} alt="Historia" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                   <div className="absolute bottom-3 left-3 flex items-center gap-2">
@@ -322,47 +322,111 @@ export default function Social() {
         </div>
       )}
 
-      {/* Modal nuevo post */}
+      {/* Botón flotante */}
+      {tab === 'feed' && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileTap={{ scale: 0.9 }}
+          whileHover={{ scale: 1.05 }}
+          onClick={() => setShowNewPost(true)}
+          className="fixed bottom-24 right-5 w-14 h-14 bg-amber-500 hover:bg-amber-400 text-white rounded-full shadow-lg shadow-amber-900/40 flex items-center justify-center text-2xl z-40 transition-colors"
+        >
+          ✏️
+        </motion.button>
+      )}
+
+      {/* ── MODAL NUEVO POST ── */}
       <AnimatePresence>
         {showNewPost && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
-            onClick={() => setShowNewPost(false)}
+            className="fixed inset-0 z-50 flex flex-col justify-end"
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+            onClick={closeNewPost}
           >
             <motion.div
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
-              className="rounded-t-3xl p-6 w-full max-w-lg"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+              className="flex flex-col rounded-t-3xl w-full max-w-lg mx-auto"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                maxHeight: '90vh',
+              }}
             >
-              <h2 className="text-lg font-bold mb-4">Nuevo post 📝</h2>
-              <textarea
-                value={newPostContent}
-                onChange={e => setNewPostContent(e.target.value)}
-                placeholder="¿Qué estás bebiendo? 🍺"
-                rows={4}
-                className="w-full rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm mb-3"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-              />
-              {newPostPreview && (
-                <div className="relative mb-3">
-                  <img src={newPostPreview} alt="Preview" className="w-full rounded-2xl max-h-48 object-cover" />
-                  <button onClick={() => { setNewPostImage(null); setNewPostPreview(null) }} className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm">✕</button>
-                </div>
-              )}
-              <div className="flex gap-3">
-                <motion.button whileTap={{ scale: 0.95 }} onClick={() => postImageRef.current?.click()} className="p-3 rounded-xl transition-colors" style={{ backgroundColor: 'var(--bg-input)' }}>📷</motion.button>
-                <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
-                <motion.button
-                  whileTap={{ scale: 0.96 }}
-                  onClick={submitPost}
-                  disabled={(!newPostContent.trim() && !newPostImage) || uploadingPost}
-                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-3 rounded-xl transition-colors"
-                >
-                  {uploadingPost ? 'Publicando...' : 'Publicar'}
+              {/* Cabecera fija */}
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0 border-b"
+                style={{ borderColor: 'var(--border)' }}>
+                <motion.button whileTap={{ scale: 0.9 }} onClick={closeNewPost}
+                  className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+                  Cancelar
                 </motion.button>
+                <h2 className="text-base font-bold">Nuevo post</h2>
+                {/* BOTÓN PUBLICAR siempre visible arriba */}
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={submitPost}
+                  disabled={!canPublish}
+                  className="px-4 py-2 rounded-full text-sm font-bold transition-colors"
+                  style={{
+                    backgroundColor: canPublish ? '#f59e0b' : 'var(--bg-input)',
+                    color: canPublish ? '#fff' : 'var(--text-hint)',
+                  }}
+                >
+                  {uploadingPost ? '...' : 'Publicar'}
+                </motion.button>
+              </div>
+
+              {/* Cuerpo con scroll */}
+              <div className="flex-1 overflow-y-auto px-5 pt-4">
+
+                {/* Avatar + textarea */}
+                <div className="flex gap-3 mb-4">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg mt-1"
+                    style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+                  <textarea
+                    ref={textareaRef}
+                    value={newPostContent}
+                    onChange={e => setNewPostContent(e.target.value)}
+                    placeholder="¿Qué estás bebiendo? 🍺"
+                    rows={5}
+                    className="flex-1 outline-none resize-none text-sm bg-transparent leading-relaxed"
+                    style={{ color: 'var(--text-primary)' }}
+                  />
+                </div>
+
+                {/* Preview imagen */}
+                {newPostPreview && (
+                  <div className="relative mb-4 ml-12">
+                    <img src={newPostPreview} alt="Preview"
+                      className="w-full rounded-2xl max-h-52 object-cover" />
+                    <motion.button whileTap={{ scale: 0.9 }}
+                      onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
+                      className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm">
+                      ✕
+                    </motion.button>
+                  </div>
+                )}
+              </div>
+
+              {/* Pie fijo con acciones */}
+              <div className="flex-shrink-0 border-t px-5 py-3 flex items-center gap-3"
+                style={{ borderColor: 'var(--border)' }}>
+                <motion.button whileTap={{ scale: 0.9 }}
+                  onClick={() => postImageRef.current?.click()}
+                  className="p-2 rounded-xl transition-colors"
+                  style={{ color: '#f59e0b' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                    <path fillRule="evenodd" d="M1.5 6a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 6v12a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 18V6zM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0021 18v-1.94l-2.69-2.689a1.5 1.5 0 00-2.12 0l-.88.879.97.97a.75.75 0 11-1.06 1.06l-5.16-5.159a1.5 1.5 0 00-2.12 0L3 16.061zm10.125-7.81a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0z" clipRule="evenodd" />
+                  </svg>
+                </motion.button>
+                <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
+
+                <p className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>
+                  {newPostContent.length > 0 && `${newPostContent.length} caracteres`}
+                </p>
               </div>
             </motion.div>
           </motion.div>
@@ -372,12 +436,11 @@ export default function Social() {
       {/* Visor historia */}
       <AnimatePresence>
         {selectedStory && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black z-50 flex items-center justify-center"
-            onClick={() => setSelectedStory(null)}
-          >
-            <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} src={selectedStory.image_url} alt="Historia" className="w-full h-full object-contain" />
+            onClick={() => setSelectedStory(null)}>
+            <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              src={selectedStory.image_url} alt="Historia" className="w-full h-full object-contain" />
             <div className="absolute top-6 left-4 flex items-center gap-2">
               <Avatar url={selectedStory.profiles?.avatar_url} username={selectedStory.profiles?.username} />
               <div>
@@ -393,19 +456,20 @@ export default function Social() {
       {/* Panel comentarios */}
       <AnimatePresence>
         {openComments && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-end z-50"
-            onClick={() => setOpenComments(null)}
-          >
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            onClick={() => setOpenComments(null)}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="rounded-t-3xl p-5 w-full max-h-[70vh] flex flex-col"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
-            >
-              <h2 className="text-base font-bold mb-4">Comentarios 💬</h2>
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold">Comentarios 💬</h2>
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setOpenComments(null)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-sm"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
+              </div>
               <div className="flex-1 overflow-y-auto space-y-3 mb-4">
                 {comments.length === 0 ? (
                   <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>Sin comentarios todavía</p>
@@ -422,20 +486,13 @@ export default function Social() {
                 )}
               </div>
               <div className="flex gap-2">
-                <textarea
-                  value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
-                  placeholder="Escribe un comentario..."
+                <textarea value={commentText} onChange={e => setCommentText(e.target.value)}
+                  onKeyDown={handleKeyDown} placeholder="Escribe un comentario..."
                   rows={1}
                   className="flex-1 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                />
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={submitComment}
-                  disabled={!commentText.trim()}
-                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors"
-                >
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                <motion.button whileTap={{ scale: 0.9 }} onClick={submitComment} disabled={!commentText.trim()}
+                  className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                     <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                   </svg>
