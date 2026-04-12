@@ -5,6 +5,15 @@ import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerContainer, staggerItem } from '../lib/animations'
 import { soundDrink, soundSuccess } from '../lib/sounds'
 
+// Genera un UUID v4 simple en el cliente
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
 export default function AddDrink() {
   const { user } = useAuth()
   const [drinkTypes, setDrinkTypes] = useState([])
@@ -33,6 +42,7 @@ export default function AddDrink() {
     soundDrink()
 
     const drink = drinkTypes.find(d => d.id === selectedDrink)
+    const drinkGroupId = generateUUID() // mismo UUID para todas las ligas
 
     const inserts = leagues.map(league_id => ({
       user_id: user.id,
@@ -40,6 +50,7 @@ export default function AddDrink() {
       drink_type_id: drink.id,
       points: drink.points,
       season_id: seasonId,
+      drink_group_id: drinkGroupId,
     }))
 
     await supabase.from('drinks').insert(inserts)

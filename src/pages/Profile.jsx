@@ -30,19 +30,36 @@ export default function Profile() {
   const fetchProfile = async () => {
     const [{ data: profileData }, { data: drinksData }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('drinks').select('points, drink_types(name, emoji)').eq('user_id', user.id)
+      // Contar solo consumiciones únicas agrupando por drink_group_id
+      supabase
+        .from('drinks')
+        .select('drink_group_id, points, drink_types(name, emoji)')
+        .eq('user_id', user.id)
+        .order('consumed_at', { ascending: false })
     ])
+
     setProfile(profileData)
     setNewUsername(profileData?.username || '')
+
     if (drinksData) {
-      const total = drinksData.reduce((sum, d) => sum + d.points, 0)
-      const byType = drinksData.reduce((acc, d) => {
+      // Deduplicar por drink_group_id para no contar la misma consumición varias veces
+      const seen = new Set()
+      const unique = drinksData.filter(d => {
+        if (seen.has(d.drink_group_id)) return false
+        seen.add(d.drink_group_id)
+        return true
+      })
+
+      const total = unique.reduce((sum, d) => sum + d.points, 0)
+      const byType = unique.reduce((acc, d) => {
         const name = d.drink_types.name
         acc[name] = (acc[name] || 0) + 1
         return acc
       }, {})
-      setStats({ total, count: drinksData.length, byType })
+
+      setStats({ total, count: unique.length, byType })
     }
+
     setLoading(false)
   }
 
