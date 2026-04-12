@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerContainer, staggerItem } from '../lib/animations'
 import { soundDrink, soundSuccess } from '../lib/sounds'
 
-// Genera un UUID v4 simple en el cliente
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0
@@ -22,6 +21,7 @@ export default function AddDrink() {
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [coinsEarned, setCoinsEarned] = useState(0)
 
   useEffect(() => { fetchData() }, [])
 
@@ -42,7 +42,8 @@ export default function AddDrink() {
     soundDrink()
 
     const drink = drinkTypes.find(d => d.id === selectedDrink)
-    const drinkGroupId = generateUUID() // mismo UUID para todas las ligas
+    const drinkGroupId = generateUUID()
+    const coins = Math.floor(drink.points * 10)
 
     const inserts = leagues.map(league_id => ({
       user_id: user.id,
@@ -55,6 +56,13 @@ export default function AddDrink() {
 
     await supabase.from('drinks').insert(inserts)
 
+    // Dar recompensa en monedas 🪙
+    await supabase.rpc('reward_drink', {
+      p_user_id: user.id,
+      p_points: drink.points,
+    })
+
+    setCoinsEarned(coins)
     setSuccess(true)
     soundSuccess()
     setTimeout(() => setSuccess(false), 2500)
@@ -92,8 +100,11 @@ export default function AddDrink() {
                 {drink.emoji}
               </motion.div>
               <div className="font-semibold text-sm">{drink.name}</div>
-              <div className="text-xs mt-1" style={{ color: selectedDrink === drink.id ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
+              <div className="text-xs mt-0.5" style={{ color: selectedDrink === drink.id ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
                 {drink.points} {drink.points === 1 ? 'punto' : 'puntos'}
+              </div>
+              <div className="text-xs mt-0.5 font-medium" style={{ color: selectedDrink === drink.id ? 'rgba(255,255,255,0.9)' : '#f59e0b' }}>
+                +{Math.floor(drink.points * 10)}🪙
               </div>
             </motion.button>
           ))}
@@ -123,15 +134,21 @@ export default function AddDrink() {
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
               className="mt-6 text-center bg-green-900 rounded-2xl py-5"
             >
-              <motion.div
-                className="text-5xl mb-2"
+              <motion.div className="text-5xl mb-2"
                 animate={{ rotate: [0, -15, 15, -10, 0], scale: [1, 1.3, 1] }}
-                transition={{ duration: 0.6 }}
-              >
+                transition={{ duration: 0.6 }}>
                 🎉
               </motion.div>
               <p className="text-green-300 font-bold text-lg">¡Punto anotado!</p>
               <p className="text-green-500 text-sm mt-1">Anotado en {leagues.length} {leagues.length === 1 ? 'liga' : 'ligas'} 🏆</p>
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-amber-400 font-bold mt-2"
+              >
+                +{coinsEarned}🪙 ganadas
+              </motion.p>
             </motion.div>
           )}
         </AnimatePresence>
