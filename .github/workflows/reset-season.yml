@@ -1,0 +1,22 @@
+name: Reset Season
+
+on:
+  schedule:
+    # Se ejecuta cada 10 días a las 00:00 UTC
+    - cron: '0 0 */10 * *'
+  # Permite ejecutarlo manualmente desde GitHub si hace falta
+  workflow_dispatch:
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reset season in Supabase
+        run: |
+          curl -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/reset_season" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json"
+      
+      - name: Confirm reset
+        run: echo "✅ Temporada reseteada correctamente"
