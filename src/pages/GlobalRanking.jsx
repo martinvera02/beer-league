@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { staggerItem, fadeIn } from '../lib/animations'
 import SeasonCountdown from '../components/SeasonCountdown'
+import SeasonHistory from '../components/SeasonHistory'
 import Market from './Market'
 
 export default function GlobalRanking() {
@@ -24,6 +25,11 @@ export default function GlobalRanking() {
     setLoading(false)
   }
 
+  // Se llama cuando SeasonCountdown detecta una nueva temporada
+  const handleSeasonReset = useCallback(() => {
+    fetchRanking()
+  }, [])
+
   const medals = ['🥇', '🥈', '🥉']
 
   const Avatar = ({ url, username, size = 'md' }) => {
@@ -31,16 +37,13 @@ export default function GlobalRanking() {
     return url ? (
       <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
     ) : (
-      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0`} style={{ backgroundColor: 'var(--bg-input)' }}>
-        🍺
-      </div>
+      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
     )
   }
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
-      {/* Header con pestañas */}
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h1 className="text-2xl font-bold mb-4">Global 🌍</h1>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -61,11 +64,10 @@ export default function GlobalRanking() {
         </div>
       </div>
 
-      {/* ── RANKING GLOBAL ── */}
       {tab === 'ranking' && (
         <div className="pb-24 px-4 pt-4 max-w-md mx-auto">
 
-          <SeasonCountdown />
+          <SeasonCountdown onSeasonReset={handleSeasonReset} />
 
           {/* Podio top 3 */}
           {!loading && rankings.length >= 3 && (
@@ -118,7 +120,9 @@ export default function GlobalRanking() {
                       <Avatar url={entry.avatar_url} username={entry.username} />
                       <div className="flex-1">
                         <p className="font-bold">{entry.username} {isMe && '(tú)'}</p>
-                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>{entry.total_drinks} consumiciones</p>
+                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>
+                          {entry.total_drinks} consumiciones
+                        </p>
                       </div>
                       <div className="text-right">
                         <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>{entry.total_points}</p>
@@ -138,10 +142,12 @@ export default function GlobalRanking() {
               })}
             </div>
           )}
+
+          {/* Historial de temporadas anteriores */}
+          <SeasonHistory />
         </div>
       )}
 
-      {/* ── MERCADO ── */}
       {tab === 'market' && <Market />}
     </div>
   )
