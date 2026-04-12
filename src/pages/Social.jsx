@@ -29,11 +29,13 @@ export default function Social() {
   const fetchFeed = async () => {
     setLoading(true)
     const [{ data: postsData }, { data: storiesData }] = await Promise.all([
-      supabase.from('posts')
+      supabase
+        .from('posts')
         .select('*, profiles(username, avatar_url), post_likes(user_id), post_comments(id)')
         .order('created_at', { ascending: false })
         .limit(50),
-      supabase.from('stories')
+      supabase
+        .from('stories')
         .select('*, profiles(username, avatar_url)')
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
@@ -53,6 +55,7 @@ export default function Social() {
   const submitPost = async () => {
     if (!newPostContent.trim() && !newPostImage) return
     setUploadingPost(true)
+
     let imageUrl = null
     if (newPostImage) {
       const ext = newPostImage.name.split('.').pop()
@@ -63,7 +66,13 @@ export default function Social() {
         imageUrl = publicUrl
       }
     }
-    await supabase.from('posts').insert({ user_id: user.id, content: newPostContent.trim(), image_url: imageUrl })
+
+    await supabase.from('posts').insert({
+      user_id: user.id,
+      content: newPostContent.trim(),
+      image_url: imageUrl,
+    })
+
     setNewPostContent('')
     setNewPostImage(null)
     setNewPostPreview(null)
@@ -127,6 +136,20 @@ export default function Social() {
     fetchFeed()
   }
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      submitComment()
+    }
+  }
+
+  const closeNewPost = () => {
+    setShowNewPost(false)
+    setNewPostContent('')
+    setNewPostImage(null)
+    setNewPostPreview(null)
+  }
+
   const formatTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
     const mins = Math.floor(diff / 60000)
@@ -158,16 +181,7 @@ export default function Social() {
 
       {/* Header */}
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">Social 🍻</h1>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowNewPost(true)}
-            className="bg-amber-500 hover:bg-amber-400 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors"
-          >
-            + Post
-          </motion.button>
-        </div>
+        <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
             { id: 'feed',    label: '📰 Feed' },
@@ -196,6 +210,8 @@ export default function Social() {
       {/* ── FEED ── */}
       {tab === 'feed' && (
         <div className="max-w-md mx-auto px-4 pt-4">
+
+          {/* Historias en miniatura */}
           {Object.keys(storiesByUser).length > 0 && (
             <div className="flex gap-3 overflow-x-auto pb-3 mb-4">
               {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
@@ -215,6 +231,30 @@ export default function Social() {
               ))}
             </div>
           )}
+
+          {/* Box para crear post rápido (estilo Twitter/Reddit) */}
+          <motion.div
+            {...fadeIn}
+            className="rounded-2xl p-4 mb-4 flex items-center gap-3 cursor-pointer"
+            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}
+            onClick={() => setShowNewPost(true)}
+          >
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg" style={{ backgroundColor: 'var(--bg-input)' }}>
+              🍺
+            </div>
+            <div className="flex-1 rounded-xl px-4 py-2.5 text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
+              ¿Qué estás bebiendo?
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={(e) => { e.stopPropagation(); postImageRef.current?.click() }}
+              className="p-2 rounded-xl transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              📷
+            </motion.button>
+            <input ref={postImageRef} type="file" accept="image/*" onChange={(e) => { handlePostImageSelect(e); setShowNewPost(true) }} className="hidden" />
+          </motion.div>
 
           {loading ? (
             <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando feed...</p>
@@ -251,8 +291,13 @@ export default function Social() {
                         <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)} className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>
                       )}
                     </div>
+
                     {post.content && <p className="px-4 pb-3 text-sm leading-relaxed">{post.content}</p>}
-                    {post.image_url && <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />}
+
+                    {post.image_url && (
+                      <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />
+                    )}
+
                     <div className="flex items-center gap-4 px-4 py-3 border-t" style={{ borderColor: 'var(--border)' }}>
                       <motion.button whileTap={{ scale: 0.8 }} onClick={() => toggleLike(post)} className="flex items-center gap-1.5 text-sm">
                         <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} transition={{ duration: 0.3 }} className="text-xl">
@@ -287,6 +332,7 @@ export default function Social() {
           >
             <span className="text-3xl">{uploadingStory ? '⏳' : '⭕'}</span>
             <span className="text-sm">{uploadingStory ? 'Subiendo historia...' : 'Añadir historia'}</span>
+            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Desaparece en 24 horas</span>
           </motion.button>
           <input ref={storyImageRef} type="file" accept="image/*" onChange={submitStory} className="hidden" />
 
@@ -322,38 +368,86 @@ export default function Social() {
         </div>
       )}
 
+      {/* Botón flotante para crear post */}
+      {tab === 'feed' && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileTap={{ scale: 0.9 }}
+          whileHover={{ scale: 1.05 }}
+          onClick={() => setShowNewPost(true)}
+          className="fixed bottom-24 right-5 w-14 h-14 bg-amber-500 hover:bg-amber-400 text-white rounded-full shadow-lg shadow-amber-900/40 flex items-center justify-center text-2xl z-40 transition-colors"
+        >
+          ✏️
+        </motion.button>
+      )}
+
       {/* Modal nuevo post */}
       <AnimatePresence>
         {showNewPost && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
-            onClick={() => setShowNewPost(false)}
+            onClick={closeNewPost}
           >
             <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="rounded-t-3xl p-6 w-full max-w-lg"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
             >
-              <h2 className="text-lg font-bold mb-4">Nuevo post 📝</h2>
+              {/* Cabecera del modal */}
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold">Nuevo post 📝</h2>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={closeNewPost}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}
+                >
+                  ✕
+                </motion.button>
+              </div>
+
+              {/* Área de texto */}
               <textarea
                 value={newPostContent}
                 onChange={e => setNewPostContent(e.target.value)}
                 placeholder="¿Qué estás bebiendo? 🍺"
                 rows={4}
+                autoFocus
                 className="w-full rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm mb-3"
                 style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
               />
+
+              {/* Preview imagen */}
               {newPostPreview && (
                 <div className="relative mb-3">
                   <img src={newPostPreview} alt="Preview" className="w-full rounded-2xl max-h-48 object-cover" />
-                  <button onClick={() => { setNewPostImage(null); setNewPostPreview(null) }} className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm">✕</button>
+                  <button
+                    onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
+                    className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
+
+              {/* Acciones */}
               <div className="flex gap-3">
-                <motion.button whileTap={{ scale: 0.95 }} onClick={() => postImageRef.current?.click()} className="p-3 rounded-xl transition-colors" style={{ backgroundColor: 'var(--bg-input)' }}>📷</motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => postImageRef.current?.click()}
+                  className="p-3 rounded-xl transition-colors"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}
+                >
+                  📷
+                </motion.button>
                 <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
                 <motion.button
                   whileTap={{ scale: 0.96 }}
@@ -405,7 +499,11 @@ export default function Social() {
               className="rounded-t-3xl p-5 w-full max-h-[70vh] flex flex-col"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
             >
-              <h2 className="text-base font-bold mb-4">Comentarios 💬</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold">Comentarios 💬</h2>
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setOpenComments(null)} className="w-7 h-7 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
+              </div>
+
               <div className="flex-1 overflow-y-auto space-y-3 mb-4">
                 {comments.length === 0 ? (
                   <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>Sin comentarios todavía</p>
@@ -421,10 +519,12 @@ export default function Social() {
                   ))
                 )}
               </div>
+
               <div className="flex gap-2">
                 <textarea
                   value={commentText}
                   onChange={e => setCommentText(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="Escribe un comentario..."
                   rows={1}
                   className="flex-1 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
