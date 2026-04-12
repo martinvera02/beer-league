@@ -1,81 +1,55 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerItem } from '../lib/animations'
-import { soundSuccess, soundError, soundLike } from '../lib/sounds'
+import { soundSuccess, soundError } from '../lib/sounds'
 
-// Mini gráfica de velas SVG
-function SparkChart({ history, color = '#f59e0b', width = 120, height = 40 }) {
+function SparkChart({ history, width = 120, height = 40 }) {
   if (!history || history.length < 2) return null
-
   const prices = history.map(h => h.price)
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
-
   const points = prices.map((p, i) => {
     const x = (i / (prices.length - 1)) * width
     const y = height - ((p - min) / range) * height
     return `${x},${y}`
   }).join(' ')
-
   const isUp = prices[prices.length - 1] >= prices[0]
   const lineColor = isUp ? '#10b981' : '#ef4444'
-
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <defs>
-        <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polyline
-        points={points}
-        fill="none"
-        stroke={lineColor}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2"
+        strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
-// Gráfica grande de línea para el detalle
 function DetailChart({ history, width = 300, height = 120 }) {
   if (!history || history.length < 2) return (
     <div className="flex items-center justify-center" style={{ height }}>
       <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Sin historial suficiente</p>
     </div>
   )
-
   const prices = history.map(h => h.price)
-  const times = history.map(h => new Date(h.recorded_at))
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
   const pad = 20
-
   const toX = (i) => pad + (i / (prices.length - 1)) * (width - pad * 2)
   const toY = (p) => pad + (height - pad * 2) - ((p - min) / range) * (height - pad * 2)
-
   const points = prices.map((p, i) => `${toX(i)},${toY(p)}`).join(' ')
   const areaPoints = `${toX(0)},${height - pad} ${points} ${toX(prices.length - 1)},${height - pad}`
-
   const isUp = prices[prices.length - 1] >= prices[0]
   const lineColor = isUp ? '#10b981' : '#ef4444'
   const current = prices[prices.length - 1]
   const start = prices[0]
   const pct = (((current - start) / start) * 100).toFixed(1)
-
   return (
     <div>
       <div className="flex items-end gap-2 mb-2">
-        <span className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-          {current.toFixed(0)}🪙
-        </span>
+        <span className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{current.toFixed(0)}🪙</span>
         <span className={`text-sm font-semibold mb-0.5 ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
           {isUp ? '▲' : '▼'} {Math.abs(pct)}%
         </span>
@@ -87,22 +61,15 @@ function DetailChart({ history, width = 300, height = 120 }) {
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
         </defs>
-        {/* Líneas de guía horizontales */}
         {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
-          <line key={i}
-            x1={pad} y1={pad + (height - pad * 2) * t}
+          <line key={i} x1={pad} y1={pad + (height - pad * 2) * t}
             x2={width - pad} y2={pad + (height - pad * 2) * t}
-            stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3 3"
-          />
+            stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3 3" />
         ))}
-        {/* Área bajo la curva */}
         <polygon points={areaPoints} fill="url(#area-grad)" />
-        {/* Línea principal */}
         <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round" />
-        {/* Punto actual */}
         <circle cx={toX(prices.length - 1)} cy={toY(current)} r="4" fill={lineColor} />
-        {/* Etiquetas Y */}
         <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">{max.toFixed(0)}</text>
         <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">{min.toFixed(0)}</text>
       </svg>
@@ -115,6 +82,7 @@ export default function Market() {
   const [tab, setTab] = useState('market')
   const [balance, setBalance] = useState(0)
   const [drinkMarket, setDrinkMarket] = useState([])
+  const [drinkTypes, setDrinkTypes] = useState([])
   const [powerups, setPowerups] = useState([])
   const [myPowerups, setMyPowerups] = useState([])
   const [myPositions, setMyPositions] = useState([])
@@ -122,7 +90,6 @@ export default function Market() {
   const [selectedLeague, setSelectedLeague] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Modales
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [drinkHistory, setDrinkHistory] = useState([])
   const [tradeDirection, setTradeDirection] = useState('long')
@@ -135,48 +102,45 @@ export default function Market() {
   const [buying, setBuying] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
-
-  useEffect(() => {
-    if (selectedLeague) fetchLeagueMembers(selectedLeague.id)
-  }, [selectedLeague])
+  useEffect(() => { if (selectedLeague) fetchLeagueMembers(selectedLeague.id) }, [selectedLeague])
 
   const fetchAll = async () => {
     setLoading(true)
     const [
       { data: walletData },
       { data: marketData },
+      { data: drinkTypesData },
       { data: powerupData },
       { data: myPowerupData },
       { data: positionData },
       { data: leagueData },
     ] = await Promise.all([
       supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
-      supabase.from('drink_market').select('*, drink_types(name, emoji)').order('drink_type_id'),
+      supabase.from('drink_market').select('*, drink_types(name, emoji, points)').order('drink_type_id'),
+      supabase.from('drink_types').select('*').order('points', { ascending: false }),
       supabase.from('powerup_catalog').select('*').eq('active', true),
       supabase.from('active_powerups')
         .select('*, powerup_catalog(name, emoji, description)')
-        .eq('user_id', user.id)
-        .eq('active', true)
+        .eq('user_id', user.id).eq('active', true)
         .or('expires_at.is.null,expires_at.gt.now()'),
-      supabase.from('market_positions').select('*, drink_types(name, emoji)').eq('user_id', user.id).eq('closed', false),
+      supabase.from('market_positions')
+        .select('*, drink_types(name, emoji)').eq('user_id', user.id).eq('closed', false),
       supabase.from('league_members').select('league_id, leagues(id, name)').eq('user_id', user.id),
     ])
 
     setBalance(walletData?.balance || 0)
-    setDrinkMarket(marketData || [])
+    setDrinkTypes(drinkTypesData || [])
     setPowerups(powerupData || [])
     setMyPowerups(myPowerupData || [])
     setMyPositions(positionData || [])
 
     const userLeagues = leagueData?.map(d => d.leagues) || []
     setLeagues(userLeagues)
-    if (userLeagues.length > 0) setSelectedLeague(userLeagues[0])
+    if (userLeagues.length > 0 && !selectedLeague) setSelectedLeague(userLeagues[0])
 
-    // Cargar historial de todos los drinks
+    // Cargar historial de precios
     const { data: histData } = await supabase
-      .from('drink_market_history')
-      .select('*')
-      .order('recorded_at', { ascending: true })
+      .from('drink_market_history').select('*').order('recorded_at', { ascending: true })
 
     if (histData) {
       const grouped = histData.reduce((acc, h) => {
@@ -184,7 +148,9 @@ export default function Market() {
         acc[h.drink_type_id].push(h)
         return acc
       }, {})
-      setDrinkMarket(prev => prev.map(d => ({ ...d, history: grouped[d.drink_type_id] || [] })))
+      setDrinkMarket((marketData || []).map(d => ({ ...d, history: grouped[d.drink_type_id] || [] })))
+    } else {
+      setDrinkMarket(marketData || [])
     }
 
     setLoading(false)
@@ -192,10 +158,8 @@ export default function Market() {
 
   const fetchLeagueMembers = async (leagueId) => {
     const { data } = await supabase
-      .from('league_members')
-      .select('profiles(id, username, avatar_url)')
-      .eq('league_id', leagueId)
-      .neq('user_id', user.id)
+      .from('league_members').select('profiles(id, username, avatar_url)')
+      .eq('league_id', leagueId).neq('user_id', user.id)
     setLeagueMembers(data?.map(d => d.profiles) || [])
   }
 
@@ -204,11 +168,9 @@ export default function Market() {
     setTradeAmount(10)
     setTradeDirection('long')
     const { data } = await supabase
-      .from('drink_market_history')
-      .select('*')
+      .from('drink_market_history').select('*')
       .eq('drink_type_id', drink.drink_type_id)
-      .order('recorded_at', { ascending: true })
-      .limit(50)
+      .order('recorded_at', { ascending: true }).limit(50)
     setDrinkHistory(data || [])
   }
 
@@ -221,15 +183,12 @@ export default function Market() {
       p_direction: tradeDirection,
       p_amount: tradeAmount,
     })
-
     if (result.data?.success) {
       soundSuccess()
       setBalance(prev => prev - tradeAmount)
       setSelectedDrink(null)
       fetchAll()
-    } else {
-      soundError()
-    }
+    } else { soundError() }
     setTrading(false)
   }
 
@@ -237,7 +196,6 @@ export default function Market() {
     if (!selectedPowerup || !selectedLeague) return
     const needsTarget = ['freeze', 'sabotage'].includes(selectedPowerup.effect_type)
     if (needsTarget && !targetUser) return
-
     setBuying(true)
     const result = await supabase.rpc('buy_powerup', {
       p_user_id: user.id,
@@ -246,20 +204,15 @@ export default function Market() {
       p_powerup_id: selectedPowerup.id,
       p_extra_data: {},
     })
-
     if (result.data?.success) {
       soundSuccess()
       setBalance(prev => prev - selectedPowerup.cost)
       setSelectedPowerup(null)
       setTargetUser(null)
       fetchAll()
-    } else {
-      soundError()
-    }
+    } else { soundError() }
     setBuying(false)
   }
-
-  const needsTarget = selectedPowerup && ['freeze', 'sabotage'].includes(selectedPowerup.effect_type)
 
   const formatTime = (ts) => {
     if (!ts) return 'Permanente'
@@ -270,8 +223,10 @@ export default function Market() {
     return `${h}h ${m}m`
   }
 
+  const needsTarget = selectedPowerup && ['freeze', 'sabotage'].includes(selectedPowerup.effect_type)
+
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center transition-colors" style={{ backgroundColor: 'var(--bg-base)' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
       <div className="text-center">
         <motion.div className="text-5xl mb-3" animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>🪙</motion.div>
         <p style={{ color: 'var(--text-muted)' }}>Cargando mercado...</p>
@@ -283,30 +238,24 @@ export default function Market() {
     <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
-      <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold">Mercado 📈</h1>
+            <h2 className="text-xl font-bold">Mercado 📈</h2>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Invierte, especula y destruye a tus amigos</p>
           </div>
-          {/* Balance */}
-          <motion.div
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 0.3 }}
-            key={balance}
+          <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 0.3 }} key={balance}
             className="flex items-center gap-2 px-4 py-2 rounded-2xl"
-            style={{ backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }}
-          >
+            style={{ backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }}>
             <span className="text-lg">🪙</span>
             <span className="font-bold text-amber-400 text-lg">{balance.toLocaleString()}</span>
           </motion.div>
         </div>
 
-        {/* Pestañas */}
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
-            { id: 'market',   label: '📈 Cotización' },
-            { id: 'powerups', label: '⚡ Tienda' },
+            { id: 'market',    label: '📈 Cotización' },
+            { id: 'powerups',  label: '⚡ Tienda' },
             { id: 'portfolio', label: '💼 Cartera' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -328,45 +277,30 @@ export default function Market() {
           <p className="text-xs mb-4 font-medium" style={{ color: 'var(--text-muted)' }}>
             Invierte 🪙 para mover el precio. Toca una bebida para operar.
           </p>
-
           <div className="space-y-3">
-            {drinkMarket.map((drink, idx) => {
-              const isUp = drink.history?.length > 1
-                ? drink.price >= drink.history[0]?.price
-                : true
+            {drinkMarket.map((drink) => {
+              const isUp = drink.history?.length > 1 ? drink.price >= drink.history[0]?.price : true
               const pct = drink.history?.length > 1
                 ? (((drink.price - drink.history[0].price) / drink.history[0].price) * 100).toFixed(1)
                 : '0.0'
-
               return (
-                <motion.button
-                  key={drink.id}
-                  variants={staggerItem} initial="initial" animate="animate"
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => openDrinkDetail(drink)}
-                  className="w-full rounded-2xl p-4 text-left transition-colors"
-                  style={{ backgroundColor: 'var(--bg-card)' }}
-                >
+                <motion.button key={drink.id} variants={staggerItem} initial="initial" animate="animate"
+                  whileTap={{ scale: 0.98 }} onClick={() => openDrinkDetail(drink)}
+                  className="w-full rounded-2xl p-4 text-left" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <div className="flex items-center gap-3">
-                    {/* Emoji y nombre */}
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
                       style={{ backgroundColor: 'var(--bg-input)' }}>
                       {drink.drink_types?.emoji}
                     </div>
-
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{drink.drink_types?.name}</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                         Vol: {drink.volume?.toLocaleString()}🪙
                       </p>
                     </div>
-
-                    {/* Mini gráfica */}
                     <div className="flex-shrink-0">
                       <SparkChart history={drink.history} width={80} height={32} />
                     </div>
-
-                    {/* Precio y cambio */}
                     <div className="text-right flex-shrink-0 ml-2">
                       <p className="font-bold text-sm">{parseFloat(drink.price).toFixed(0)}🪙</p>
                       <p className={`text-xs font-semibold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -384,15 +318,12 @@ export default function Market() {
       {/* ── TIENDA POWERUPS ── */}
       {tab === 'powerups' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
-
-          {/* Selector de liga */}
           {leagues.length > 0 && (
             <div className="mb-4">
-              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Liga donde se aplicará el powerup</p>
+              <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Liga donde se aplicará</p>
               <div className="flex gap-2 flex-wrap">
                 {leagues.map(l => (
-                  <motion.button key={l.id} whileTap={{ scale: 0.95 }}
-                    onClick={() => setSelectedLeague(l)}
+                  <motion.button key={l.id} whileTap={{ scale: 0.95 }} onClick={() => setSelectedLeague(l)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${selectedLeague?.id === l.id ? 'bg-amber-500 text-white' : ''}`}
                     style={selectedLeague?.id !== l.id ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}>
                     {l.name}
@@ -402,7 +333,6 @@ export default function Market() {
             </div>
           )}
 
-          {/* Powerups activos propios */}
           {myPowerups.length > 0 && (
             <div className="mb-5">
               <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Tus powerups activos</p>
@@ -425,8 +355,7 @@ export default function Market() {
               const canAfford = balance >= pw.cost
               return (
                 <motion.div key={pw.id} variants={staggerItem} initial="initial" animate="animate"
-                  className="rounded-2xl p-4 transition-colors"
-                  style={{ backgroundColor: 'var(--bg-card)', opacity: canAfford ? 1 : 0.6 }}>
+                  className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', opacity: canAfford ? 1 : 0.6 }}>
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
                       style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -439,8 +368,7 @@ export default function Market() {
                         <p className="text-xs mt-0.5 text-amber-400">⏱ {pw.duration_hours}h de efecto</p>
                       )}
                     </div>
-                    <motion.button
-                      whileTap={{ scale: 0.9 }}
+                    <motion.button whileTap={{ scale: 0.9 }}
                       disabled={!canAfford || !selectedLeague}
                       onClick={() => setSelectedPowerup(pw)}
                       className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-colors"
@@ -470,21 +398,33 @@ export default function Market() {
             <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>🪙 Cervezas</p>
           </motion.div>
 
-          {/* Cómo ganar monedas */}
+          {/* Recompensas dinámicas desde la BD */}
           <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-sm font-bold mb-3">¿Cómo ganar 🪙?</p>
+            <p className="text-sm font-bold mb-1">¿Cómo ganar 🪙?</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
+              Cada consumición otorga monedas según su valor en puntos (1 punto = 10🪙)
+            </p>
             <div className="space-y-2">
-              {[
-                { emoji: '🍺', label: 'Cerveza / Vino', coins: '+10🪙' },
-                { emoji: '🥃', label: 'Cubata', coins: '+25🪙' },
-                { emoji: '🥂', label: 'Chupito', coins: '+20🪙' },
-                { emoji: '🍾', label: 'Botellín', coins: '+5🪙' },
-              ].map(r => (
-                <div key={r.label} className="flex justify-between items-center">
-                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{r.emoji} {r.label}</span>
-                  <span className="text-sm font-bold text-amber-400">{r.coins}</span>
-                </div>
-              ))}
+              {drinkTypes.map(drink => {
+                const coins = Math.floor(drink.points * 10)
+                return (
+                  <motion.div key={drink.id} variants={staggerItem} initial="initial" animate="animate"
+                    className="flex justify-between items-center py-2 border-b last:border-0"
+                    style={{ borderColor: 'var(--border)' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{drink.emoji}</span>
+                      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{drink.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
+                        {drink.points} pts
+                      </span>
+                      <span className="text-sm font-bold text-amber-400">+{coins}🪙</span>
+                    </div>
+                  </motion.div>
+                )
+              })}
             </div>
           </div>
 
@@ -505,7 +445,6 @@ export default function Market() {
                   ? Math.floor(pos.amount * ((currentPrice - pos.entry_price) / pos.entry_price))
                   : Math.floor(pos.amount * ((pos.entry_price - currentPrice) / pos.entry_price))
                 const isProfit = pnl >= 0
-
                 return (
                   <motion.div key={pos.id} variants={staggerItem} initial="initial" animate="animate"
                     className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -515,7 +454,7 @@ export default function Market() {
                         {pos.drink_types?.emoji}
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-sm">{pos.drink_types?.name}</p>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pos.direction === 'long' ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
                             {pos.direction === 'long' ? '▲ LONG' : '▼ SHORT'}
@@ -542,20 +481,18 @@ export default function Market() {
         </div>
       )}
 
-      {/* Modal detalle de bebida + trading */}
+      {/* Modal detalle bebida + trading */}
       <AnimatePresence>
         {selectedDrink && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
             onClick={() => setSelectedDrink(null)}>
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="rounded-t-3xl p-6 w-full max-w-lg"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
 
-              {/* Cabecera */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{selectedDrink.drink_types?.emoji}</span>
@@ -569,12 +506,10 @@ export default function Market() {
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
 
-              {/* Gráfica */}
               <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
                 <DetailChart history={drinkHistory} width={320} height={140} />
               </div>
 
-              {/* Controles de trading */}
               <div className="mb-4">
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
                 <div className="flex gap-2">
@@ -584,35 +519,34 @@ export default function Market() {
                       backgroundColor: tradeDirection === 'long' ? 'rgba(16,185,129,0.2)' : 'var(--bg-input)',
                       color: tradeDirection === 'long' ? '#10b981' : 'var(--text-muted)',
                       border: tradeDirection === 'long' ? '2px solid #10b981' : '2px solid transparent',
-                    }}>
-                    ▲ LONG (sube)
-                  </motion.button>
+                    }}>▲ LONG (sube)</motion.button>
                   <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('short')}
                     className="flex-1 py-3 rounded-xl font-bold text-sm transition-colors"
                     style={{
                       backgroundColor: tradeDirection === 'short' ? 'rgba(239,68,68,0.2)' : 'var(--bg-input)',
                       color: tradeDirection === 'short' ? '#ef4444' : 'var(--text-muted)',
                       border: tradeDirection === 'short' ? '2px solid #ef4444' : '2px solid transparent',
-                    }}>
-                    ▼ SHORT (baja)
-                  </motion.button>
+                    }}>▼ SHORT (baja)</motion.button>
                 </div>
               </div>
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad a invertir</p>
-                  <p className="text-xs text-amber-400 font-bold">{tradeAmount}🪙 / {balance}🪙 disponibles</p>
+                  <p className="text-xs text-amber-400 font-bold">{tradeAmount}🪙 / {balance}🪙</p>
                 </div>
                 <input type="range" min="10" max={Math.min(balance, 500)} step="10"
                   value={tradeAmount} onChange={e => setTradeAmount(Number(e.target.value))}
                   className="w-full accent-amber-500" />
-                <div className="flex justify-between mt-1">
+                <div className="flex justify-between mt-2 gap-2">
                   {[10, 50, 100, 250].map(v => (
                     <motion.button key={v} whileTap={{ scale: 0.9 }}
                       onClick={() => setTradeAmount(Math.min(v, balance))}
-                      className="text-xs px-2 py-1 rounded-lg"
-                      style={{ backgroundColor: tradeAmount === v ? '#f59e0b' : 'var(--bg-input)', color: tradeAmount === v ? '#fff' : 'var(--text-muted)' }}>
+                      className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                      style={{
+                        backgroundColor: tradeAmount === v ? '#f59e0b' : 'var(--bg-input)',
+                        color: tradeAmount === v ? '#fff' : 'var(--text-muted)',
+                      }}>
                       {v}
                     </motion.button>
                   ))}
@@ -642,8 +576,7 @@ export default function Market() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
             onClick={() => { setSelectedPowerup(null); setTargetUser(null) }}>
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="rounded-t-3xl p-6 w-full max-w-lg"
@@ -662,7 +595,6 @@ export default function Market() {
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
 
-              {/* Selector de objetivo si es necesario */}
               {needsTarget && (
                 <div className="mb-5">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
@@ -670,7 +602,7 @@ export default function Market() {
                   </p>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {leagueMembers.length === 0 ? (
-                      <p className="text-xs text-center py-4" style={{ color: 'var(--text-hint)' }}>No hay otros miembros en esta liga</p>
+                      <p className="text-xs text-center py-4" style={{ color: 'var(--text-hint)' }}>No hay otros miembros</p>
                     ) : leagueMembers.map(member => (
                       <motion.button key={member.id} whileTap={{ scale: 0.97 }}
                         onClick={() => setTargetUser(member)}
@@ -692,8 +624,7 @@ export default function Market() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between p-4 rounded-2xl mb-4"
-                style={{ backgroundColor: 'var(--bg-base)' }}>
+              <div className="flex items-center justify-between p-4 rounded-2xl mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
                 <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Coste</span>
                 <span className="font-bold text-amber-400 text-lg">{selectedPowerup.cost}🪙</span>
               </div>
