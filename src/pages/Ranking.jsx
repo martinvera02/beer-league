@@ -65,11 +65,15 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .from('league_members')
       .select('league_id, role, leagues(id, name, created_by)')
       .eq('user_id', user.id)
+
     const userLeagues = data?.map(d => ({ ...d.leagues, myRole: d.role })) || []
     setLeagues(userLeagues)
+
     if (!selectedLeague && userLeagues.length > 0) {
-      setSelectedLeague(userLeagues[0])
-      setMyRole(userLeagues[0].myRole || 'member')
+      const first = userLeagues[0]
+      setSelectedLeague(first)
+      setMyRole(first.myRole || 'member')
+      setNewLeagueName(first.name)
     }
   }
 
@@ -93,8 +97,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     const mapped = data?.map(m => ({ ...m.profiles, joined_at: m.joined_at, role: m.role })) || []
     setMembers(mapped)
 
+    // Actualizar myRole basándonos en los datos frescos de la BD
     const me = mapped.find(m => m.id === user.id)
-    setMyRole(me?.role || 'member')
+    if (me) setMyRole(me.role || 'member')
   }
 
   const fetchMessages = async (leagueId) => {
@@ -105,6 +110,14 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .order('created_at', { ascending: true })
       .limit(100)
     setMessages(data || [])
+  }
+
+  const handleSelectLeague = (league) => {
+    setSelectedLeague(league)
+    setMyRole(league.myRole || 'member')
+    setNewLeagueName(league.name)
+    setTab('ranking')
+    setEditingName(false)
   }
 
   const saveLeagueName = async () => {
@@ -119,7 +132,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .eq('id', selectedLeague.id)
 
     if (!error) {
-      setSelectedLeague(prev => ({ ...prev, name: newLeagueName.trim() }))
+      const updated = { ...selectedLeague, name: newLeagueName.trim() }
+      setSelectedLeague(updated)
       setLeagues(prev => prev.map(l => l.id === selectedLeague.id ? { ...l, name: newLeagueName.trim() } : l))
     }
     setSavingName(false)
@@ -182,6 +196,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     await supabase.from('league_members').delete()
       .eq('league_id', selectedLeague.id).eq('user_id', user.id)
     setSelectedLeague(null)
+    setMyRole('member')
     fetchLeagues()
     setTab('ranking')
   }
@@ -207,25 +222,26 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const medals = ['🥇', '🥈', '🥉']
 
   const roleLabel = { owner: '👑 Creador', admin: '⚡ Admin', member: 'Miembro' }
-  const roleBadgeColor = {
-    owner: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-    admin: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8' },
-    member: { bg: 'var(--bg-input)', color: 'var(--text-hint)' },
+  const roleBadgeStyle = {
+    owner:  { backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+    admin:  { backgroundColor: 'rgba(99,102,241,0.15)',  color: '#818cf8' },
+    member: { backgroundColor: 'var(--bg-input)',         color: 'var(--text-hint)' },
   }
 
   const canManage = myRole === 'owner' || myRole === 'admin'
 
   const Avatar = ({ url, username, size = 'sm' }) => {
-    const dim = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-base'
+    const dim = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10'
     return url ? (
       <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
     ) : (
-      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-sm`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
     )
   }
 
   return (
-    <div className={`flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`} style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className={`flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`}
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
       <div className="px-4 pt-6 pb-3 flex-shrink-0">
@@ -237,12 +253,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <motion.button
                 key={league.id}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  setSelectedLeague(league)
-                  setMyRole(league.myRole || 'member')
-                  setTab('ranking')
-                }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${selectedLeague?.id === league.id ? 'bg-amber-500 text-white' : ''}`}
+                onClick={() => handleSelectLeague(league)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                  selectedLeague?.id === league.id ? 'bg-amber-500 text-white' : ''
+                }`}
                 style={selectedLeague?.id !== league.id ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}
               >
                 {league.name}
@@ -251,7 +265,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Nombre de liga + edición */}
+        {/* Nombre de liga + botón editar */}
         {selectedLeague && (
           <div className="mb-4">
             {editingName ? (
@@ -261,14 +275,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   value={newLeagueName}
                   onChange={e => setNewLeagueName(e.target.value)}
                   autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') saveLeagueName(); if (e.key === 'Escape') setEditingName(false) }}
                   className="flex-1 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                  onKeyDown={e => { if (e.key === 'Enter') saveLeagueName(); if (e.key === 'Escape') setEditingName(false) }}
                 />
-                <motion.button whileTap={{ scale: 0.95 }} onClick={saveLeagueName} disabled={savingName} className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold">
+                <motion.button whileTap={{ scale: 0.95 }} onClick={saveLeagueName} disabled={savingName}
+                  className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold">
                   {savingName ? '...' : 'Guardar'}
                 </motion.button>
-                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setEditingName(false)} className="px-3 py-2 rounded-xl text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
+                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setEditingName(false); setNewLeagueName(selectedLeague.name) }}
+                  className="px-3 py-2 rounded-xl text-sm"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
                   ✕
                 </motion.button>
               </div>
@@ -297,12 +314,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Comparte este ID con tus amigos</p>
               <p className="text-amber-400 font-bold text-lg">#{selectedLeague.id}</p>
             </div>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
+            <motion.button whileTap={{ scale: 0.95 }}
               onClick={() => navigator.clipboard.writeText(String(selectedLeague.id))}
               className="text-sm px-3 py-2 rounded-lg transition-colors"
-              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}
-            >
+              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
               Copiar
             </motion.button>
           </div>
@@ -316,19 +331,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               { id: 'members', label: '👥 Miembros' },
               { id: 'chat',    label: '💬 Chat' },
             ].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => setTab(t.id)}
                 className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
-                style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}
-              >
+                style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
                 {tab === t.id && (
-                  <motion.div
-                    layoutId="tab-indicator"
-                    className="absolute inset-0 bg-amber-500 rounded-lg"
-                    style={{ zIndex: -1 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
+                  <motion.div layoutId="tab-indicator" className="absolute inset-0 bg-amber-500 rounded-lg"
+                    style={{ zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
                 )}
                 {t.label}
               </button>
@@ -340,9 +348,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* ── RANKING ── */}
       {tab === 'ranking' && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
-          <div className="pt-2">
-            <SeasonCountdown />
-          </div>
+          <div className="pt-2"><SeasonCountdown /></div>
           {loading ? (
             <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando...</p>
           ) : rankings.length === 0 ? (
@@ -363,8 +369,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 return (
                   <motion.div key={entry.user_id} variants={staggerItem} initial="initial" animate="animate"
                     className={`rounded-2xl p-4 ${isMe ? 'bg-amber-500' : ''}`}
-                    style={!isMe ? { backgroundColor: 'var(--bg-card)' } : {}}
-                  >
+                    style={!isMe ? { backgroundColor: 'var(--bg-card)' } : {}}>
                     <div className="flex items-center gap-3 mb-3">
                       <span className="text-2xl w-8 text-center">{medals[index] || `${index + 1}`}</span>
                       <Avatar url={entry.avatar_url} username={entry.username} size="md" />
@@ -410,8 +415,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   style={{
                     backgroundColor: 'var(--bg-card)',
                     border: isMe ? '2px solid #f59e0b' : '2px solid transparent',
-                  }}
-                >
+                  }}>
                   <div className="flex items-center gap-3">
                     <Avatar url={member.avatar_url} username={member.username} size="md" />
                     <div className="flex-1 min-w-0">
@@ -419,33 +423,23 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                         <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>
                           {member.username} {isMe && '(tú)'}
                         </p>
-                        <span
-                          className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={roleBadgeColor[member.role]}
-                        >
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
+                          style={roleBadgeStyle[member.role]}>
                           {roleLabel[member.role]}
                         </span>
                       </div>
                     </div>
-
-                    {/* Acciones */}
                     <div className="flex gap-2 flex-shrink-0">
                       {canChangeRole && (
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => setRoleTarget(member)}
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)}
                           className="text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                          style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}
-                        >
+                          style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
                           Rol
                         </motion.button>
                       )}
                       {canKick && (
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => setKickTarget(member)}
-                          className="text-xs font-semibold px-3 py-2 rounded-xl transition-colors bg-red-950 text-red-400 hover:bg-red-900"
-                        >
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)}
+                          className="text-xs font-semibold px-3 py-2 rounded-xl transition-colors bg-red-950 text-red-400 hover:bg-red-900">
                           Expulsar
                         </motion.button>
                       )}
@@ -487,12 +481,14 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     const isMe = msg.user_id === user.id
                     const isSameUser = msgs[index - 1]?.user_id === msg.user_id
                     return (
-                      <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
-                        className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}
-                      >
+                      <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         {!isMe && (
                           <div className="flex-shrink-0 self-end">
-                            {!isSameUser ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} size="sm" /> : <div className="w-8" />}
+                            {!isSameUser
+                              ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} size="sm" />
+                              : <div className="w-8" />}
                           </div>
                         )}
                         <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
@@ -522,17 +518,19 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
           <div className="px-4 py-3 pb-24 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
             <div className="flex gap-2 items-end">
-              <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}
+              <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()}
+                disabled={uploadingImage}
                 className="p-3 rounded-2xl transition-colors flex-shrink-0"
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
                 {uploadingImage ? '⏳' : '📷'}
               </motion.button>
               <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-              <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder="Escribe un mensaje..." rows={1}
+              <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)}
+                onKeyDown={handleKeyDown} placeholder="Escribe un mensaje..." rows={1}
                 className="flex-1 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '120px' }} />
-              <motion.button whileTap={{ scale: 0.9 }} onClick={sendMessage} disabled={!newMessage.trim() || sending}
+              <motion.button whileTap={{ scale: 0.9 }} onClick={sendMessage}
+                disabled={!newMessage.trim() || sending}
                 className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                   <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
@@ -567,19 +565,24 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
               className="rounded-2xl p-6 w-full max-w-sm"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
-            >
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-4">
                 <div className="text-4xl mb-2">🚫</div>
                 <h2 className="text-xl font-bold">¿Expulsar a {kickTarget.username}?</h2>
-                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminará de la liga y perderá su historial en esta temporada.</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
+                  Se eliminará de la liga y perderá su historial en esta temporada.
+                </p>
               </div>
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }} onClick={() => setKickTarget(null)}
                   className="flex-1 font-semibold py-3 rounded-xl transition-colors"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+                  Cancelar
+                </motion.button>
                 <motion.button whileTap={{ scale: 0.96 }} onClick={kickMember}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors">Expulsar</motion.button>
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  Expulsar
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>
@@ -598,52 +601,45 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
               className="rounded-2xl p-6 w-full max-w-sm"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
-            >
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">⚡</div>
                 <h2 className="text-xl font-bold">Rol de {roleTarget.username}</h2>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Elige qué permisos tendrá en la liga</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Elige qué permisos tendrá en la liga
+                </p>
               </div>
 
               <div className="space-y-3">
-                {/* Admin */}
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => changeRole(roleTarget.id, 'admin')}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => changeRole(roleTarget.id, 'admin')}
                   className="w-full rounded-2xl p-4 text-left transition-colors"
                   style={{
                     backgroundColor: roleTarget.role === 'admin' ? 'rgba(99,102,241,0.15)' : 'var(--bg-input)',
                     border: roleTarget.role === 'admin' ? '2px solid #818cf8' : '2px solid transparent',
-                  }}
-                >
+                  }}>
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">⚡</span>
-                    <div>
+                    <div className="flex-1">
                       <p className="font-bold text-sm" style={{ color: roleTarget.role === 'admin' ? '#818cf8' : 'var(--text-primary)' }}>Admin</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Puede expulsar miembros y cambiar el nombre del grupo</p>
                     </div>
-                    {roleTarget.role === 'admin' && <span className="ml-auto text-indigo-400">✓</span>}
+                    {roleTarget.role === 'admin' && <span className="text-indigo-400">✓</span>}
                   </div>
                 </motion.button>
 
-                {/* Miembro */}
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => changeRole(roleTarget.id, 'member')}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => changeRole(roleTarget.id, 'member')}
                   className="w-full rounded-2xl p-4 text-left transition-colors"
                   style={{
                     backgroundColor: roleTarget.role === 'member' ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)',
                     border: roleTarget.role === 'member' ? '2px solid #f59e0b' : '2px solid transparent',
-                  }}
-                >
+                  }}>
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">🍺</span>
-                    <div>
+                    <div className="flex-1">
                       <p className="font-bold text-sm" style={{ color: roleTarget.role === 'member' ? '#f59e0b' : 'var(--text-primary)' }}>Miembro</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Solo puede participar y chatear</p>
                     </div>
-                    {roleTarget.role === 'member' && <span className="ml-auto text-amber-400">✓</span>}
+                    {roleTarget.role === 'member' && <span className="text-amber-400">✓</span>}
                   </div>
                 </motion.button>
               </div>
