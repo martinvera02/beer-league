@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { staggerItem, fadeIn } from '../lib/animations'
+import SeasonCountdown from '../components/SeasonCountdown'
 
 export default function GlobalRanking() {
   const { user } = useAuth()
@@ -40,8 +41,11 @@ export default function GlobalRanking() {
 
         <motion.div {...fadeIn}>
           <h1 className="text-2xl font-bold mb-1">Ranking global 🌍</h1>
-          <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Los más bebedores del mundo mundial</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Los más bebedores del mundo mundial</p>
         </motion.div>
+
+        {/* Cuenta atrás de temporada */}
+        <SeasonCountdown />
 
         {/* Podio top 3 */}
         {!loading && rankings.length >= 3 && (

@@ -9,6 +9,7 @@ export default function AddDrink() {
   const { user } = useAuth()
   const [drinkTypes, setDrinkTypes] = useState([])
   const [leagues, setLeagues] = useState([])
+  const [seasonId, setSeasonId] = useState(null)
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -16,27 +17,29 @@ export default function AddDrink() {
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
-    const [{ data: drinks }, { data: members }] = await Promise.all([
+    const [{ data: drinks }, { data: members }, { data: season }] = await Promise.all([
       supabase.from('drink_types').select('*'),
-      supabase.from('league_members').select('league_id').eq('user_id', user.id)
+      supabase.from('league_members').select('league_id').eq('user_id', user.id),
+      supabase.rpc('get_active_season'),
     ])
     setDrinkTypes(drinks || [])
     setLeagues(members?.map(m => m.league_id) || [])
+    setSeasonId(season?.id || null)
   }
 
   const handleAdd = async () => {
-    if (!selectedDrink || leagues.length === 0) return
+    if (!selectedDrink || leagues.length === 0 || !seasonId) return
     setLoading(true)
     soundDrink()
 
     const drink = drinkTypes.find(d => d.id === selectedDrink)
 
-    // Insertar la consumición en todas las ligas del usuario a la vez
     const inserts = leagues.map(league_id => ({
       user_id: user.id,
       league_id,
       drink_type_id: drink.id,
       points: drink.points,
+      season_id: seasonId,
     }))
 
     await supabase.from('drinks').insert(inserts)
@@ -121,7 +124,6 @@ export default function AddDrink() {
             </motion.div>
           )}
         </AnimatePresence>
-
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { staggerItem } from '../lib/animations'
 import { soundMessage, soundMessageReceived } from '../lib/sounds'
+import SeasonCountdown from '../components/SeasonCountdown'
 
 export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const { user } = useAuth()
@@ -172,7 +173,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   }
 
   return (
-    <div className={`text-white flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`} style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className={`flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`} style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
       <div className="px-4 pt-6 pb-3 flex-shrink-0">
@@ -243,6 +244,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* ── RANKING ── */}
       {tab === 'ranking' && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
+
+          {/* Cuenta atrás */}
+          <div className="pt-4">
+            <SeasonCountdown />
+          </div>
+
           {loading ? (
             <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando...</p>
           ) : rankings.length === 0 ? (
@@ -252,7 +259,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <p className="text-sm mt-1">¡Sé el primero en anotar!</p>
             </motion.div>
           ) : (
-            <div className="space-y-3 pt-4">
+            <div className="space-y-3">
               {rankings.map((entry, index) => {
                 const isMe = entry.user_id === user.id
                 const drinkCounts = (entry.drinks_detail || []).reduce((acc, d) => {
@@ -338,7 +345,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 </motion.div>
               )
             })}
-
             {selectedLeague?.created_by !== user.id && (
               <motion.button
                 whileTap={{ scale: 0.97 }}
@@ -420,7 +426,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input chat */}
           <div className="px-4 py-3 pb-24 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
             <div className="flex gap-2 items-end">
               <motion.button
