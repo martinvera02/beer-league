@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { soundTab } from '../lib/sounds'
 
 export default function Navbar({ currentPage, setCurrentPage }) {
   const { logout } = useAuth()
@@ -15,6 +16,11 @@ export default function Navbar({ currentPage, setCurrentPage }) {
     { id: 'profile',       emoji: '👤', label: 'Perfil' },
   ]
 
+  const handleTabClick = (id) => {
+    soundTab()
+    setCurrentPage(id)
+  }
+
   return (
     <>
       <nav
@@ -25,7 +31,7 @@ export default function Navbar({ currentPage, setCurrentPage }) {
           {tabs.map(tab => (
             <motion.button
               key={tab.id}
-              onClick={() => setCurrentPage(tab.id)}
+              onClick={() => handleTabClick(tab.id)}
               whileTap={{ scale: 0.85 }}
               className="relative flex flex-col items-center py-2 px-2 rounded-xl transition-colors"
               style={{ color: currentPage === tab.id ? '#f59e0b' : 'var(--text-hint)' }}
@@ -60,7 +66,6 @@ export default function Navbar({ currentPage, setCurrentPage }) {
         </div>
       </nav>
 
-      {/* Modal confirmación salir */}
       <AnimatePresence>
         {showLogoutConfirm && (
           <motion.div
@@ -82,7 +87,9 @@ export default function Navbar({ currentPage, setCurrentPage }) {
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">🚪</div>
                 <h2 className="text-xl font-bold">¿Cerrar sesión?</h2>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Tendrás que volver a iniciar sesión para entrar.</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Tendrás que volver a iniciar sesión para entrar.
+                </p>
               </div>
               <div className="flex gap-3">
                 <motion.button

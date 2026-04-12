@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerContainer, staggerItem, scaleIn } from '../lib/animations'
+import { soundDrink, soundSuccess } from '../lib/sounds'
 
 export default function AddDrink() {
   const { user } = useAuth()
@@ -25,9 +26,10 @@ export default function AddDrink() {
     if (members?.length > 0) setSelectedLeague(members[0].leagues.id)
   }
 
-  const handleAdd = async () => {
+    const handleAdd = async () => {
     if (!selectedDrink || !selectedLeague) return
     setLoading(true)
+    soundDrink() // 🍺 sonido al añadir
     const drink = drinkTypes.find(d => d.id === selectedDrink)
     await supabase.from('drinks').insert({
       user_id: user.id,
@@ -36,6 +38,7 @@ export default function AddDrink() {
       points: drink.points,
     })
     setSuccess(true)
+    soundSuccess() // 🎉 sonido de éxito
     setTimeout(() => setSuccess(false), 2500)
     setLoading(false)
     setSelectedDrink(null)

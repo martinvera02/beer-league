@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { fadeIn, staggerItem, scaleIn } from '../lib/animations'
+import { soundError, soundSuccess as soundOk } from '../lib/sounds'
 
 export default function Profile() {
   const { user, logout } = useAuth()
@@ -58,11 +59,12 @@ export default function Profile() {
     const ext = file.name.split('.').pop()
     const path = `${user.id}/avatar.${ext}`
     const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (uploadError) { setError('Error al subir la imagen'); setUploadingAvatar(false); return }
+    if (uploadError) { soundError(); setError('Error al subir la imagen'); setUploadingAvatar(false); return }
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
     await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
     setProfile(prev => ({ ...prev, avatar_url: publicUrl }))
     setUploadingAvatar(false)
+    soundOk()
     showSuccess('Foto actualizada')
   }
 
@@ -72,23 +74,26 @@ export default function Profile() {
     setError('')
     const { error } = await supabase.from('profiles').update({ username: newUsername.trim() }).eq('id', user.id)
     if (error) {
+      soundError()
       setError(error.message.includes('unique') ? 'Ese nombre de usuario ya está en uso' : error.message)
     } else {
       setProfile(prev => ({ ...prev, username: newUsername.trim() }))
+      soundOk()
       showSuccess('Nombre de usuario actualizado')
     }
     setSavingUsername(false)
   }
 
   const handleChangePassword = async () => {
-    if (!newPassword || newPassword !== confirmPassword) { setError('Las contraseñas no coinciden'); return }
-    if (newPassword.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return }
+    if (!newPassword || newPassword !== confirmPassword) { soundError(); setError('Las contraseñas no coinciden'); return }
+    if (newPassword.length < 6) { soundError(); setError('La contraseña debe tener al menos 6 caracteres'); return }
     setSavingPassword(true)
     setError('')
     const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (error) { setError(error.message) } else {
+    if (error) { soundError(); setError(error.message) } else {
       setNewPassword('')
       setConfirmPassword('')
+      soundOk()
       showSuccess('Contraseña actualizada')
     }
     setSavingPassword(false)
@@ -98,7 +103,7 @@ export default function Profile() {
     setDeleting(true)
     setError('')
     const { error } = await supabase.rpc('delete_user')
-    if (error) { setError('Error al eliminar la cuenta: ' + error.message); setDeleting(false); setShowDeleteConfirm(false); return }
+    if (error) { soundError(); setError('Error al eliminar la cuenta: ' + error.message); setDeleting(false); setShowDeleteConfirm(false); return }
     await logout()
   }
 
@@ -211,7 +216,6 @@ export default function Profile() {
         {section === 'settings' && (
           <motion.div {...fadeIn} key="settings" className="space-y-4">
 
-            {/* Cambiar nombre */}
             <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold mb-4">✏️ Cambiar nombre de usuario</h2>
               <input
@@ -232,7 +236,6 @@ export default function Profile() {
               </motion.button>
             </div>
 
-            {/* Cambiar contraseña */}
             <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold mb-4">🔒 Cambiar contraseña</h2>
               <input
@@ -261,7 +264,6 @@ export default function Profile() {
               </motion.button>
             </div>
 
-            {/* Apariencia */}
             <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold mb-4">🎨 Apariencia</h2>
               <div className="grid grid-cols-3 gap-2">
@@ -289,7 +291,6 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Zona peligrosa */}
             <div className="rounded-2xl p-5 border border-red-900" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold text-red-400 mb-1">⚠️ Zona peligrosa</h2>
               <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>
@@ -307,7 +308,6 @@ export default function Profile() {
         )}
       </div>
 
-      {/* Modal eliminar cuenta */}
       <AnimatePresence>
         {showDeleteConfirm && (
           <motion.div
