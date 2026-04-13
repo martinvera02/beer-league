@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerContainer, staggerItem } from '../lib/animations'
-import { soundDrink, soundSuccess } from '../lib/sounds'
+import { soundDrink, soundSuccess, soundError } from '../lib/sounds'
 
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -16,24 +16,67 @@ const generateUUID = () => {
 export default function AddDrink() {
   const { user } = useAuth()
   const [drinkTypes, setDrinkTypes] = useState([])
+  const [drinkMarket, setDrinkMarket] = useState({})
   const [leagues, setLeagues] = useState([])
   const [seasonId, setSeasonId] = useState(null)
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [coinsEarned, setCoinsEarned] = useState(0)
+  const [frozen, setFrozen] = useState(false)
+  const [result, setResult] = useState(null)
+  const [activePowerups, setActivePowerups] = useState([])
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
-    const [{ data: drinks }, { data: members }, { data: season }] = await Promise.all([
+    const [
+      { data: drinks },
+      { data: members },
+      { data: season },
+      { data: market },
+      { data: powerups },
+    ] = await Promise.all([
       supabase.from('drink_types').select('*'),
       supabase.from('league_members').select('league_id').eq('user_id', user.id),
       supabase.rpc('get_active_season'),
+      supabase.from('drink_market').select('drink_type_id, price'),
+      supabase.from('active_powerups')
+        .select('*, powerup_catalog(name, emoji, effect_type)')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .or('expires_at.is.null,expires_at.gt.now()'),
     ])
+
     setDrinkTypes(drinks || [])
     setLeagues(members?.map(m => m.league_id) || [])
     setSeasonId(season?.id || null)
+    setActivePowerups(powerups || [])
+
+    // Indexar precios por drink_type_id
+    const marketMap = {}
+    market?.forEach(m => { marketMap[m.drink_type_id] = m.price })
+    setDrinkMarket(marketMap)
+  }
+
+  const getEffectivePoints = (drink) => {
+    const price = drinkMarket[drink.id] || 100
+    const marketMultiplier = Math.max(0.5, Math.min(2.0, price / 100))
+    const hasDouble = activePowerups.some(p => p.powerup_catalog?.effect_type === 'double_points')
+    const hasTurbo = activePowerups.some(p =>
+      p.powerup_catalog?.effect_type === 'turbo' &&
+      p.extra_data?.drink_type_id === drink.id
+    )
+    let multiplier = marketMultiplier
+    if (hasDouble) multiplier *= 2
+    if (hasTurbo) multiplier *= 3
+    return Math.round(drink.points * multiplier * 10) / 10
+  }
+
+  const getMarketTrend = (drinkId) => {
+    const price = drinkMarket[drinkId] || 100
+    if (price > 110) return { icon: '📈', color: '#10b981' }
+    if (price < 90) return { icon: '📉', color: '#ef4444' }
+    return { icon: '➡️', color: 'var(--text-muted)' }
   }
 
   const handleAdd = async () => {
@@ -41,83 +84,152 @@ export default function AddDrink() {
     setLoading(true)
     soundDrink()
 
-    const drink = drinkTypes.find(d => d.id === selectedDrink)
     const drinkGroupId = generateUUID()
-    const coins = Math.floor(drink.points * 10)
 
-    const inserts = leagues.map(league_id => ({
-      user_id: user.id,
-      league_id,
-      drink_type_id: drink.id,
-      points: drink.points,
-      season_id: seasonId,
-      drink_group_id: drinkGroupId,
-    }))
-
-    await supabase.from('drinks').insert(inserts)
-
-    // Dar recompensa en monedas 🪙
-    await supabase.rpc('reward_drink', {
+    const { data, error } = await supabase.rpc('add_drink_with_effects', {
       p_user_id: user.id,
-      p_points: drink.points,
+      p_drink_type_id: selectedDrink,
+      p_season_id: seasonId,
+      p_league_ids: leagues,
+      p_drink_group_id: drinkGroupId,
     })
 
-    setCoinsEarned(coins)
+    if (error || !data?.success) {
+      if (data?.frozen) {
+        setFrozen(true)
+        soundError()
+        setTimeout(() => setFrozen(false), 3000)
+      }
+      setLoading(false)
+      return
+    }
+
+    setResult(data)
     setSuccess(true)
     soundSuccess()
-    setTimeout(() => setSuccess(false), 2500)
+    await fetchData() // recargar powerups y mercado
+    setTimeout(() => {
+      setSuccess(false)
+      setResult(null)
+    }, 3000)
     setLoading(false)
     setSelectedDrink(null)
   }
 
+  const isFreezeActive = activePowerups.some(p =>
+    p.powerup_catalog?.effect_type === 'freeze' &&
+    p.target_user_id === user.id
+  )
+
   return (
-    <div className="min-h-screen pb-24 px-4 pt-6 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen pb-24 px-4 pt-6 transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       <div className="max-w-md mx-auto">
 
         <motion.div {...fadeIn}>
           <h1 className="text-2xl font-bold mb-1">Añadir consumición 🍺</h1>
-          <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>¿Qué has tomado? Se anotará en todas tus ligas.</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+            ¿Qué has tomado? Se anotará en todas tus ligas.
+          </p>
         </motion.div>
 
+        {/* Powerups activos */}
+        {activePowerups.length > 0 && (
+          <motion.div {...fadeIn} className="flex gap-2 overflow-x-auto pb-2 mb-4">
+            {activePowerups.map(ap => (
+              <div key={ap.id} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                <span>{ap.powerup_catalog?.emoji}</span>
+                <span>{ap.powerup_catalog?.name}</span>
+                {ap.extra_data?.uses_left && <span>({ap.extra_data.uses_left} usos)</span>}
+              </div>
+            ))}
+          </motion.div>
+        )}
+
+        {/* Aviso freeze */}
+        <AnimatePresence>
+          {isFreezeActive && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="rounded-2xl p-4 mb-4 text-center"
+              style={{ backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)' }}>
+              <div className="text-3xl mb-1">🧊</div>
+              <p className="font-bold text-blue-400">¡Estás congelado!</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>No puedes sumar puntos mientras dure el freeze</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-2 gap-3 mb-8">
-          {drinkTypes.map(drink => (
-            <motion.button
-              key={drink.id}
-              variants={staggerItem}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedDrink(drink.id)}
-              className={`rounded-2xl p-5 text-center transition-all ${
-                selectedDrink === drink.id ? 'bg-amber-500 shadow-lg shadow-amber-900' : ''
-              }`}
-              style={selectedDrink !== drink.id ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' } : {}}
-            >
-              <motion.div
-                className="text-4xl mb-2"
-                animate={selectedDrink === drink.id ? { scale: [1, 1.3, 1] } : {}}
-                transition={{ duration: 0.3 }}
+          {drinkTypes.map(drink => {
+            const effectivePoints = getEffectivePoints(drink)
+            const basePoints = drink.points
+            const isModified = effectivePoints !== basePoints
+            const trend = getMarketTrend(drink.id)
+            const isSelected = selectedDrink === drink.id
+
+            return (
+              <motion.button
+                key={drink.id}
+                variants={staggerItem}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setSelectedDrink(drink.id)}
+                className={`rounded-2xl p-5 text-center transition-all relative ${
+                  isSelected ? 'bg-amber-500 shadow-lg shadow-amber-900' : ''
+                }`}
+                style={!isSelected ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' } : {}}
               >
-                {drink.emoji}
-              </motion.div>
-              <div className="font-semibold text-sm">{drink.name}</div>
-              <div className="text-xs mt-0.5" style={{ color: selectedDrink === drink.id ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
-                {drink.points} {drink.points === 1 ? 'punto' : 'puntos'}
-              </div>
-              <div className="text-xs mt-0.5 font-medium" style={{ color: selectedDrink === drink.id ? 'rgba(255,255,255,0.9)' : '#f59e0b' }}>
-                +{Math.floor(drink.points * 10)}🪙
-              </div>
-            </motion.button>
-          ))}
+                {/* Indicador de tendencia */}
+                <div className="absolute top-2 right-2 text-xs">{trend.icon}</div>
+
+                <motion.div className="text-4xl mb-2"
+                  animate={isSelected ? { scale: [1, 1.3, 1] } : {}}
+                  transition={{ duration: 0.3 }}>
+                  {drink.emoji}
+                </motion.div>
+                <div className="font-semibold text-sm">{drink.name}</div>
+
+                {/* Puntos efectivos */}
+                <div className="mt-1">
+                  {isModified ? (
+                    <div>
+                      <span className="text-xs line-through mr-1"
+                        style={{ color: isSelected ? 'rgba(255,255,255,0.5)' : 'var(--text-hint)' }}>
+                        {basePoints}pts
+                      </span>
+                      <span className="text-sm font-bold"
+                        style={{ color: isSelected ? '#fff' : '#10b981' }}>
+                        {effectivePoints}pts
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs" style={{ color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
+                      {basePoints} {basePoints === 1 ? 'punto' : 'puntos'}
+                    </div>
+                  )}
+                  <div className="text-xs font-medium mt-0.5"
+                    style={{ color: isSelected ? 'rgba(255,255,255,0.9)' : '#f59e0b' }}>
+                    +{Math.floor(effectivePoints * 10)}🪙
+                  </div>
+                </div>
+              </motion.button>
+            )
+          })}
         </motion.div>
 
         <motion.button
           onClick={handleAdd}
-          disabled={!selectedDrink || loading || leagues.length === 0}
+          disabled={!selectedDrink || loading || leagues.length === 0 || isFreezeActive}
           whileTap={{ scale: 0.97 }}
-          whileHover={selectedDrink ? { scale: 1.02 } : {}}
+          whileHover={selectedDrink && !isFreezeActive ? { scale: 1.02 } : {}}
           className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl text-lg transition-colors"
         >
-          {loading ? 'Guardando...' : leagues.length === 0 ? 'Únete a una liga primero' : '¡Apuntar consumición!'}
+          {loading ? 'Guardando...' :
+           isFreezeActive ? '🧊 Congelado' :
+           leagues.length === 0 ? 'Únete a una liga primero' :
+           '¡Apuntar consumición!'}
         </motion.button>
 
         {leagues.length === 0 && (
@@ -126,29 +238,84 @@ export default function AddDrink() {
           </motion.p>
         )}
 
+        {/* Resultado animado */}
         <AnimatePresence>
-          {success && (
+          {success && result && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
-              className="mt-6 text-center bg-green-900 rounded-2xl py-5"
+              className="mt-6 rounded-2xl py-5 px-4 text-center"
+              style={{ backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}
             >
               <motion.div className="text-5xl mb-2"
                 animate={{ rotate: [0, -15, 15, -10, 0], scale: [1, 1.3, 1] }}
                 transition={{ duration: 0.6 }}>
                 🎉
               </motion.div>
-              <p className="text-green-300 font-bold text-lg">¡Punto anotado!</p>
-              <p className="text-green-500 text-sm mt-1">Anotado en {leagues.length} {leagues.length === 1 ? 'liga' : 'ligas'} 🏆</p>
+              <p className="text-emerald-400 font-bold text-lg">¡Consumición anotada!</p>
+
+              {/* Desglose de puntos */}
+              <div className="mt-3 space-y-1.5">
+                <div className="flex justify-between text-sm px-4">
+                  <span style={{ color: 'var(--text-muted)' }}>Puntos base</span>
+                  <span className="font-medium">{result.base_points} pts</span>
+                </div>
+                {result.market_multiplier !== 1 && (
+                  <div className="flex justify-between text-sm px-4">
+                    <span style={{ color: 'var(--text-muted)' }}>Mercado</span>
+                    <span className={`font-medium ${result.market_multiplier > 1 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      x{result.market_multiplier}
+                    </span>
+                  </div>
+                )}
+                {result.double_active && (
+                  <div className="flex justify-between text-sm px-4">
+                    <span style={{ color: 'var(--text-muted)' }}>🔥 Racha Doble</span>
+                    <span className="font-medium text-amber-400">x2</span>
+                  </div>
+                )}
+                {result.turbo_active && (
+                  <div className="flex justify-between text-sm px-4">
+                    <span style={{ color: 'var(--text-muted)' }}>⚡ Turbo</span>
+                    <span className="font-medium text-amber-400">x3</span>
+                  </div>
+                )}
+                <div className="border-t mt-2 pt-2 flex justify-between text-sm px-4"
+                  style={{ borderColor: 'rgba(16,185,129,0.3)' }}>
+                  <span className="font-bold text-emerald-400">Total</span>
+                  <span className="font-bold text-emerald-400">{result.final_points} pts</span>
+                </div>
+              </div>
+
               <motion.p
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="text-amber-400 font-bold mt-2"
+                className="text-amber-400 font-bold mt-3 text-lg"
               >
-                +{coinsEarned}🪙 ganadas
+                +{result.coins}🪙
               </motion.p>
+
+              <p className="text-xs mt-2" style={{ color: 'var(--text-hint)' }}>
+                Anotado en {leagues.length} {leagues.length === 1 ? 'liga' : 'ligas'}
+              </p>
+            </motion.div>
+          )}
+
+          {frozen && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.8 }}
+              className="mt-6 rounded-2xl py-5 text-center"
+              style={{ backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.4)' }}
+            >
+              <div className="text-5xl mb-2">🧊</div>
+              <p className="text-blue-400 font-bold">¡Estás congelado!</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                Alguien te ha aplicado un Freeze. No puntúas hasta que expire.
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
