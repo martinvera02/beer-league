@@ -10,6 +10,7 @@ import GlobalRanking from './pages/GlobalRanking'
 import Social from './pages/Social'
 import Profile from './pages/Profile'
 import Navbar from './components/Navbar'
+import Footer from './components/Footer'
 
 function Dashboard() {
   const [currentPage, setCurrentPage] = useState('home')
@@ -30,6 +31,7 @@ function Dashboard() {
   return (
     <div>
       {renderPage()}
+      <Footer />
       <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
     </div>
   )
