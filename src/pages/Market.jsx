@@ -33,24 +33,31 @@ function DetailChart({ history, width = 300, height = 120 }) {
     </div>
   )
   const prices = history.map(h => h.price)
-  const min = Math.min(...prices)
-  const max = Math.max(...prices)
-  const range = max - min || 1
-  const pad = 20
-  const toX = (i) => pad + (i / (prices.length - 1)) * (width - pad * 2)
-  const toY = (p) => pad + (height - pad * 2) - ((p - min) / range) * (height - pad * 2)
-  const points = prices.map((p, i) => `${toX(i)},${toY(p)}`).join(' ')
-  const areaPoints = `${toX(0)},${height - pad} ${points} ${toX(prices.length - 1)},${height - pad}`
-  const isUp = prices[prices.length - 1] >= prices[0]
+  const multipliers = prices.map(p => Math.max(0.5, Math.min(2.0, p / 100)))
+  const min = Math.min(...multipliers)
+  const max = Math.max(...multipliers)
+  const range = max - min || 0.1
+  const pad = 24
+  const toX = (i) => pad + (i / (multipliers.length - 1)) * (width - pad * 2)
+  const toY = (m) => pad + (height - pad * 2) - ((m - min) / range) * (height - pad * 2)
+  const points = multipliers.map((m, i) => `${toX(i)},${toY(m)}`).join(' ')
+  const areaPoints = `${toX(0)},${height - pad} ${points} ${toX(multipliers.length - 1)},${height - pad}`
+  const current = multipliers[multipliers.length - 1]
+  const start = multipliers[0]
+  const isUp = current >= start
   const lineColor = isUp ? '#10b981' : '#ef4444'
-  const current = prices[prices.length - 1]
-  const start = prices[0]
   const pct = (((current - start) / start) * 100).toFixed(1)
+
   return (
     <div>
-      <div className="flex items-end gap-2 mb-2">
-        <span className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{current.toFixed(0)}🪙</span>
-        <span className={`text-sm font-semibold mb-0.5 ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
+      <div className="flex items-end gap-3 mb-3">
+        <div>
+          <p className="text-xs mb-0.5" style={{ color: 'var(--text-hint)' }}>Multiplicador actual</p>
+          <p className="text-3xl font-bold" style={{ color: current > 1 ? '#10b981' : current < 1 ? '#ef4444' : 'var(--text-primary)' }}>
+            x{current.toFixed(2)}
+          </p>
+        </div>
+        <span className={`text-sm font-semibold mb-1 ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
           {isUp ? '▲' : '▼'} {Math.abs(pct)}%
         </span>
       </div>
@@ -61,6 +68,14 @@ function DetailChart({ history, width = 300, height = 120 }) {
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
         </defs>
+        {/* Línea de referencia x1.0 */}
+        {(() => {
+          const refY = toY(1.0)
+          if (refY >= pad && refY <= height - pad) return (
+            <line x1={pad} y1={refY} x2={width - pad} y2={refY}
+              stroke="rgba(245,158,11,0.4)" strokeWidth="1" strokeDasharray="4 4" />
+          )
+        })()}
         {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
           <line key={i} x1={pad} y1={pad + (height - pad * 2) * t}
             x2={width - pad} y2={pad + (height - pad * 2) * t}
@@ -69,9 +84,11 @@ function DetailChart({ history, width = 300, height = 120 }) {
         <polygon points={areaPoints} fill="url(#area-grad)" />
         <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2.5"
           strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={toX(prices.length - 1)} cy={toY(current)} r="4" fill={lineColor} />
-        <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">{max.toFixed(0)}</text>
-        <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">{min.toFixed(0)}</text>
+        <circle cx={toX(multipliers.length - 1)} cy={toY(current)} r="4" fill={lineColor} />
+        <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">x{max.toFixed(1)}</text>
+        <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">x{min.toFixed(1)}</text>
+        {/* Etiqueta línea base */}
+        <text x={width - pad + 4} y={toY(1.0) + 4} fontSize="8" fill="rgba(245,158,11,0.7)">x1.0</text>
       </svg>
     </div>
   )
@@ -216,12 +233,9 @@ export default function Market() {
     if (needsTarget && !targetUser) return
     const needsTurboDrink = selectedPowerup.effect_type === 'turbo'
     if (needsTurboDrink && !turboDrink) return
-
     setBuying(true)
-
     let extraData = {}
     if (needsTurboDrink) extraData.drink_type_id = turboDrink
-
     const result = await supabase.rpc('buy_powerup', {
       p_user_id: user.id,
       p_target_user_id: targetUser?.id || user.id,
@@ -229,7 +243,6 @@ export default function Market() {
       p_powerup_id: selectedPowerup.id,
       p_extra_data: extraData,
     })
-
     if (result.data?.success) {
       soundSuccess()
       setBalance(prev => prev - selectedPowerup.cost)
@@ -250,27 +263,33 @@ export default function Market() {
     return `${h}h ${m}m`
   }
 
+  const getMultiplier = (price) => Math.max(0.5, Math.min(2.0, price / 100))
+
   const needsTarget = selectedPowerup && ['freeze'].includes(selectedPowerup.effect_type)
   const needsTurboDrink = selectedPowerup?.effect_type === 'turbo'
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
       <div className="text-center">
-        <motion.div className="text-5xl mb-3" animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>🪙</motion.div>
+        <motion.div className="text-5xl mb-3" animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>🪙</motion.div>
         <p style={{ color: 'var(--text-muted)' }}>Cargando mercado...</p>
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen pb-24 transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold">Mercado 📈</h2>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Invierte, especula y destruye a tus amigos</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              Invierte para subir o bajar el multiplicador de cada bebida
+            </p>
           </div>
           <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 0.3 }} key={balance}
             className="flex items-center gap-2 px-4 py-2 rounded-2xl"
@@ -302,52 +321,114 @@ export default function Market() {
       {/* ── COTIZACIÓN ── */}
       {tab === 'market' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
-          <p className="text-xs mb-2 font-medium" style={{ color: 'var(--text-muted)' }}>
-            El precio afecta a los puntos que ganas. Precio {'>'} 100 = más puntos, {'<'} 100 = menos puntos.
-          </p>
-          <div className="rounded-xl p-3 mb-4 flex gap-4 text-xs"
-            style={{ backgroundColor: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
-            <span>📈 x0.5 — x2.0 multiplicador</span>
-            <span className="text-emerald-400">Precio 200 = x2 pts</span>
-            <span className="text-red-400">Precio 50 = x0.5 pts</span>
+
+          {/* Leyenda */}
+          <div className="rounded-2xl p-3 mb-4 flex items-center justify-between"
+            style={{ backgroundColor: 'var(--bg-card)' }}>
+            <div className="text-center flex-1">
+              <p className="text-xs font-bold text-red-400">x0.5</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Mínimo</p>
+            </div>
+            <div className="text-center flex-1 border-x" style={{ borderColor: 'var(--border)' }}>
+              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>x1.0</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Base</p>
+            </div>
+            <div className="text-center flex-1">
+              <p className="text-xs font-bold text-emerald-400">x2.0</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Máximo</p>
+            </div>
           </div>
 
           <div className="space-y-3">
             {drinkMarket.map((drink) => {
-              const isUp = drink.history?.length > 1 ? drink.price >= drink.history[0]?.price : true
+              const multiplier = getMultiplier(drink.price)
+              const basePoints = drink.drink_types?.points || 0
+              const effectivePoints = Math.round(basePoints * multiplier * 10) / 10
+              const effectiveCoins = Math.floor(effectivePoints * 10)
+              const isUp = drink.history?.length > 1
+                ? drink.price >= drink.history[0]?.price : true
               const pct = drink.history?.length > 1
                 ? (((drink.price - drink.history[0].price) / drink.history[0].price) * 100).toFixed(1)
                 : '0.0'
-              const multiplier = Math.max(0.5, Math.min(2.0, drink.price / 100))
-              const effectivePoints = Math.round(drink.drink_types?.points * multiplier * 10) / 10
+
+              // Barra de multiplicador (0.5 a 2.0 → 0% a 100%)
+              const barPct = ((multiplier - 0.5) / 1.5) * 100
+              const barColor = multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : '#9ca3af'
 
               return (
                 <motion.button key={drink.id} variants={staggerItem} initial="initial" animate="animate"
                   whileTap={{ scale: 0.98 }} onClick={() => openDrinkDetail(drink)}
                   className="w-full rounded-2xl p-4 text-left" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+
+                  <div className="flex items-center gap-3 mb-3">
+                    {/* Emoji */}
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
                       style={{ backgroundColor: 'var(--bg-input)' }}>
                       {drink.drink_types?.emoji}
                     </div>
+
+                    {/* Nombre y variación */}
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{drink.drink_types?.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                          Base: {drink.drink_types?.points}pts
-                        </span>
-                        <span className="text-xs font-bold" style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : 'var(--text-muted)' }}>
-                          → {effectivePoints}pts ahora
-                        </span>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                        Vol: {drink.volume?.toLocaleString()}🪙
+                      </p>
+                    </div>
+
+                    {/* Mini gráfica */}
+                    <SparkChart history={drink.history} width={60} height={28} />
+
+                    {/* Variación % */}
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-xs font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {isUp ? '▲' : '▼'} {Math.abs(pct)}%
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Barra de multiplicador */}
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>x0.5</span>
+                      <span className="text-sm font-bold"
+                        style={{ color: multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : 'var(--text-primary)' }}>
+                        x{multiplier.toFixed(2)}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>x2.0</span>
+                    </div>
+                    <div className="w-full rounded-full h-2" style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${barPct}%` }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                        className="h-2 rounded-full"
+                        style={{ backgroundColor: barColor }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Puntos y monedas efectivos */}
+                  <div className="flex items-center justify-between pt-2 border-t"
+                    style={{ borderColor: 'var(--border)' }}>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Pts base</p>
+                        <p className="text-sm font-medium">{basePoints}pts</p>
+                      </div>
+                      <span style={{ color: 'var(--text-hint)' }}>→</span>
+                      <div>
+                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Pts ahora</p>
+                        <p className="text-sm font-bold"
+                          style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : 'var(--text-primary)' }}>
+                          {effectivePoints}pts
+                        </p>
                       </div>
                     </div>
-                    <div className="flex-shrink-0">
-                      <SparkChart history={drink.history} width={80} height={32} />
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-2">
-                      <p className="font-bold text-sm">{parseFloat(drink.price).toFixed(0)}🪙</p>
-                      <p className={`text-xs font-semibold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isUp ? '▲' : '▼'} {Math.abs(pct)}%
+                    <div className="text-right">
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Monedas ahora</p>
+                      <p className="text-sm font-bold"
+                        style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>
+                        +{effectiveCoins}🪙
                       </p>
                     </div>
                   </div>
@@ -446,17 +527,16 @@ export default function Market() {
           <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
             <p className="text-sm font-bold mb-1">¿Cómo ganar 🪙?</p>
             <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
-              1 punto = 10🪙 base. El precio del mercado multiplica los puntos (y las monedas).
+              Puntos × 10 = monedas. El multiplicador del mercado afecta a ambos.
             </p>
             <div className="space-y-2">
               {drinkTypes.map(drink => {
                 const marketDrink = drinkMarket.find(d => d.drink_type_id === drink.id)
                 const price = marketDrink?.price || 100
-                const multiplier = Math.max(0.5, Math.min(2.0, price / 100))
+                const multiplier = getMultiplier(price)
                 const effectivePoints = Math.round(drink.points * multiplier * 10) / 10
                 const coins = Math.floor(effectivePoints * 10)
                 const isModified = Math.abs(multiplier - 1) > 0.05
-
                 return (
                   <motion.div key={drink.id} variants={staggerItem} initial="initial" animate="animate"
                     className="flex justify-between items-center py-2 border-b last:border-0"
@@ -467,7 +547,8 @@ export default function Market() {
                     </div>
                     <div className="flex items-center gap-2">
                       {isModified && (
-                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                        <span className="text-xs font-bold"
+                          style={{ color: multiplier > 1 ? '#10b981' : '#ef4444' }}>
                           x{multiplier.toFixed(1)}
                         </span>
                       )}
@@ -486,23 +567,24 @@ export default function Market() {
             </div>
           </div>
 
-          {/* Resultado cierre */}
           <AnimatePresence>
             {closeResult && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="rounded-2xl p-4 mb-4 text-center"
-                style={{ backgroundColor: closeResult.pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${closeResult.pnl >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                style={{
+                  backgroundColor: closeResult.pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                  border: `1px solid ${closeResult.pnl >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                }}>
                 <p className="font-bold" style={{ color: closeResult.pnl >= 0 ? '#10b981' : '#ef4444' }}>
                   {closeResult.pnl >= 0 ? '🎉 Ganancia' : '📉 Pérdida'}: {closeResult.pnl >= 0 ? '+' : ''}{closeResult.pnl}🪙
                 </p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                  Entrada: {parseFloat(closeResult.entry_price).toFixed(0)}🪙 → Salida: {parseFloat(closeResult.exit_price).toFixed(0)}🪙
+                  Entrada: {parseFloat(closeResult.entry_price).toFixed(0)} → Salida: {parseFloat(closeResult.exit_price).toFixed(0)}
                 </p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Posiciones abiertas */}
           <p className="text-sm font-bold mb-3">Posiciones abiertas</p>
           {myPositions.length === 0 ? (
             <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
@@ -519,6 +601,8 @@ export default function Market() {
                   ? Math.floor(pos.amount * ((currentPrice - pos.entry_price) / pos.entry_price))
                   : Math.floor(pos.amount * ((pos.entry_price - currentPrice) / pos.entry_price))
                 const isProfit = pnl >= 0
+                const currentMultiplier = getMultiplier(currentPrice)
+                const entryMultiplier = getMultiplier(pos.entry_price)
                 return (
                   <motion.div key={pos.id} variants={staggerItem} initial="initial" animate="animate"
                     className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -535,15 +619,12 @@ export default function Market() {
                           </span>
                         </div>
                         <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                          Invertido: {pos.amount}🪙 · Entrada: {parseFloat(pos.entry_price).toFixed(0)}🪙
+                          Invertido: {pos.amount}🪙 · Entrada: x{entryMultiplier.toFixed(2)} → Ahora: x{currentMultiplier.toFixed(2)}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className={`font-bold text-sm ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                           {isProfit ? '+' : ''}{pnl}🪙
-                        </p>
-                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                          Ahora: {parseFloat(currentPrice).toFixed(0)}🪙
                         </p>
                       </div>
                     </div>
@@ -583,7 +664,9 @@ export default function Market() {
                   <span className="text-3xl">{selectedDrink.drink_types?.emoji}</span>
                   <div>
                     <h2 className="text-lg font-bold">{selectedDrink.drink_types?.name}</h2>
-                    <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Vol: {selectedDrink.volume?.toLocaleString()}🪙</p>
+                    <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                      Base: {selectedDrink.drink_types?.points}pts · Vol: {selectedDrink.volume?.toLocaleString()}🪙
+                    </p>
                   </div>
                 </div>
                 <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSelectedDrink(null)}
@@ -591,9 +674,35 @@ export default function Market() {
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
 
+              {/* Gráfica del multiplicador */}
               <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
                 <DetailChart history={drinkHistory} width={320} height={140} />
               </div>
+
+              {/* Efecto actual */}
+              {(() => {
+                const mult = getMultiplier(selectedDrink.price)
+                const effPts = Math.round(selectedDrink.drink_types?.points * mult * 10) / 10
+                const effCoins = Math.floor(effPts * 10)
+                return (
+                  <div className="flex gap-3 mb-4">
+                    <div className="flex-1 rounded-xl p-3 text-center"
+                      style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Pts ahora</p>
+                      <p className="font-bold" style={{ color: mult > 1 ? '#10b981' : mult < 1 ? '#ef4444' : 'var(--text-primary)' }}>
+                        {effPts}pts
+                      </p>
+                    </div>
+                    <div className="flex-1 rounded-xl p-3 text-center"
+                      style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Monedas ahora</p>
+                      <p className="font-bold" style={{ color: mult > 1 ? '#10b981' : mult < 1 ? '#ef4444' : '#f59e0b' }}>
+                        +{effCoins}🪙
+                      </p>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div className="mb-4">
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
@@ -604,14 +713,14 @@ export default function Market() {
                       backgroundColor: tradeDirection === 'long' ? 'rgba(16,185,129,0.2)' : 'var(--bg-input)',
                       color: tradeDirection === 'long' ? '#10b981' : 'var(--text-muted)',
                       border: tradeDirection === 'long' ? '2px solid #10b981' : '2px solid transparent',
-                    }}>▲ LONG (sube)</motion.button>
+                    }}>▲ LONG<br/><span className="text-xs font-normal">sube multiplicador</span></motion.button>
                   <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('short')}
                     className="flex-1 py-3 rounded-xl font-bold text-sm transition-colors"
                     style={{
                       backgroundColor: tradeDirection === 'short' ? 'rgba(239,68,68,0.2)' : 'var(--bg-input)',
                       color: tradeDirection === 'short' ? '#ef4444' : 'var(--text-muted)',
                       border: tradeDirection === 'short' ? '2px solid #ef4444' : '2px solid transparent',
-                    }}>▼ SHORT (baja)</motion.button>
+                    }}>▼ SHORT<br/><span className="text-xs font-normal">baja multiplicador</span></motion.button>
                 </div>
               </div>
 
@@ -640,8 +749,8 @@ export default function Market() {
 
               <p className="text-xs mb-3 text-center" style={{ color: 'var(--text-hint)' }}>
                 {tradeDirection === 'long'
-                  ? `▲ El precio subirá ~${(tradeAmount / 100).toFixed(1)}🪙 → más puntos al beberla`
-                  : `▼ El precio bajará ~${(tradeAmount / 100).toFixed(1)}🪙 → menos puntos al beberla`}
+                  ? `▲ El multiplicador subirá ~${(tradeAmount / 10000).toFixed(3)} → más pts y 🪙 al beberla`
+                  : `▼ El multiplicador bajará ~${(tradeAmount / 10000).toFixed(3)} → menos pts y 🪙 al beberla`}
               </p>
 
               <motion.button whileTap={{ scale: 0.97 }} onClick={executeTrade}
@@ -675,12 +784,12 @@ export default function Market() {
                     <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{selectedPowerup.description}</p>
                   </div>
                 </div>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null) }}
+                <motion.button whileTap={{ scale: 0.9 }}
+                  onClick={() => { setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null) }}
                   className="w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
 
-              {/* Selector objetivo para Freeze */}
               {needsTarget && (
                 <div className="mb-5">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
@@ -699,8 +808,7 @@ export default function Market() {
                         }}>
                         {member.avatar_url
                           ? <img src={member.avatar_url} alt={member.username} className="w-8 h-8 rounded-full object-cover" />
-                          : <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-card)' }}>🍺</div>
-                        }
+                          : <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-card)' }}>🍺</div>}
                         <span className="text-sm font-medium">{member.username}</span>
                         {targetUser?.id === member.id && <span className="ml-auto text-amber-400">✓</span>}
                       </motion.button>
@@ -709,7 +817,6 @@ export default function Market() {
                 </div>
               )}
 
-              {/* Selector bebida para Turbo */}
               {needsTurboDrink && (
                 <div className="mb-5">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
@@ -733,17 +840,14 @@ export default function Market() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between p-4 rounded-2xl mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
+              <div className="flex items-center justify-between p-4 rounded-2xl mb-4"
+                style={{ backgroundColor: 'var(--bg-base)' }}>
                 <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Coste</span>
                 <span className="font-bold text-amber-400 text-lg">{selectedPowerup.cost}🪙</span>
               </div>
 
               <motion.button whileTap={{ scale: 0.97 }} onClick={executeBuyPowerup}
-                disabled={
-                  buying || balance < selectedPowerup.cost ||
-                  (needsTarget && !targetUser) ||
-                  (needsTurboDrink && !turboDrink)
-                }
+                disabled={buying || balance < selectedPowerup.cost || (needsTarget && !targetUser) || (needsTurboDrink && !turboDrink)}
                 className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-4 rounded-2xl transition-colors">
                 {buying ? 'Activando...' : `Activar · ${selectedPowerup.cost}🪙`}
               </motion.button>
