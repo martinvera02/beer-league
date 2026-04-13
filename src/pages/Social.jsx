@@ -480,118 +480,124 @@ export default function Social() {
       </AnimatePresence>
 
       {/* ── PANEL COMENTARIOS ── */}
-      <AnimatePresence>
-        {openComments && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 flex items-end z-50"
-            onClick={closeCommentsPanel}>
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-              onClick={e => e.stopPropagation()}
-              className="rounded-t-3xl w-full flex flex-col"
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                color: 'var(--text-primary)',
-                maxHeight: '75vh',
-              }}>
+<AnimatePresence>
+  {openComments && (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/70 z-50"
+      style={{ display: 'flex', alignItems: 'flex-end' }}
+      onClick={closeCommentsPanel}>
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+        onClick={e => e.stopPropagation()}
+        style={{
+          backgroundColor: 'var(--bg-card)',
+          color: 'var(--text-primary)',
+          height: '70vh',
+          width: '100%',
+          borderRadius: '24px 24px 0 0',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
 
-              {/* Cabecera */}
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0 border-b"
-                style={{ borderColor: 'var(--border)' }}>
-                <h2 className="text-base font-bold">
-                  Comentarios
-                  {comments.length > 0 && (
-                    <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
-                      {comments.length}
-                    </span>
-                  )}
-                </h2>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={closeCommentsPanel}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-sm"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
-              </div>
+        {/* Cabecera */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '20px 20px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0
+        }}>
+          <p style={{ fontWeight: 'bold', fontSize: '15px' }}>
+            Comentarios {comments.length > 0 && `(${comments.length})`}
+          </p>
+          <button onClick={closeCommentsPanel} style={{
+            width: 28, height: 28, borderRadius: '50%',
+            backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13
+          }}>✕</button>
+        </div>
 
-              {/* Lista de comentarios con scroll */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-                {comments.length === 0 ? (
-                  <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
-                    <div className="text-4xl mb-2">💬</div>
-                    <p className="text-sm">Sin comentarios todavía</p>
-                    <p className="text-xs mt-1">¡Sé el primero!</p>
+        {/* Lista comentarios */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {comments.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>💬</div>
+              <p style={{ fontSize: 14 }}>Sin comentarios todavía</p>
+              <p style={{ fontSize: 12, marginTop: 4 }}>¡Sé el primero!</p>
+            </div>
+          ) : (
+            comments.map(comment => {
+              const isMe = comment.user_id === user.id
+              return (
+                <div key={comment.id} style={{ display: 'flex', gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                    backgroundColor: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {comment.profiles?.avatar_url
+                      ? <img src={comment.profiles.avatar_url} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                      : '🍺'}
                   </div>
-                ) : (
-                  comments.map(comment => {
-                    const isMe = comment.user_id === user.id
-                    return (
-                      <motion.div key={comment.id}
-                        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                        className="flex gap-3">
-                        <Avatar url={comment.profiles?.avatar_url} username={comment.profiles?.username} />
-                        <div className="flex-1">
-                          <div className="rounded-2xl rounded-tl-sm px-3 py-2.5"
-                            style={{ backgroundColor: isMe ? 'rgba(245,158,11,0.15)' : 'var(--bg-input)' }}>
-                            <p className="text-xs font-bold mb-1"
-                              style={{ color: isMe ? '#f59e0b' : 'var(--text-primary)' }}>
-                              {comment.profiles?.username} {isMe && '(tú)'}
-                            </p>
-                            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-                              {comment.content}
-                            </p>
-                          </div>
-                          <p className="text-xs mt-1 ml-1" style={{ color: 'var(--text-hint)' }}>
-                            {formatTime(comment.created_at)}
-                          </p>
-                        </div>
-                      </motion.div>
-                    )
-                  })
-                )}
-                <div ref={commentsBottomRef} />
-              </div>
-
-              {/* Input comentario fijo abajo */}
-              <div className="flex-shrink-0 border-t px-4 py-3 flex gap-3 items-end"
-                style={{ borderColor: 'var(--border)' }}>
-                <Avatar url={null} username={user.email} />
-                <div className="flex-1 flex items-end gap-2 rounded-2xl px-3 py-2"
-                  style={{ backgroundColor: 'var(--bg-input)' }}>
-                  <textarea
-                    value={commentText}
-                    onChange={e => setCommentText(e.target.value)}
-                    onKeyDown={handleCommentKeyDown}
-                    placeholder="Escribe un comentario..."
-                    rows={1}
-                    className="flex-1 outline-none resize-none text-sm bg-transparent"
-                    style={{ color: 'var(--text-primary)', maxHeight: '80px' }}
-                  />
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={submitComment}
-                    disabled={!commentText.trim() || sendingComment}
-                    className="flex-shrink-0 p-1.5 rounded-xl transition-colors disabled:opacity-40"
-                    style={{
-                      backgroundColor: commentText.trim() ? '#f59e0b' : 'transparent',
-                      color: commentText.trim() ? '#fff' : 'var(--text-hint)',
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      borderRadius: '0 16px 16px 16px', padding: '8px 12px',
+                      backgroundColor: isMe ? 'rgba(245,158,11,0.15)' : 'var(--bg-input)'
                     }}>
-                    {sendingComment ? (
-                      <div className="w-5 h-5 flex items-center justify-center">
-                        <motion.div className="w-3 h-3 border-2 border-white rounded-full border-t-transparent"
-                          animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
-                      </div>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-                      </svg>
-                    )}
-                  </motion.button>
+                      <p style={{ fontSize: 12, fontWeight: 'bold', color: isMe ? '#f59e0b' : 'var(--text-primary)', marginBottom: 4 }}>
+                        {comment.profiles?.username}
+                      </p>
+                      <p style={{ fontSize: 14, color: 'var(--text-primary)' }}>{comment.content}</p>
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 4, marginLeft: 4 }}>
+                      {formatTime(comment.created_at)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              )
+            })
+          )}
+          <div ref={commentsBottomRef} />
+        </div>
+
+        {/* Input SIEMPRE VISIBLE */}
+        <div style={{
+          flexShrink: 0, borderTop: '1px solid var(--border)',
+          padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-end'
+        }}>
+          <textarea
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            onKeyDown={handleCommentKeyDown}
+            placeholder="Escribe un comentario..."
+            rows={1}
+            style={{
+              flex: 1, borderRadius: 20, padding: '10px 16px',
+              backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)',
+              border: 'none', outline: 'none', resize: 'none', fontSize: 14,
+              maxHeight: 80, fontFamily: 'inherit'
+            }}
+          />
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={submitComment}
+            disabled={!commentText.trim() || sendingComment}
+            style={{
+              width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+              backgroundColor: commentText.trim() ? '#f59e0b' : 'var(--bg-input)',
+              color: commentText.trim() ? '#fff' : 'var(--text-hint)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              opacity: !commentText.trim() || sendingComment ? 0.5 : 1,
+              transition: 'all 0.2s'
+            }}>
+            {sendingComment ? '⏳' : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}>
+                <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+              </svg>
+            )}
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
     </div>
   )
 }
