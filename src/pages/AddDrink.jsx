@@ -23,6 +23,9 @@ export default function AddDrink() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [frozen, setFrozen] = useState(false)
+  const [shieldBlocked, setShieldBlocked] = useState(false)
+  const [sabotageBlocked, setSabotageBlocked] = useState(false)
+  const [sabotageMsg, setSabotageMsg] = useState('')
   const [result, setResult] = useState(null)
   const [activePowerups, setActivePowerups] = useState([])
 
@@ -52,7 +55,6 @@ export default function AddDrink() {
     setSeasonId(season?.id || null)
     setActivePowerups(powerups || [])
 
-    // Indexar precios por drink_type_id
     const marketMap = {}
     market?.forEach(m => { marketMap[m.drink_type_id] = m.price })
     setDrinkMarket(marketMap)
@@ -76,7 +78,7 @@ export default function AddDrink() {
     const price = drinkMarket[drinkId] || 100
     if (price > 110) return { icon: '📈', color: '#10b981' }
     if (price < 90) return { icon: '📉', color: '#ef4444' }
-    return { icon: '➡️', color: 'var(--text-muted)' }
+    return { icon: null, color: 'var(--text-muted)' }
   }
 
   const handleAdd = async () => {
@@ -96,9 +98,15 @@ export default function AddDrink() {
 
     if (error || !data?.success) {
       if (data?.frozen) {
-        setFrozen(true)
-        soundError()
-        setTimeout(() => setFrozen(false), 3000)
+        if (data?.shield_blocked) {
+          setShieldBlocked(true)
+          soundSuccess()
+          setTimeout(() => setShieldBlocked(false), 3000)
+        } else {
+          setFrozen(true)
+          soundError()
+          setTimeout(() => setFrozen(false), 3000)
+        }
       }
       setLoading(false)
       return
@@ -107,7 +115,7 @@ export default function AddDrink() {
     setResult(data)
     setSuccess(true)
     soundSuccess()
-    await fetchData() // recargar powerups y mercado
+    await fetchData()
     setTimeout(() => {
       setSuccess(false)
       setResult(null)
@@ -117,8 +125,11 @@ export default function AddDrink() {
   }
 
   const isFreezeActive = activePowerups.some(p =>
-    p.powerup_catalog?.effect_type === 'freeze' &&
-    p.target_user_id === user.id
+    p.powerup_catalog?.effect_type === 'freeze'
+  )
+
+  const hasShield = activePowerups.some(p =>
+    p.powerup_catalog?.effect_type === 'shield'
   )
 
   return (
@@ -137,8 +148,14 @@ export default function AddDrink() {
         {activePowerups.length > 0 && (
           <motion.div {...fadeIn} className="flex gap-2 overflow-x-auto pb-2 mb-4">
             {activePowerups.map(ap => (
-              <div key={ap.id} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
-                style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <div key={ap.id}
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{
+                  backgroundColor: ap.powerup_catalog?.effect_type === 'shield'
+                    ? 'rgba(99,102,241,0.15)' : 'rgba(245,158,11,0.15)',
+                  color: ap.powerup_catalog?.effect_type === 'shield' ? '#818cf8' : '#f59e0b',
+                  border: `1px solid ${ap.powerup_catalog?.effect_type === 'shield' ? 'rgba(99,102,241,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                }}>
                 <span>{ap.powerup_catalog?.emoji}</span>
                 <span>{ap.powerup_catalog?.name}</span>
                 {ap.extra_data?.uses_left && <span>({ap.extra_data.uses_left} usos)</span>}
@@ -149,23 +166,26 @@ export default function AddDrink() {
 
         {/* Aviso freeze */}
         <AnimatePresence>
-          {isFreezeActive && (
+          {isFreezeActive && !shieldBlocked && (
             <motion.div
               initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
               style={{ backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)' }}>
               <div className="text-3xl mb-1">🧊</div>
               <p className="font-bold text-blue-400">¡Estás congelado!</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>No puedes sumar puntos mientras dure el freeze</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                No puedes sumar puntos mientras dure el freeze
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-2 gap-3 mb-8">
+        <motion.div variants={staggerContainer} initial="initial" animate="animate"
+          className="grid grid-cols-2 gap-3 mb-8">
           {drinkTypes.map(drink => {
             const effectivePoints = getEffectivePoints(drink)
             const basePoints = drink.points
-            const isModified = effectivePoints !== basePoints
+            const isModified = Math.abs(effectivePoints - basePoints) > 0.05
             const trend = getMarketTrend(drink.id)
             const isSelected = selectedDrink === drink.id
 
@@ -181,8 +201,9 @@ export default function AddDrink() {
                 }`}
                 style={!isSelected ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' } : {}}
               >
-                {/* Indicador de tendencia */}
-                <div className="absolute top-2 right-2 text-xs">{trend.icon}</div>
+                {trend.icon && (
+                  <div className="absolute top-2 right-2 text-xs">{trend.icon}</div>
+                )}
 
                 <motion.div className="text-4xl mb-2"
                   animate={isSelected ? { scale: [1, 1.3, 1] } : {}}
@@ -191,7 +212,6 @@ export default function AddDrink() {
                 </motion.div>
                 <div className="font-semibold text-sm">{drink.name}</div>
 
-                {/* Puntos efectivos */}
                 <div className="mt-1">
                   {isModified ? (
                     <div>
@@ -205,7 +225,8 @@ export default function AddDrink() {
                       </span>
                     </div>
                   ) : (
-                    <div className="text-xs" style={{ color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
+                    <div className="text-xs"
+                      style={{ color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
                       {basePoints} {basePoints === 1 ? 'punto' : 'puntos'}
                     </div>
                   )}
@@ -238,8 +259,8 @@ export default function AddDrink() {
           </motion.p>
         )}
 
-        {/* Resultado animado */}
         <AnimatePresence>
+          {/* Éxito con desglose */}
           {success && result && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -255,7 +276,6 @@ export default function AddDrink() {
               </motion.div>
               <p className="text-emerald-400 font-bold text-lg">¡Consumición anotada!</p>
 
-              {/* Desglose de puntos */}
               <div className="mt-3 space-y-1.5">
                 <div className="flex justify-between text-sm px-4">
                   <span style={{ color: 'var(--text-muted)' }}>Puntos base</span>
@@ -303,6 +323,7 @@ export default function AddDrink() {
             </motion.div>
           )}
 
+          {/* Freeze activo al intentar añadir */}
           {frozen && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -315,6 +336,27 @@ export default function AddDrink() {
               <p className="text-blue-400 font-bold">¡Estás congelado!</p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
                 Alguien te ha aplicado un Freeze. No puntúas hasta que expire.
+              </p>
+            </motion.div>
+          )}
+
+          {/* Escudo bloqueó el freeze */}
+          {shieldBlocked && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.8 }}
+              className="mt-6 rounded-2xl py-5 text-center"
+              style={{ backgroundColor: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.4)' }}
+            >
+              <motion.div className="text-5xl mb-2"
+                animate={{ scale: [1, 1.3, 1], rotate: [0, -10, 10, 0] }}
+                transition={{ duration: 0.5 }}>
+                🛡️
+              </motion.div>
+              <p className="font-bold" style={{ color: '#818cf8' }}>¡Escudo activado!</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                Tu escudo ha absorbido el Freeze y se ha consumido
               </p>
             </motion.div>
           )}
