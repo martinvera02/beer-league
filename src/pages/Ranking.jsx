@@ -24,6 +24,20 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [editingName, setEditingName] = useState(false)
   const [newLeagueName, setNewLeagueName] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
+
+  // Unirse con código
+  const [showJoinModal, setShowJoinModal] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [joining, setJoining] = useState(false)
+  const [joinError, setJoinError] = useState('')
+  const [joinSuccess, setJoinSuccess] = useState('')
+
+  // Crear liga
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newLeagueCreateName, setNewLeagueCreateName] = useState('')
+  const [creating, setCreating] = useState(false)
+
   const bottomRef = useRef(null)
   const imageInputRef = useRef(null)
 
@@ -63,7 +77,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchLeagues = async () => {
     const { data } = await supabase
       .from('league_members')
-      .select('league_id, role, leagues(id, name, created_by)')
+      .select('league_id, role, leagues(id, name, created_by, invite_code)')
       .eq('user_id', user.id)
 
     const userLeagues = data?.map(d => ({ ...d.leagues, myRole: d.role })) || []
@@ -97,7 +111,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     const mapped = data?.map(m => ({ ...m.profiles, joined_at: m.joined_at, role: m.role })) || []
     setMembers(mapped)
 
-    // Actualizar myRole basándonos en los datos frescos de la BD
     const me = mapped.find(m => m.id === user.id)
     if (me) setMyRole(me.role || 'member')
   }
@@ -138,6 +151,57 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     }
     setSavingName(false)
     setEditingName(false)
+  }
+
+  const copyCode = () => {
+    if (!selectedLeague?.invite_code) return
+    navigator.clipboard.writeText(selectedLeague.invite_code)
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 2000)
+  }
+
+  const handleJoinLeague = async () => {
+    if (!joinCode.trim()) return
+    setJoining(true)
+    setJoinError('')
+    setJoinSuccess('')
+
+    const { data, error } = await supabase.rpc('join_league_by_code', {
+      p_code: joinCode.trim().toUpperCase(),
+    })
+
+    if (error || !data?.success) {
+      setJoinError(data?.error || 'Código no válido')
+    } else {
+      setJoinSuccess(`¡Te has unido a ${data.league_name}! 🎉`)
+      setJoinCode('')
+      fetchLeagues()
+      setTimeout(() => {
+        setShowJoinModal(false)
+        setJoinSuccess('')
+      }, 2000)
+    }
+    setJoining(false)
+  }
+
+  const handleCreateLeague = async () => {
+    if (!newLeagueCreateName.trim()) return
+    setCreating(true)
+    const { data, error } = await supabase
+      .from('leagues')
+      .insert({ name: newLeagueCreateName.trim(), created_by: user.id })
+      .select()
+      .single()
+
+    if (!error && data) {
+      await supabase.from('league_members').insert({
+        league_id: data.id, user_id: user.id, role: 'owner',
+      })
+      setNewLeagueCreateName('')
+      setShowCreateModal(false)
+      fetchLeagues()
+    }
+    setCreating(false)
   }
 
   const changeRole = async (memberId, newRole) => {
@@ -220,14 +284,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   }, {})
 
   const medals = ['🥇', '🥈', '🥉']
-
   const roleLabel = { owner: '👑 Creador', admin: '⚡ Admin', member: 'Miembro' }
   const roleBadgeStyle = {
     owner:  { backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
     admin:  { backgroundColor: 'rgba(99,102,241,0.15)',  color: '#818cf8' },
     member: { backgroundColor: 'var(--bg-input)',         color: 'var(--text-hint)' },
   }
-
   const canManage = myRole === 'owner' || myRole === 'admin'
 
   const Avatar = ({ url, username, size = 'sm' }) => {
@@ -235,7 +297,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     return url ? (
       <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
     ) : (
-      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-sm`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-sm`}
+        style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
     )
   }
 
@@ -246,59 +309,53 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* Header */}
       <div className="px-4 pt-6 pb-3 flex-shrink-0">
 
-        {/* Selector de liga */}
-        {leagues.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-4">
-            {leagues.map(league => (
-              <motion.button
-                key={league.id}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleSelectLeague(league)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  selectedLeague?.id === league.id ? 'bg-amber-500 text-white' : ''
-                }`}
-                style={selectedLeague?.id !== league.id ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}
-              >
-                {league.name}
-              </motion.button>
-            ))}
-          </div>
-        )}
+        {/* Selector de liga + botones crear/unirse */}
+        <div className="flex gap-2 flex-wrap mb-4 items-center">
+          {leagues.map(league => (
+            <motion.button key={league.id} whileTap={{ scale: 0.95 }}
+              onClick={() => handleSelectLeague(league)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${selectedLeague?.id === league.id ? 'bg-amber-500 text-white' : ''}`}
+              style={selectedLeague?.id !== league.id ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}>
+              {league.name}
+            </motion.button>
+          ))}
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowJoinModal(true)}
+            className="px-3 py-2 rounded-xl text-sm font-medium transition-colors"
+            style={{ backgroundColor: 'var(--bg-card)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+            + Unirse
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowCreateModal(true)}
+            className="px-3 py-2 rounded-xl text-sm font-medium transition-colors"
+            style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+            + Crear
+          </motion.button>
+        </div>
 
-        {/* Nombre de liga + botón editar */}
+        {/* Nombre de liga + editar */}
         {selectedLeague && (
           <div className="mb-4">
             {editingName ? (
               <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={newLeagueName}
-                  onChange={e => setNewLeagueName(e.target.value)}
+                <input type="text" value={newLeagueName} onChange={e => setNewLeagueName(e.target.value)}
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') saveLeagueName(); if (e.key === 'Escape') setEditingName(false) }}
                   className="flex-1 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                />
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                 <motion.button whileTap={{ scale: 0.95 }} onClick={saveLeagueName} disabled={savingName}
                   className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold">
                   {savingName ? '...' : 'Guardar'}
                 </motion.button>
                 <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setEditingName(false); setNewLeagueName(selectedLeague.name) }}
                   className="px-3 py-2 rounded-xl text-sm"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
-                  ✕
-                </motion.button>
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold">{selectedLeague.name}</h1>
                 {myRole === 'owner' && (
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => setEditingName(true)}
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setEditingName(true)}
                     className="p-1.5 rounded-lg text-sm transition-colors"
-                    style={{ color: 'var(--text-hint)', backgroundColor: 'var(--bg-input)' }}
-                  >
+                    style={{ color: 'var(--text-hint)', backgroundColor: 'var(--bg-input)' }}>
                     ✏️
                   </motion.button>
                 )}
@@ -307,18 +364,25 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* ID para compartir */}
+        {/* Código de invitación */}
         {selectedLeague && (
-          <div className="rounded-2xl px-4 py-3 mb-4 flex items-center justify-between" style={{ backgroundColor: 'var(--bg-card)' }}>
+          <div className="rounded-2xl px-4 py-3 mb-4 flex items-center justify-between"
+            style={{ backgroundColor: 'var(--bg-card)' }}>
             <div>
-              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Comparte este ID con tus amigos</p>
-              <p className="text-amber-400 font-bold text-lg">#{selectedLeague.id}</p>
+              <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>
+                Código de invitación · compártelo con tus amigos
+              </p>
+              <p className="font-bold text-lg tracking-widest text-amber-400">
+                {selectedLeague.invite_code || '···-····-····'}
+              </p>
             </div>
-            <motion.button whileTap={{ scale: 0.95 }}
-              onClick={() => navigator.clipboard.writeText(String(selectedLeague.id))}
-              className="text-sm px-3 py-2 rounded-lg transition-colors"
-              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
-              Copiar
+            <motion.button whileTap={{ scale: 0.9 }} onClick={copyCode}
+              className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl transition-colors font-medium"
+              style={{
+                backgroundColor: codeCopied ? 'rgba(16,185,129,0.15)' : 'var(--bg-input)',
+                color: codeCopied ? '#10b981' : 'var(--text-muted)',
+              }}>
+              {codeCopied ? '✓ Copiado' : 'Copiar'}
             </motion.button>
           </div>
         )}
@@ -343,17 +407,28 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             ))}
           </div>
         )}
+
+        {/* Estado vacío si no hay ligas */}
+        {leagues.length === 0 && (
+          <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-5xl mb-3">🏆</div>
+            <p className="font-bold">Aún no estás en ninguna liga</p>
+            <p className="text-sm mt-1">Crea una nueva o únete con un código</p>
+          </div>
+        )}
       </div>
 
       {/* ── RANKING ── */}
-      {tab === 'ranking' && (
+      {tab === 'ranking' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
           <div className="pt-2"><SeasonCountdown /></div>
           {loading ? (
             <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando...</p>
           ) : rankings.length === 0 ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <motion.div className="text-5xl mb-3" animate={{ y: [0, -8, 0] }} transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}>🍺</motion.div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <motion.div className="text-5xl mb-3" animate={{ y: [0, -8, 0] }}
+                transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}>🍺</motion.div>
               <p>Aún no hay consumiciones</p>
               <p className="text-sm mt-1">¡Sé el primero en anotar!</p>
             </motion.div>
@@ -374,17 +449,27 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                       <span className="text-2xl w-8 text-center">{medals[index] || `${index + 1}`}</span>
                       <Avatar url={entry.avatar_url} username={entry.username} size="md" />
                       <div className="flex-1">
-                        <p className="font-bold" style={{ color: isMe ? '#fff' : 'var(--text-primary)' }}>{entry.username} {isMe && '(tú)'}</p>
-                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>{entry.total_drinks} consumiciones</p>
+                        <p className="font-bold" style={{ color: isMe ? '#fff' : 'var(--text-primary)' }}>
+                          {entry.username} {isMe && '(tú)'}
+                        </p>
+                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>
+                          {entry.total_drinks} consumiciones
+                        </p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>{entry.total_points}</p>
-                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>puntos</p>
+                        <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>
+                          {entry.total_points}
+                        </p>
+                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>
+                          puntos
+                        </p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 pt-2 border-t" style={{ borderColor: isMe ? 'rgba(255,255,255,0.3)' : 'var(--border)' }}>
+                    <div className="flex flex-wrap gap-2 pt-2 border-t"
+                      style={{ borderColor: isMe ? 'rgba(255,255,255,0.3)' : 'var(--border)' }}>
                       {Object.entries(drinkCounts).sort(([, a], [, b]) => b.count - a.count).map(([name, { emoji, count }]) => (
-                        <div key={name} className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${isMe ? 'bg-amber-600 text-white' : ''}`}
+                        <div key={name}
+                          className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${isMe ? 'bg-amber-600 text-white' : ''}`}
                           style={!isMe ? { backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' } : {}}>
                           <span>{emoji}</span><span>{count}</span>
                         </div>
@@ -399,7 +484,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       )}
 
       {/* ── MIEMBROS ── */}
-      {tab === 'members' && (
+      {tab === 'members' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
           <div className="space-y-3 pt-4">
             {members.map(member => {
@@ -432,14 +517,14 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     <div className="flex gap-2 flex-shrink-0">
                       {canChangeRole && (
                         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)}
-                          className="text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                          className="text-xs font-semibold px-3 py-2 rounded-xl"
                           style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
                           Rol
                         </motion.button>
                       )}
                       {canKick && (
                         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)}
-                          className="text-xs font-semibold px-3 py-2 rounded-xl transition-colors bg-red-950 text-red-400 hover:bg-red-900">
+                          className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">
                           Expulsar
                         </motion.button>
                       )}
@@ -451,7 +536,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
             {myRole !== 'owner' && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={leaveLeague}
-                className="w-full mt-2 bg-transparent hover:bg-red-950 text-red-500 font-semibold py-3 rounded-2xl border border-red-900 transition-colors">
+                className="w-full mt-2 bg-transparent text-red-500 font-semibold py-3 rounded-2xl border border-red-900 transition-colors">
                 Abandonar liga 🚪
               </motion.button>
             )}
@@ -460,11 +545,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       )}
 
       {/* ── CHAT ── */}
-      {tab === 'chat' && (
+      {tab === 'chat' && selectedLeague && (
         <>
           <div className="flex-1 overflow-y-auto px-4 py-2">
             {messages.length === 0 ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
                 <div className="text-5xl mb-3">💬</div>
                 <p>Aún no hay mensajes</p>
                 <p className="text-sm mt-1">¡Sé el primero en escribir!</p>
@@ -493,19 +579,27 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                         )}
                         <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                           {!isMe && !isSameUser && (
-                            <span className="text-xs text-amber-400 font-medium mb-1 ml-1">{msg.profiles?.username}</span>
+                            <span className="text-xs text-amber-400 font-medium mb-1 ml-1">
+                              {msg.profiles?.username}
+                            </span>
                           )}
                           {msg.image_url && (
-                            <img src={msg.image_url} alt="Imagen" onClick={() => setLightboxUrl(msg.image_url)}
+                            <img src={msg.image_url} alt="Imagen"
+                              onClick={() => setLightboxUrl(msg.image_url)}
                               className={`max-w-52 rounded-2xl cursor-pointer object-cover ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} />
                           )}
                           {msg.content && (
                             <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
-                              style={{ backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)', color: isMe ? '#fff' : 'var(--text-primary)' }}>
+                              style={{
+                                backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)',
+                                color: isMe ? '#fff' : 'var(--text-primary)',
+                              }}>
                               {msg.content}
                             </div>
                           )}
-                          <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>{formatTime(msg.created_at)}</span>
+                          <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>
+                            {formatTime(msg.created_at)}
+                          </span>
                         </div>
                       </motion.div>
                     )
@@ -520,7 +614,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             <div className="flex gap-2 items-end">
               <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()}
                 disabled={uploadingImage}
-                className="p-3 rounded-2xl transition-colors flex-shrink-0"
+                className="p-3 rounded-2xl flex-shrink-0"
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
                 {uploadingImage ? '⏳' : '📷'}
               </motion.button>
@@ -531,7 +625,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '120px' }} />
               <motion.button whileTap={{ scale: 0.9 }} onClick={sendMessage}
                 disabled={!newMessage.trim() || sending}
-                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl transition-colors flex-shrink-0">
+                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                   <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                 </svg>
@@ -548,7 +642,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
             onClick={() => setLightboxUrl(null)}>
             <motion.img initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
-              src={lightboxUrl} alt="Imagen ampliada" className="max-w-full max-h-full rounded-2xl object-contain" />
+              src={lightboxUrl} alt="Imagen ampliada"
+              className="max-w-full max-h-full rounded-2xl object-contain" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -575,12 +670,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               </div>
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }} onClick={() => setKickTarget(null)}
-                  className="flex-1 font-semibold py-3 rounded-xl transition-colors"
+                  className="flex-1 font-semibold py-3 rounded-xl"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   Cancelar
                 </motion.button>
                 <motion.button whileTap={{ scale: 0.96 }} onClick={kickMember}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-colors">
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl">
                   Expulsar
                 </motion.button>
               </div>
@@ -609,10 +704,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   Elige qué permisos tendrá en la liga
                 </p>
               </div>
-
               <div className="space-y-3">
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => changeRole(roleTarget.id, 'admin')}
-                  className="w-full rounded-2xl p-4 text-left transition-colors"
+                  className="w-full rounded-2xl p-4 text-left"
                   style={{
                     backgroundColor: roleTarget.role === 'admin' ? 'rgba(99,102,241,0.15)' : 'var(--bg-input)',
                     border: roleTarget.role === 'admin' ? '2px solid #818cf8' : '2px solid transparent',
@@ -620,15 +714,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">⚡</span>
                     <div className="flex-1">
-                      <p className="font-bold text-sm" style={{ color: roleTarget.role === 'admin' ? '#818cf8' : 'var(--text-primary)' }}>Admin</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Puede expulsar miembros y cambiar el nombre del grupo</p>
+                      <p className="font-bold text-sm"
+                        style={{ color: roleTarget.role === 'admin' ? '#818cf8' : 'var(--text-primary)' }}>Admin</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                        Puede expulsar miembros y cambiar el nombre del grupo
+                      </p>
                     </div>
                     {roleTarget.role === 'admin' && <span className="text-indigo-400">✓</span>}
                   </div>
                 </motion.button>
-
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => changeRole(roleTarget.id, 'member')}
-                  className="w-full rounded-2xl p-4 text-left transition-colors"
+                  className="w-full rounded-2xl p-4 text-left"
                   style={{
                     backgroundColor: roleTarget.role === 'member' ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)',
                     border: roleTarget.role === 'member' ? '2px solid #f59e0b' : '2px solid transparent',
@@ -636,19 +732,129 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">🍺</span>
                     <div className="flex-1">
-                      <p className="font-bold text-sm" style={{ color: roleTarget.role === 'member' ? '#f59e0b' : 'var(--text-primary)' }}>Miembro</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Solo puede participar y chatear</p>
+                      <p className="font-bold text-sm"
+                        style={{ color: roleTarget.role === 'member' ? '#f59e0b' : 'var(--text-primary)' }}>Miembro</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                        Solo puede participar y chatear
+                      </p>
                     </div>
                     {roleTarget.role === 'member' && <span className="text-amber-400">✓</span>}
                   </div>
                 </motion.button>
               </div>
-
               <motion.button whileTap={{ scale: 0.96 }} onClick={() => setRoleTarget(null)}
-                className="w-full mt-4 font-semibold py-3 rounded-xl transition-colors text-sm"
+                className="w-full mt-4 font-semibold py-3 rounded-xl text-sm"
                 style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
                 Cancelar
               </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL UNIRSE CON CÓDIGO ── */}
+      <AnimatePresence>
+        {showJoinModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+            onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              className="rounded-2xl p-6 w-full max-w-sm"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-2">🔑</div>
+                <h2 className="text-xl font-bold">Unirse a una liga</h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Introduce el código de invitación
+                </p>
+              </div>
+
+              <input
+                type="text"
+                value={joinCode}
+                onChange={e => { setJoinCode(e.target.value.toUpperCase()); setJoinError('') }}
+                placeholder="BEER-XXXX-XXXX"
+                className="w-full rounded-xl px-4 py-3 text-center font-bold tracking-widest text-lg outline-none focus:ring-2 focus:ring-amber-500 mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                maxLength={14}
+              />
+
+              <AnimatePresence>
+                {joinError && (
+                  <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="text-red-400 text-sm text-center mb-3">
+                    ⚠️ {joinError}
+                  </motion.p>
+                )}
+                {joinSuccess && (
+                  <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="text-emerald-400 text-sm text-center mb-3 font-bold">
+                    {joinSuccess}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }}
+                  onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }}
+                  className="flex-1 font-semibold py-3 rounded-xl"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+                  Cancelar
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleJoinLeague}
+                  disabled={!joinCode.trim() || joining}
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-3 rounded-xl">
+                  {joining ? 'Uniéndose...' : 'Unirse'}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL CREAR LIGA ── */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+            onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              className="rounded-2xl p-6 w-full max-w-sm"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-2">🏆</div>
+                <h2 className="text-xl font-bold">Nueva liga</h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Se generará un código de invitación automáticamente
+                </p>
+              </div>
+              <input type="text" value={newLeagueCreateName}
+                onChange={e => setNewLeagueCreateName(e.target.value)}
+                placeholder="Nombre de la liga..."
+                onKeyDown={e => e.key === 'Enter' && handleCreateLeague()}
+                className="w-full rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-500 mb-4"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }}
+                  onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }}
+                  className="flex-1 font-semibold py-3 rounded-xl"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+                  Cancelar
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleCreateLeague}
+                  disabled={!newLeagueCreateName.trim() || creating}
+                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-3 rounded-xl">
+                  {creating ? 'Creando...' : 'Crear'}
+                </motion.button>
+              </div>
             </motion.div>
           </motion.div>
         )}
