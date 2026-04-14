@@ -838,84 +838,108 @@ export default function Market() {
           )}
 
           {!activeLoan && (
-            <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <p className="text-sm font-bold mb-4">Solicitar préstamo</p>
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
-                  <p className="text-sm font-bold text-indigo-400">{loanAmount}🪙</p>
-                </div>
-                <input type="range" min="50" max="5000" step="50"
-                  value={loanAmount} onChange={e => setLoanAmount(Number(e.target.value))}
-                  className="w-full accent-indigo-500" />
-                <div className="flex justify-between mt-1">
-                  <span className="text-xs" style={{ color: 'var(--text-hint)' }}>50🪙 mín</span>
-                  <span className="text-xs" style={{ color: 'var(--text-hint)' }}>5000🪙 máx</span>
-                </div>
-                <div className="flex gap-2 mt-2">
-                  {[100, 250, 500, 1000].map(v => (
-                    <motion.button key={v} whileTap={{ scale: 0.9 }}
-                      onClick={() => setLoanAmount(v)}
-                      className="flex-1 text-xs py-1.5 rounded-lg font-medium"
-                      style={{
-                        backgroundColor: loanAmount === v ? '#6366f1' : 'var(--bg-input)',
-                        color: loanAmount === v ? '#fff' : 'var(--text-muted)',
-                      }}>{v}</motion.button>
-                  ))}
-                </div>
-              </div>
+  <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+    <p className="text-sm font-bold mb-1">Solicitar préstamo</p>
 
-              <div className="mb-5">
-                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Plazo</p>
-                <div className="flex gap-2">
-                  {[
-                    { days: 1, label: '1 día', rate: '5%' },
-                    { days: 3, label: '3 días', rate: '8%' },
-                    { days: 7, label: '7 días', rate: '12%' },
-                  ].map(opt => (
-                    <motion.button key={opt.days} whileTap={{ scale: 0.95 }}
-                      onClick={() => setLoanDays(opt.days)}
-                      className="flex-1 rounded-xl p-3 text-center"
-                      style={{
-                        backgroundColor: loanDays === opt.days ? 'rgba(99,102,241,0.2)' : 'var(--bg-input)',
-                        border: loanDays === opt.days ? '2px solid #6366f1' : '2px solid transparent',
-                      }}>
-                      <p className="text-sm font-bold"
-                        style={{ color: loanDays === opt.days ? '#818cf8' : 'var(--text-primary)' }}>
-                        {opt.label}
-                      </p>
-                      <p className="text-xs mt-0.5 text-amber-400">{opt.rate}</p>
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
+    {/* Límite dinámico */}
+    {(() => {
+      const maxLoan = Math.min(2000, Math.max(100, balance * 2))
+      return (
+        <div className="rounded-xl p-3 mb-4 flex items-center justify-between"
+          style={{ backgroundColor: 'var(--bg-base)' }}>
+          <div>
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Tu límite disponible</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Basado en tu saldo actual</p>
+          </div>
+          <p className="text-lg font-bold text-indigo-400">{maxLoan.toLocaleString()}🪙</p>
+        </div>
+      )
+    })()}
 
-              <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span style={{ color: 'var(--text-muted)' }}>Recibes ahora</span>
-                  <span className="font-bold text-emerald-400">+{loanAmount}🪙</span>
-                </div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span style={{ color: 'var(--text-muted)' }}>Interés ({getInterestRate(loanDays)}%)</span>
-                  <span className="font-medium text-amber-400">+{getPreviewRepay() - loanAmount}🪙</span>
-                </div>
-                <div className="border-t pt-1 mt-1 flex justify-between text-sm" style={{ borderColor: 'var(--border)' }}>
-                  <span className="font-bold">Total a devolver</span>
-                  <span className="font-bold text-indigo-400">{getPreviewRepay()}🪙</span>
-                </div>
-                <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-hint)' }}>
-                  +2% adicional por cada día de retraso
-                </p>
-              </div>
+    <div className="mb-4">
+      {(() => {
+        const maxLoan = Math.min(2000, Math.max(100, balance * 2))
+        return (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
+              <p className="text-sm font-bold text-indigo-400">{Math.min(loanAmount, maxLoan)}🪙</p>
+            </div>
+            <input type="range" min="50" max={maxLoan} step="50"
+              value={Math.min(loanAmount, maxLoan)}
+              onChange={e => setLoanAmount(Number(e.target.value))}
+              className="w-full accent-indigo-500" />
+            <div className="flex justify-between mt-1">
+              <span className="text-xs" style={{ color: 'var(--text-hint)' }}>50🪙 mín</span>
+              <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{maxLoan}🪙 máx</span>
+            </div>
+            <div className="flex gap-2 mt-2">
+              {[100, 250, 500, 1000].filter(v => v <= maxLoan).map(v => (
+                <motion.button key={v} whileTap={{ scale: 0.9 }}
+                  onClick={() => setLoanAmount(v)}
+                  className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                  style={{
+                    backgroundColor: loanAmount === v ? '#6366f1' : 'var(--bg-input)',
+                    color: loanAmount === v ? '#fff' : 'var(--text-muted)',
+                  }}>{v}</motion.button>
+              ))}
+            </div>
+          </>
+        )
+      })()}
+    </div>
 
-              <motion.button whileTap={{ scale: 0.97 }} onClick={executeRequestLoan}
-                disabled={requesting}
-                className="w-full py-4 rounded-2xl font-bold text-white text-sm"
-                style={{ backgroundColor: '#6366f1' }}>
-                {requesting ? 'Solicitando...' : `Pedir ${loanAmount}🪙 al banco`}
-              </motion.button>
-            </motion.div>
-          )}
+    <div className="mb-5">
+      <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Plazo</p>
+      <div className="flex gap-2">
+        {[
+          { days: 1, label: '1 día', rate: '5%' },
+          { days: 3, label: '3 días', rate: '8%' },
+          { days: 7, label: '7 días', rate: '12%' },
+        ].map(opt => (
+          <motion.button key={opt.days} whileTap={{ scale: 0.95 }}
+            onClick={() => setLoanDays(opt.days)}
+            className="flex-1 rounded-xl p-3 text-center"
+            style={{
+              backgroundColor: loanDays === opt.days ? 'rgba(99,102,241,0.2)' : 'var(--bg-input)',
+              border: loanDays === opt.days ? '2px solid #6366f1' : '2px solid transparent',
+            }}>
+            <p className="text-sm font-bold"
+              style={{ color: loanDays === opt.days ? '#818cf8' : 'var(--text-primary)' }}>
+              {opt.label}
+            </p>
+            <p className="text-xs mt-0.5 text-amber-400">{opt.rate}</p>
+          </motion.button>
+        ))}
+      </div>
+    </div>
+
+    <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
+      <div className="flex justify-between text-sm mb-1">
+        <span style={{ color: 'var(--text-muted)' }}>Recibes ahora</span>
+        <span className="font-bold text-emerald-400">+{loanAmount}🪙</span>
+      </div>
+      <div className="flex justify-between text-sm mb-1">
+        <span style={{ color: 'var(--text-muted)' }}>Interés ({getInterestRate(loanDays)}%)</span>
+        <span className="font-medium text-amber-400">+{getPreviewRepay() - loanAmount}🪙</span>
+      </div>
+      <div className="border-t pt-1 mt-1 flex justify-between text-sm" style={{ borderColor: 'var(--border)' }}>
+        <span className="font-bold">Total a devolver</span>
+        <span className="font-bold text-indigo-400">{getPreviewRepay()}🪙</span>
+      </div>
+      <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-hint)' }}>
+        +2% adicional por cada día de retraso
+      </p>
+    </div>
+
+    <motion.button whileTap={{ scale: 0.97 }} onClick={executeRequestLoan}
+      disabled={requesting}
+      className="w-full py-4 rounded-2xl font-bold text-white text-sm"
+      style={{ backgroundColor: '#6366f1' }}>
+      {requesting ? 'Solicitando...' : `Pedir ${loanAmount}🪙 al banco`}
+    </motion.button>
+  </motion.div>
+)}
 
           {loanHistory.length > 0 && (
             <div>
