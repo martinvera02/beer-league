@@ -948,121 +948,124 @@ export default function Market() {
       )}
 
       {/* Modal detalle bebida + trading */}
-      <AnimatePresence>
-        {selectedDrink && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
-            onClick={() => setSelectedDrink(null)}>
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-              onClick={e => e.stopPropagation()}
-              className="rounded-t-3xl p-6 w-full max-w-lg"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{selectedDrink.drink_types?.emoji}</span>
-                  <div>
-                    <h2 className="text-lg font-bold">{selectedDrink.drink_types?.name}</h2>
-                    <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                      Base: {selectedDrink.drink_types?.points}pts · Vol: {selectedDrink.volume?.toLocaleString()}🪙
-                    </p>
-                  </div>
-                </div>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSelectedDrink(null)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
-              </div>
+<AnimatePresence>
+  {selectedDrink && (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
+      onClick={() => setSelectedDrink(null)}>
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+        onClick={e => e.stopPropagation()}
+        className="rounded-t-3xl p-6 w-full max-w-lg overflow-y-auto"
+        style={{
+          backgroundColor: 'var(--bg-card)',
+          color: 'var(--text-primary)',
+          maxHeight: '90vh',
+          paddingBottom: '100px',
+        }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{selectedDrink.drink_types?.emoji}</span>
+            <div>
+              <h2 className="text-lg font-bold">{selectedDrink.drink_types?.name}</h2>
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                Base: {selectedDrink.drink_types?.points}pts · Vol: {selectedDrink.volume?.toLocaleString()}🪙
+              </p>
+            </div>
+          </div>
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSelectedDrink(null)}
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
+        </div>
 
-              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
-                <DetailChart history={drinkHistory} width={320} height={140} />
-              </div>
+        <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
+          <DetailChart history={drinkHistory} width={320} height={140} />
+        </div>
 
-              {(() => {
-                const mult = getMultiplier(selectedDrink.price)
-                const effPts = Math.round(selectedDrink.drink_types?.points * mult * 10) / 10
-                const effCoins = Math.floor(effPts * 10)
-                return (
-                  <div className="flex gap-3 mb-4">
-                    <div className="flex-1 rounded-xl p-3 text-center" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Pts ahora</p>
-                      <p className="font-bold" style={{ color: mult > 1 ? '#10b981' : mult < 1 ? '#ef4444' : 'var(--text-primary)' }}>
-                        {effPts}pts
-                      </p>
-                    </div>
-                    <div className="flex-1 rounded-xl p-3 text-center" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Monedas ahora</p>
-                      <p className="font-bold" style={{ color: mult > 1 ? '#10b981' : mult < 1 ? '#ef4444' : '#f59e0b' }}>
-                        +{effCoins}🪙
-                      </p>
-                    </div>
-                  </div>
-                )
-              })()}
-
-              <div className="mb-4">
-                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
-                <div className="flex gap-2">
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('long')}
-                    className="flex-1 py-3 rounded-xl font-bold text-sm"
-                    style={{
-                      backgroundColor: tradeDirection === 'long' ? 'rgba(16,185,129,0.2)' : 'var(--bg-input)',
-                      color: tradeDirection === 'long' ? '#10b981' : 'var(--text-muted)',
-                      border: tradeDirection === 'long' ? '2px solid #10b981' : '2px solid transparent',
-                    }}>▲ LONG<br /><span className="text-xs font-normal">sube multiplicador</span></motion.button>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('short')}
-                    className="flex-1 py-3 rounded-xl font-bold text-sm"
-                    style={{
-                      backgroundColor: tradeDirection === 'short' ? 'rgba(239,68,68,0.2)' : 'var(--bg-input)',
-                      color: tradeDirection === 'short' ? '#ef4444' : 'var(--text-muted)',
-                      border: tradeDirection === 'short' ? '2px solid #ef4444' : '2px solid transparent',
-                    }}>▼ SHORT<br /><span className="text-xs font-normal">baja multiplicador</span></motion.button>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
-                  <p className="text-xs text-amber-400 font-bold">{tradeAmount}🪙 / {balance}🪙</p>
-                </div>
-                <input type="range" min="10" max={Math.min(Math.max(balance, 10), 1000)} step="10"
-                  value={tradeAmount} onChange={e => setTradeAmount(Number(e.target.value))}
-                  className="w-full accent-amber-500" />
-                <div className="flex justify-between mt-2 gap-2">
-                  {[50, 100, 250, 500].map(v => (
-                    <motion.button key={v} whileTap={{ scale: 0.9 }}
-                      onClick={() => setTradeAmount(Math.min(v, balance))}
-                      className="flex-1 text-xs py-1.5 rounded-lg font-medium"
-                      style={{
-                        backgroundColor: tradeAmount === v ? '#f59e0b' : 'var(--bg-input)',
-                        color: tradeAmount === v ? '#fff' : 'var(--text-muted)',
-                      }}>{v}</motion.button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Impacto estimado con nueva fórmula */}
-              <div className="rounded-xl p-3 mb-4 text-center"
-                style={{ backgroundColor: 'var(--bg-base)' }}>
-                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Impacto estimado</p>
-                <p className="text-sm font-bold mt-1"
-                  style={{ color: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
-                  {tradeDirection === 'long' ? '+' : '-'}x{getImpactPreview(tradeAmount)} en el multiplicador
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                  Los precios decaen solos cada día — actúa rápido
+        {(() => {
+          const mult = getMultiplier(selectedDrink.price)
+          const effPts = Math.round(selectedDrink.drink_types?.points * mult * 10) / 10
+          const effCoins = Math.floor(effPts * 10)
+          return (
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1 rounded-xl p-3 text-center" style={{ backgroundColor: 'var(--bg-input)' }}>
+                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Pts ahora</p>
+                <p className="font-bold" style={{ color: mult > 1 ? '#10b981' : mult < 1 ? '#ef4444' : 'var(--text-primary)' }}>
+                  {effPts}pts
                 </p>
               </div>
+              <div className="flex-1 rounded-xl p-3 text-center" style={{ backgroundColor: 'var(--bg-input)' }}>
+                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Monedas ahora</p>
+                <p className="font-bold" style={{ color: mult > 1 ? '#10b981' : mult < 1 ? '#ef4444' : '#f59e0b' }}>
+                  +{effCoins}🪙
+                </p>
+              </div>
+            </div>
+          )
+        })()}
 
-              <motion.button whileTap={{ scale: 0.97 }} onClick={executeTrade}
-                disabled={trading || tradeAmount > balance || tradeAmount < 10}
-                className="w-full font-bold py-4 rounded-2xl text-white"
-                style={{ backgroundColor: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
-                {trading ? 'Ejecutando...' : `${tradeDirection === 'long' ? '▲ LONG' : '▼ SHORT'} · ${tradeAmount}🪙`}
-              </motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <div className="mb-4">
+          <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
+          <div className="flex gap-2">
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('long')}
+              className="flex-1 py-3 rounded-xl font-bold text-sm"
+              style={{
+                backgroundColor: tradeDirection === 'long' ? 'rgba(16,185,129,0.2)' : 'var(--bg-input)',
+                color: tradeDirection === 'long' ? '#10b981' : 'var(--text-muted)',
+                border: tradeDirection === 'long' ? '2px solid #10b981' : '2px solid transparent',
+              }}>▲ LONG<br /><span className="text-xs font-normal">sube multiplicador</span></motion.button>
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('short')}
+              className="flex-1 py-3 rounded-xl font-bold text-sm"
+              style={{
+                backgroundColor: tradeDirection === 'short' ? 'rgba(239,68,68,0.2)' : 'var(--bg-input)',
+                color: tradeDirection === 'short' ? '#ef4444' : 'var(--text-muted)',
+                border: tradeDirection === 'short' ? '2px solid #ef4444' : '2px solid transparent',
+              }}>▼ SHORT<br /><span className="text-xs font-normal">baja multiplicador</span></motion.button>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
+            <p className="text-xs text-amber-400 font-bold">{tradeAmount}🪙 / {balance}🪙</p>
+          </div>
+          <input type="range" min="10" max={Math.min(Math.max(balance, 10), 1000)} step="10"
+            value={tradeAmount} onChange={e => setTradeAmount(Number(e.target.value))}
+            className="w-full accent-amber-500" />
+          <div className="flex justify-between mt-2 gap-2">
+            {[50, 100, 250, 500].map(v => (
+              <motion.button key={v} whileTap={{ scale: 0.9 }}
+                onClick={() => setTradeAmount(Math.min(v, balance))}
+                className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                style={{
+                  backgroundColor: tradeAmount === v ? '#f59e0b' : 'var(--bg-input)',
+                  color: tradeAmount === v ? '#fff' : 'var(--text-muted)',
+                }}>{v}</motion.button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'var(--bg-base)' }}>
+          <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Impacto estimado</p>
+          <p className="text-sm font-bold mt-1"
+            style={{ color: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
+            {tradeDirection === 'long' ? '+' : '-'}x{getImpactPreview(tradeAmount)} en el multiplicador
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+            Los precios decaen solos cada día — actúa rápido
+          </p>
+        </div>
+
+        <motion.button whileTap={{ scale: 0.97 }} onClick={executeTrade}
+          disabled={trading || tradeAmount > balance || tradeAmount < 10}
+          className="w-full font-bold py-4 rounded-2xl text-white"
+          style={{ backgroundColor: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
+          {trading ? 'Ejecutando...' : `${tradeDirection === 'long' ? '▲ LONG' : '▼ SHORT'} · ${tradeAmount}🪙`}
+        </motion.button>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
       {/* Modal comprar powerup */}
       <AnimatePresence>
