@@ -212,8 +212,8 @@ export default function Market() {
   const executeTrade = async () => {
     if (!selectedDrink || tradeAmount < 10 || tradeAmount > balance) return
     setTrading(true)
+    // ✅ Sin p_user_id
     const result = await supabase.rpc('open_market_position', {
-      p_user_id: user.id,
       p_drink_type_id: selectedDrink.drink_type_id,
       p_direction: tradeDirection,
       p_amount: tradeAmount,
@@ -229,8 +229,8 @@ export default function Market() {
 
   const executeClosePosition = async (positionId) => {
     setClosingPosition(positionId)
+    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('close_market_position', {
-      p_user_id: user.id,
       p_position_id: positionId,
     })
     if (data?.success) {
@@ -256,8 +256,8 @@ export default function Market() {
     if (needsTurboDrink) extraData.drink_type_id = turboDrink
     if (needsResetDrink) extraData.drink_type_id = resetDrink
 
+    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('buy_powerup', {
-      p_user_id: user.id,
       p_target_user_id: targetUser?.id || user.id,
       p_league_id: selectedLeague.id,
       p_powerup_id: selectedPowerup.id,
@@ -287,6 +287,7 @@ export default function Market() {
   const executeRequestLoan = async () => {
     if (loanAmount < 50 || loanAmount > 5000) return
     setRequesting(true)
+    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('request_bank_loan', {
       p_amount: loanAmount,
       p_days: loanDays,
@@ -306,6 +307,7 @@ export default function Market() {
   const executeRepayLoan = async () => {
     if (!activeLoan) return
     setRepaying(true)
+    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('repay_bank_loan', { p_loan_id: activeLoan.id })
     if (data?.success) {
       soundSuccess()
@@ -321,16 +323,8 @@ export default function Market() {
     setRepaying(false)
   }
 
-  const getInterestRate = (days) => {
-    if (days === 1) return 5
-    if (days === 3) return 8
-    return 12
-  }
-
-  const getPreviewRepay = () => {
-    const rate = getInterestRate(loanDays)
-    return Math.ceil(loanAmount * (1 + rate / 100))
-  }
+  const getInterestRate = (days) => days === 1 ? 5 : days === 3 ? 8 : 12
+  const getPreviewRepay = () => Math.ceil(loanAmount * (1 + getInterestRate(loanDays) / 100))
 
   const formatTime = (ts) => {
     if (!ts) return 'Permanente'
@@ -399,7 +393,6 @@ export default function Market() {
           </motion.div>
         </div>
 
-        {/* Tabs */}
         <div className="flex rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
             { id: 'market',    label: '📈 Cotización' },
@@ -608,9 +601,7 @@ export default function Market() {
               {inDebt ? '🔴 En números rojos' : '🪙 Cervezas'}
             </p>
             {inDebt && (
-              <p className="text-xs mt-2 text-red-400">
-                Cada moneda que ganes reducirá tu deuda automáticamente
-              </p>
+              <p className="text-xs mt-2 text-red-400">Cada moneda que ganes reducirá tu deuda automáticamente</p>
             )}
           </motion.div>
 
@@ -734,7 +725,6 @@ export default function Market() {
       {/* ── BANCO ── */}
       {tab === 'bank' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
-
           <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4 text-center"
             style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.3)' }}>
             <div className="text-4xl mb-2">🏦</div>
@@ -744,7 +734,6 @@ export default function Market() {
             </p>
           </motion.div>
 
-          {/* Resultado de acción */}
           <AnimatePresence>
             {loanResult && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -757,7 +746,7 @@ export default function Market() {
                   <>
                     <p className="font-bold text-emerald-400 text-lg">🎉 +{loanResult.amount}🪙 recibidas</p>
                     <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                      Devuelve {loanResult.repay_amount}🪙 antes del plazo · Interés: {loanResult.interest_rate}%
+                      Devuelve {loanResult.repay_amount}🪙 · Interés: {loanResult.interest_rate}%
                     </p>
                   </>
                 )}
@@ -777,7 +766,6 @@ export default function Market() {
             )}
           </AnimatePresence>
 
-          {/* Préstamo activo */}
           {activeLoan && loanDebt && (
             <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
               style={{
@@ -802,13 +790,12 @@ export default function Market() {
                 })()}
               </div>
 
-              {/* Aviso números rojos */}
               {loanDebt.is_defaulted && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className="rounded-xl p-3 mb-4"
                   style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
                   <p className="text-xs text-red-400 text-center">
-                    ⚠️ Tu saldo está en negativo. Cada moneda que ganes irá directamente a reducir tu deuda hasta que vuelvas a 0.
+                    ⚠️ Tu saldo está en negativo. Cada moneda que ganes irá a reducir tu deuda.
                   </p>
                 </motion.div>
               )}
@@ -849,12 +836,9 @@ export default function Market() {
             </motion.div>
           )}
 
-          {/* Formulario nuevo préstamo */}
           {!activeLoan && (
-            <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
-              style={{ backgroundColor: 'var(--bg-card)' }}>
+            <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
               <p className="text-sm font-bold mb-4">Solicitar préstamo</p>
-
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
@@ -875,20 +859,18 @@ export default function Market() {
                       style={{
                         backgroundColor: loanAmount === v ? '#6366f1' : 'var(--bg-input)',
                         color: loanAmount === v ? '#fff' : 'var(--text-muted)',
-                      }}>
-                      {v}
-                    </motion.button>
+                      }}>{v}</motion.button>
                   ))}
                 </div>
               </div>
 
               <div className="mb-5">
-                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Plazo de devolución</p>
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Plazo</p>
                 <div className="flex gap-2">
                   {[
-                    { days: 1, label: '1 día',   rate: '5%' },
-                    { days: 3, label: '3 días',  rate: '8%' },
-                    { days: 7, label: '7 días',  rate: '12%' },
+                    { days: 1, label: '1 día', rate: '5%' },
+                    { days: 3, label: '3 días', rate: '8%' },
+                    { days: 7, label: '7 días', rate: '12%' },
                   ].map(opt => (
                     <motion.button key={opt.days} whileTap={{ scale: 0.95 }}
                       onClick={() => setLoanDays(opt.days)}
@@ -921,7 +903,7 @@ export default function Market() {
                   <span className="font-bold text-indigo-400">{getPreviewRepay()}🪙</span>
                 </div>
                 <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-hint)' }}>
-                  +2% adicional por cada día de retraso · sin límite
+                  +2% adicional por cada día de retraso
                 </p>
               </div>
 
@@ -934,7 +916,6 @@ export default function Market() {
             </motion.div>
           )}
 
-          {/* Historial */}
           {loanHistory.length > 0 && (
             <div>
               <p className="text-sm font-bold mb-3">Historial</p>
@@ -965,7 +946,7 @@ export default function Market() {
         </div>
       )}
 
-      {/* Modal detalle bebida + trading */}
+      {/* Modal detalle bebida */}
       <AnimatePresence>
         {selectedDrink && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

@@ -90,8 +90,8 @@ export default function AddDrink() {
     setLoading(true)
     soundDrink()
 
+    // ✅ Sin p_user_id — el servidor usa auth.uid()
     const { data, error } = await supabase.rpc('add_drink_with_effects', {
-      p_user_id: user.id,
       p_drink_type_id: selectedDrink,
       p_season_id: seasonId,
       p_league_ids: leagues,
@@ -170,11 +170,8 @@ export default function AddDrink() {
 
         {/* Avisos de estado */}
         <AnimatePresence>
-
-          {/* Números rojos */}
           {inDebt && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4"
               style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)' }}>
               <div className="flex items-center gap-3">
@@ -192,7 +189,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Freeze */}
           {isFreezeActive && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
@@ -203,7 +199,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Invisible */}
           {isInvisibleActive && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
@@ -214,7 +209,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Apuesta */}
           {isGambleActive && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
@@ -225,7 +219,6 @@ export default function AddDrink() {
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Tu próxima consumición vale x0 o x4 aleatoriamente</p>
             </motion.div>
           )}
-
         </AnimatePresence>
 
         {/* Grid de bebidas */}
@@ -310,10 +303,8 @@ export default function AddDrink() {
           </motion.p>
         )}
 
-        {/* Resultados animados */}
+        {/* Resultados */}
         <AnimatePresence>
-
-          {/* Éxito normal */}
           {success && result && !result.gamble_active && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -323,9 +314,7 @@ export default function AddDrink() {
               style={{ backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
               <motion.div className="text-5xl mb-2"
                 animate={{ rotate: [0, -15, 15, -10, 0], scale: [1, 1.3, 1] }}
-                transition={{ duration: 0.6 }}>
-                🎉
-              </motion.div>
+                transition={{ duration: 0.6 }}>🎉</motion.div>
               <p className="text-emerald-400 font-bold text-lg">¡Consumición anotada!</p>
               <div className="mt-3 space-y-1.5">
                 <div className="flex justify-between text-sm px-4">
@@ -376,7 +365,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Resultado apuesta */}
           {success && result && result.gamble_active && (
             <motion.div
               initial={{ opacity: 0, scale: 0.5 }}
@@ -405,7 +393,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Freeze */}
           {frozen && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -421,7 +408,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Escudo bloqueó */}
           {shieldBlocked && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -431,16 +417,13 @@ export default function AddDrink() {
               style={{ backgroundColor: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.4)' }}>
               <motion.div className="text-5xl mb-2"
                 animate={{ scale: [1, 1.3, 1], rotate: [0, -10, 10, 0] }}
-                transition={{ duration: 0.5 }}>
-                🛡️
-              </motion.div>
+                transition={{ duration: 0.5 }}>🛡️</motion.div>
               <p className="font-bold" style={{ color: '#818cf8' }}>¡Escudo activado!</p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
                 Tu escudo ha absorbido el ataque y se ha consumido
               </p>
             </motion.div>
           )}
-
         </AnimatePresence>
       </div>
     </div>
