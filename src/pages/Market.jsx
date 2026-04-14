@@ -114,6 +114,16 @@ export default function Market() {
   const [closingPosition, setClosingPosition] = useState(null)
   const [closeResult, setCloseResult] = useState(null)
 
+  // Banco
+  const [activeLoan, setActiveLoan] = useState(null)
+  const [loanDebt, setLoanDebt] = useState(null)
+  const [loanAmount, setLoanAmount] = useState(100)
+  const [loanDays, setLoanDays] = useState(3)
+  const [requesting, setRequesting] = useState(false)
+  const [repaying, setRepaying] = useState(false)
+  const [loanResult, setLoanResult] = useState(null)
+  const [loanHistory, setLoanHistory] = useState([])
+
   useEffect(() => { fetchAll() }, [])
   useEffect(() => { if (selectedLeague) fetchLeagueMembers(selectedLeague.id) }, [selectedLeague])
 
@@ -127,6 +137,8 @@ export default function Market() {
       { data: myPowerupData },
       { data: positionData },
       { data: leagueData },
+      { data: loanData },
+      { data: loanHistoryData },
     ] = await Promise.all([
       supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
       supabase.from('drink_market').select('*, drink_types(name, emoji, points)').order('drink_type_id'),
@@ -139,6 +151,9 @@ export default function Market() {
       supabase.from('market_positions')
         .select('*, drink_types(name, emoji)').eq('user_id', user.id).eq('closed', false),
       supabase.from('league_members').select('league_id, leagues(id, name)').eq('user_id', user.id),
+      supabase.from('bank_loans').select('*').eq('user_id', user.id).eq('status', 'active').single(),
+      supabase.from('bank_loans').select('*').eq('user_id', user.id)
+        .in('status', ['repaid', 'defaulted']).order('created_at', { ascending: false }).limit(5),
     ])
 
     setBalance(walletData?.balance || 0)
@@ -146,6 +161,8 @@ export default function Market() {
     setPowerups(powerupData || [])
     setMyPowerups(myPowerupData || [])
     setMyPositions(positionData || [])
+    setActiveLoan(loanData || null)
+    setLoanHistory(loanHistoryData || [])
 
     const userLeagues = leagueData?.map(d => d.leagues) || []
     setLeagues(userLeagues)
@@ -164,6 +181,13 @@ export default function Market() {
     } else {
       setDrinkMarket(marketData || [])
     }
+
+    // Cargar deuda actual si hay préstamo activo
+    if (loanData) {
+      const { data: debtData } = await supabase.rpc('get_current_debt', { p_loan_id: loanData.id })
+      setLoanDebt(debtData)
+    }
+
     setLoading(false)
   }
 
@@ -260,6 +284,54 @@ export default function Market() {
     setBuying(false)
   }
 
+  const executeRequestLoan = async () => {
+    if (loanAmount < 50 || loanAmount > 5000) return
+    setRequesting(true)
+    const { data } = await supabase.rpc('request_bank_loan', {
+      p_amount: loanAmount,
+      p_days: loanDays,
+    })
+    if (data?.success) {
+      soundSuccess()
+      setLoanResult(data)
+      fetchAll()
+    } else {
+      soundError()
+      setLoanResult(data)
+    }
+    setTimeout(() => setLoanResult(null), 4000)
+    setRequesting(false)
+  }
+
+  const executeRepayLoan = async () => {
+    if (!activeLoan) return
+    setRepaying(true)
+    const { data } = await supabase.rpc('repay_bank_loan', { p_loan_id: activeLoan.id })
+    if (data?.success) {
+      soundSuccess()
+      setLoanResult({ ...data, repaid: true })
+      setActiveLoan(null)
+      setLoanDebt(null)
+      fetchAll()
+    } else {
+      soundError()
+      setLoanResult(data)
+    }
+    setTimeout(() => setLoanResult(null), 4000)
+    setRepaying(false)
+  }
+
+  const getInterestRate = (days) => {
+    if (days === 1) return 5
+    if (days === 3) return 8
+    return 12
+  }
+
+  const getPreviewRepay = () => {
+    const rate = getInterestRate(loanDays)
+    return Math.ceil(loanAmount * (1 + rate / 100))
+  }
+
   const formatTime = (ts) => {
     if (!ts) return 'Permanente'
     const diff = new Date(ts) - Date.now()
@@ -269,8 +341,20 @@ export default function Market() {
     return `${h}h ${m}m`
   }
 
-  const getMultiplier = (price) => Math.max(0.5, Math.min(2.0, price / 100))
+  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+  })
 
+  const getDueStatus = (dueDate) => {
+    const diff = new Date(dueDate) - Date.now()
+    if (diff < 0) return { label: `${Math.floor(Math.abs(diff) / 86400000)}d de retraso`, color: '#ef4444', urgent: true }
+    const hours = Math.floor(diff / 3600000)
+    if (hours < 24) return { label: `${hours}h restantes`, color: '#f97316', urgent: true }
+    const days = Math.floor(diff / 86400000)
+    return { label: `${days}d restantes`, color: '#10b981', urgent: false }
+  }
+
+  const getMultiplier = (price) => Math.max(0.5, Math.min(2.0, price / 100))
   const needsTarget = selectedPowerup && ['freeze', 'sniper', 'sabotage'].includes(selectedPowerup.effect_type)
   const needsTurboDrink = selectedPowerup?.effect_type === 'turbo'
   const needsResetDrink = selectedPowerup?.effect_type === 'market_reset'
@@ -305,21 +389,41 @@ export default function Market() {
             <span className="font-bold text-amber-400 text-lg">{balance.toLocaleString()}</span>
           </motion.div>
         </div>
-        <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
+
+        {/* Tabs */}
+        <div className="flex rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
-            { id: 'market',    label: '📈 Cotización' },
-            { id: 'powerups',  label: '⚡ Tienda' },
-            { id: 'portfolio', label: '💼 Cartera' },
+            { id: 'market',    label: '📈' },
+            { id: 'powerups',  label: '⚡' },
+            { id: 'portfolio', label: '💼' },
+            { id: 'bank',      label: '🏦' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+              className="relative flex-1 py-2 rounded-lg text-sm font-medium transition-colors z-10"
               style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
               {tab === t.id && (
-                <motion.div layoutId="market-tab" className="absolute inset-0 bg-amber-500 rounded-lg"
-                  style={{ zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+                <motion.div layoutId="market-tab" className="absolute inset-0 rounded-lg"
+                  style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : '#f59e0b' }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
               {t.label}
             </button>
+          ))}
+        </div>
+
+        {/* Labels bajo las tabs */}
+        <div className="flex mt-1">
+          {[
+            { id: 'market',    label: 'Cotización' },
+            { id: 'powerups',  label: 'Tienda' },
+            { id: 'portfolio', label: 'Cartera' },
+            { id: 'bank',      label: 'Banco' },
+          ].map(t => (
+            <div key={t.id} className="flex-1 text-center">
+              <span className="text-xs" style={{ color: tab === t.id ? (t.id === 'bank' ? '#818cf8' : '#f59e0b') : 'var(--text-hint)' }}>
+                {t.label}
+              </span>
+            </div>
           ))}
         </div>
       </div>
@@ -480,7 +584,7 @@ export default function Market() {
                     <motion.button whileTap={{ scale: 0.9 }}
                       disabled={!canAfford || !selectedLeague}
                       onClick={() => setSelectedPowerup(pw)}
-                      className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-colors"
+                      className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold"
                       style={{
                         backgroundColor: canAfford ? '#f59e0b' : 'var(--bg-input)',
                         color: canAfford ? '#fff' : 'var(--text-hint)',
@@ -519,8 +623,7 @@ export default function Market() {
                 const coins = Math.floor(effectivePoints * 10)
                 const isModified = Math.abs(multiplier - 1) > 0.05
                 return (
-                  <motion.div key={drink.id} variants={staggerItem} initial="initial" animate="animate"
-                    className="flex justify-between items-center py-2 border-b last:border-0"
+                  <div key={drink.id} className="flex justify-between items-center py-2 border-b last:border-0"
                     style={{ borderColor: 'var(--border)' }}>
                     <div className="flex items-center gap-2">
                       <span className="text-xl">{drink.emoji}</span>
@@ -542,7 +645,7 @@ export default function Market() {
                         +{coins}🪙
                       </span>
                     </div>
-                  </motion.div>
+                  </div>
                 )
               })}
             </div>
@@ -558,9 +661,6 @@ export default function Market() {
                 }}>
                 <p className="font-bold" style={{ color: closeResult.pnl >= 0 ? '#10b981' : '#ef4444' }}>
                   {closeResult.pnl >= 0 ? '🎉 Ganancia' : '📉 Pérdida'}: {closeResult.pnl >= 0 ? '+' : ''}{closeResult.pnl}🪙
-                </p>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                  Entrada: x{getMultiplier(closeResult.entry_price).toFixed(2)} → Salida: x{getMultiplier(closeResult.exit_price).toFixed(2)}
                 </p>
               </motion.div>
             )}
@@ -591,7 +691,7 @@ export default function Market() {
                         {pos.drink_types?.emoji}
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
                           <p className="font-bold text-sm">{pos.drink_types?.name}</p>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pos.direction === 'long' ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
                             {pos.direction === 'long' ? '▲ LONG' : '▼ SHORT'}
@@ -610,7 +710,7 @@ export default function Market() {
                     <motion.button whileTap={{ scale: 0.97 }}
                       onClick={() => executeClosePosition(pos.id)}
                       disabled={closingPosition === pos.id}
-                      className="w-full py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                      className="w-full py-2.5 rounded-xl text-sm font-semibold"
                       style={{
                         backgroundColor: isProfit ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
                         color: isProfit ? '#10b981' : '#ef4444',
@@ -621,6 +721,241 @@ export default function Market() {
                   </motion.div>
                 )
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── BANCO ── */}
+      {tab === 'bank' && (
+        <div className="px-4 pt-4 max-w-md mx-auto">
+
+          {/* Header banco */}
+          <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4 text-center"
+            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.3)' }}>
+            <div className="text-4xl mb-2">🏦</div>
+            <h2 className="text-lg font-bold">Banco de la Espuma</h2>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              Pide monedas adelantadas y devuélvelas con intereses
+            </p>
+          </motion.div>
+
+          {/* Resultado de acción */}
+          <AnimatePresence>
+            {loanResult && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="rounded-2xl p-4 mb-4 text-center"
+                style={{
+                  backgroundColor: loanResult.success || loanResult.repaid ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                  border: `1px solid ${loanResult.success || loanResult.repaid ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                }}>
+                {loanResult.success && !loanResult.repaid && (
+                  <>
+                    <p className="font-bold text-emerald-400 text-lg">🎉 +{loanResult.amount}🪙 recibidas</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                      Devuelve {loanResult.repay_amount}🪙 antes del plazo · Interés: {loanResult.interest_rate}%
+                    </p>
+                  </>
+                )}
+                {loanResult.repaid && (
+                  <>
+                    <p className="font-bold text-emerald-400 text-lg">✅ Préstamo saldado</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                      Has pagado {loanResult.paid}🪙
+                      {loanResult.days_late > 0 ? ` (${loanResult.days_late}d de retraso)` : ' a tiempo 👏'}
+                    </p>
+                  </>
+                )}
+                {!loanResult.success && !loanResult.repaid && (
+                  <p className="font-bold text-red-400">⚠️ {loanResult.error}</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Préstamo activo */}
+          {activeLoan && loanDebt && (
+            <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: `2px solid ${loanDebt.is_overdue ? '#ef4444' : 'rgba(99,102,241,0.4)'}`,
+              }}>
+              <div className="flex items-center justify-between mb-4">
+                <p className="font-bold">Préstamo activo</p>
+                {(() => {
+                  const status = getDueStatus(activeLoan.due_date)
+                  return (
+                    <motion.span
+                      animate={status.urgent ? { opacity: [1, 0.5, 1] } : {}}
+                      transition={{ repeat: Infinity, duration: 1.5 }}
+                      className="text-xs font-bold px-2 py-1 rounded-full"
+                      style={{ backgroundColor: `${status.color}20`, color: status.color }}>
+                      ⏰ {status.label}
+                    </motion.span>
+                  )
+                })()}
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span style={{ color: 'var(--text-muted)' }}>Pedido</span>
+                  <span className="font-bold">{activeLoan.amount}🪙</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span style={{ color: 'var(--text-muted)' }}>Interés base</span>
+                  <span className="font-medium text-amber-400">{activeLoan.interest_rate}%</span>
+                </div>
+                {loanDebt.days_late > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span style={{ color: 'var(--text-muted)' }}>Penalización ({loanDebt.days_late}d retraso)</span>
+                    <span className="font-medium text-red-400">+{loanDebt.penalty_rate}%</span>
+                  </div>
+                )}
+                <div className="border-t pt-2 flex justify-between text-sm"
+                  style={{ borderColor: 'var(--border)' }}>
+                  <span className="font-bold">A pagar ahora</span>
+                  <span className="font-bold text-lg"
+                    style={{ color: loanDebt.is_overdue ? '#ef4444' : 'var(--text-primary)' }}>
+                    {loanDebt.current_debt}🪙
+                  </span>
+                </div>
+              </div>
+
+              <motion.button whileTap={{ scale: 0.97 }} onClick={executeRepayLoan}
+                disabled={repaying || balance < loanDebt.current_debt}
+                className="w-full py-3 rounded-xl font-bold text-sm text-white transition-colors"
+                style={{ backgroundColor: loanDebt.is_overdue ? '#ef4444' : '#6366f1' }}>
+                {repaying ? 'Pagando...' :
+                  balance < loanDebt.current_debt
+                    ? `Necesitas ${loanDebt.current_debt - balance}🪙 más`
+                    : `Saldar deuda · ${loanDebt.current_debt}🪙`}
+              </motion.button>
+
+              {balance < loanDebt.current_debt && (
+                <p className="text-xs text-center mt-2" style={{ color: 'var(--text-hint)' }}>
+                  Registra consumiciones para ganar más 🪙
+                </p>
+              )}
+            </motion.div>
+          )}
+
+          {/* Formulario de préstamo */}
+          {!activeLoan && (
+            <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
+              style={{ backgroundColor: 'var(--bg-card)' }}>
+              <p className="text-sm font-bold mb-4">Solicitar préstamo</p>
+
+              {/* Cantidad */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
+                  <p className="text-sm font-bold text-indigo-400">{loanAmount}🪙</p>
+                </div>
+                <input type="range" min="50" max="5000" step="50"
+                  value={loanAmount} onChange={e => setLoanAmount(Number(e.target.value))}
+                  className="w-full accent-indigo-500" />
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs" style={{ color: 'var(--text-hint)' }}>50🪙 mín</span>
+                  <span className="text-xs" style={{ color: 'var(--text-hint)' }}>5000🪙 máx</span>
+                </div>
+                <div className="flex gap-2 mt-2">
+                  {[100, 250, 500, 1000].map(v => (
+                    <motion.button key={v} whileTap={{ scale: 0.9 }}
+                      onClick={() => setLoanAmount(v)}
+                      className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                      style={{
+                        backgroundColor: loanAmount === v ? '#6366f1' : 'var(--bg-input)',
+                        color: loanAmount === v ? '#fff' : 'var(--text-muted)',
+                      }}>
+                      {v}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Plazo */}
+              <div className="mb-5">
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Plazo de devolución</p>
+                <div className="flex gap-2">
+                  {[
+                    { days: 1, label: '1 día', rate: '5%' },
+                    { days: 3, label: '3 días', rate: '8%' },
+                    { days: 7, label: '7 días', rate: '12%' },
+                  ].map(opt => (
+                    <motion.button key={opt.days} whileTap={{ scale: 0.95 }}
+                      onClick={() => setLoanDays(opt.days)}
+                      className="flex-1 rounded-xl p-3 text-center transition-colors"
+                      style={{
+                        backgroundColor: loanDays === opt.days ? 'rgba(99,102,241,0.2)' : 'var(--bg-input)',
+                        border: loanDays === opt.days ? '2px solid #6366f1' : '2px solid transparent',
+                      }}>
+                      <p className="text-sm font-bold"
+                        style={{ color: loanDays === opt.days ? '#818cf8' : 'var(--text-primary)' }}>
+                        {opt.label}
+                      </p>
+                      <p className="text-xs mt-0.5 text-amber-400">{opt.rate}</p>
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resumen */}
+              <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span style={{ color: 'var(--text-muted)' }}>Recibes ahora</span>
+                  <span className="font-bold text-emerald-400">+{loanAmount}🪙</span>
+                </div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span style={{ color: 'var(--text-muted)' }}>Interés ({getInterestRate(loanDays)}%)</span>
+                  <span className="font-medium text-amber-400">+{getPreviewRepay() - loanAmount}🪙</span>
+                </div>
+                <div className="border-t pt-1 mt-1 flex justify-between text-sm"
+                  style={{ borderColor: 'var(--border)' }}>
+                  <span className="font-bold">Total a devolver</span>
+                  <span className="font-bold text-indigo-400">{getPreviewRepay()}🪙</span>
+                </div>
+                <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-hint)' }}>
+                  +2% por cada día de retraso tras el plazo
+                </p>
+              </div>
+
+              <motion.button whileTap={{ scale: 0.97 }} onClick={executeRequestLoan}
+                disabled={requesting}
+                className="w-full py-4 rounded-2xl font-bold text-white text-sm"
+                style={{ backgroundColor: '#6366f1' }}>
+                {requesting ? 'Solicitando...' : `Pedir ${loanAmount}🪙 al banco`}
+              </motion.button>
+            </motion.div>
+          )}
+
+          {/* Historial de préstamos */}
+          {loanHistory.length > 0 && (
+            <div>
+              <p className="text-sm font-bold mb-3">Historial</p>
+              <div className="space-y-2">
+                {loanHistory.map(loan => (
+                  <motion.div key={loan.id} variants={staggerItem} initial="initial" animate="animate"
+                    className="rounded-2xl p-3 flex items-center gap-3"
+                    style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: loan.status === 'repaid' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' }}>
+                      <span className="text-sm">{loan.status === 'repaid' ? '✅' : '❌'}</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        {loan.amount}🪙 prestadas
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                        {formatDate(loan.created_at)} · {loan.interest_rate}% interés
+                      </p>
+                    </div>
+                    <p className="text-xs font-bold"
+                      style={{ color: loan.status === 'repaid' ? '#10b981' : '#ef4444' }}>
+                      {loan.status === 'repaid' ? 'Pagado' : 'Impagado'}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -751,7 +1086,6 @@ export default function Market() {
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
 
-              {/* Resultado de compra (Sniper/Sabotaje) */}
               <AnimatePresence>
                 {buyResult && (
                   <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -763,7 +1097,7 @@ export default function Market() {
                     <p className="text-sm font-bold" style={{ color: buyResult.success ? '#10b981' : '#f59e0b' }}>
                       {buyResult.success
                         ? buyResult.extra?.target
-                          ? `✅ ${buyResult.extra.target} ha recibido el impacto (-${buyResult.extra.points_stolen || buyResult.extra.points_removed}pts)`
+                          ? `✅ ${buyResult.extra.target} ha recibido el impacto`
                           : '✅ Powerup activado'
                         : buyResult.extra?.message || 'Escudo bloqueó el ataque 🛡️'}
                     </p>
@@ -771,7 +1105,6 @@ export default function Market() {
                 )}
               </AnimatePresence>
 
-              {/* Selector objetivo */}
               {needsTarget && (
                 <div className="mb-5">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
@@ -799,7 +1132,6 @@ export default function Market() {
                 </div>
               )}
 
-              {/* Selector bebida Turbo */}
               {needsTurboDrink && (
                 <div className="mb-5">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>¿A qué bebida aplicar el Turbo x3?</p>
@@ -821,7 +1153,6 @@ export default function Market() {
                 </div>
               )}
 
-              {/* Selector bebida Reset Mercado */}
               {needsResetDrink && (
                 <div className="mb-5">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>¿Qué bebida resetear a x1.0?</p>
@@ -863,7 +1194,7 @@ export default function Market() {
                   (needsTurboDrink && !turboDrink) ||
                   (needsResetDrink && !resetDrink)
                 }
-                className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-4 rounded-2xl transition-colors">
+                className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-4 rounded-2xl">
                 {buying ? 'Activando...' : `Activar · ${selectedPowerup.cost}🪙`}
               </motion.button>
             </motion.div>
