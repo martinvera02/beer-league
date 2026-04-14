@@ -392,24 +392,24 @@ export default function Market() {
 
         {/* Tabs */}
         <div className="flex rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-input)' }}>
-          {[
-            { id: 'market',    label: '📈' },
-            { id: 'powerups',  label: '⚡' },
-            { id: 'portfolio', label: '💼' },
-            { id: 'bank',      label: '🏦' },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className="relative flex-1 py-2 rounded-lg text-sm font-medium transition-colors z-10"
-              style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-              {tab === t.id && (
-                <motion.div layoutId="market-tab" className="absolute inset-0 rounded-lg"
-                  style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : '#f59e0b' }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
-              )}
-              {t.label}
-            </button>
-          ))}
-        </div>
+  {[
+    { id: 'market',    label: '📈 Cotización' },
+    { id: 'powerups',  label: '⚡ Tienda' },
+    { id: 'portfolio', label: '💼 Cartera' },
+    { id: 'bank',      label: '🏦 Banco' },
+  ].map(t => (
+    <button key={t.id} onClick={() => setTab(t.id)}
+      className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+      style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
+      {tab === t.id && (
+        <motion.div layoutId="market-tab" className="absolute inset-0 rounded-lg"
+          style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : '#f59e0b' }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+      )}
+      {t.label}
+    </button>
+  ))}
+</div>
 
         {/* Labels bajo las tabs */}
         <div className="flex mt-1">
