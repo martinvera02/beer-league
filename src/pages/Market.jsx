@@ -151,7 +151,8 @@ export default function Market() {
       supabase.from('market_positions')
         .select('*, drink_types(name, emoji)').eq('user_id', user.id).eq('closed', false),
       supabase.from('league_members').select('league_id, leagues(id, name)').eq('user_id', user.id),
-      supabase.from('bank_loans').select('*').eq('user_id', user.id).eq('status', 'active').single(),
+      supabase.from('bank_loans').select('*').eq('user_id', user.id)
+        .in('status', ['active', 'defaulted']).maybeSingle(),
       supabase.from('bank_loans').select('*').eq('user_id', user.id)
         .in('status', ['repaid', 'defaulted']).order('created_at', { ascending: false }).limit(5),
     ])
@@ -182,7 +183,6 @@ export default function Market() {
       setDrinkMarket(marketData || [])
     }
 
-    // Cargar deuda actual si hay préstamo activo
     if (loanData) {
       const { data: debtData } = await supabase.rpc('get_current_debt', { p_loan_id: loanData.id })
       setLoanDebt(debtData)
@@ -347,7 +347,10 @@ export default function Market() {
 
   const getDueStatus = (dueDate) => {
     const diff = new Date(dueDate) - Date.now()
-    if (diff < 0) return { label: `${Math.floor(Math.abs(diff) / 86400000)}d de retraso`, color: '#ef4444', urgent: true }
+    if (diff < 0) {
+      const days = Math.floor(Math.abs(diff) / 86400000)
+      return { label: `${days}d de retraso`, color: '#ef4444', urgent: true }
+    }
     const hours = Math.floor(diff / 3600000)
     if (hours < 24) return { label: `${hours}h restantes`, color: '#f97316', urgent: true }
     const days = Math.floor(diff / 86400000)
@@ -355,6 +358,7 @@ export default function Market() {
   }
 
   const getMultiplier = (price) => Math.max(0.5, Math.min(2.0, price / 100))
+  const inDebt = balance < 0
   const needsTarget = selectedPowerup && ['freeze', 'sniper', 'sabotage'].includes(selectedPowerup.effect_type)
   const needsTurboDrink = selectedPowerup?.effect_type === 'turbo'
   const needsResetDrink = selectedPowerup?.effect_type === 'market_reset'
@@ -384,35 +388,37 @@ export default function Market() {
           </div>
           <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 0.3 }} key={balance}
             className="flex items-center gap-2 px-4 py-2 rounded-2xl"
-            style={{ backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }}>
+            style={{
+              backgroundColor: inDebt ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
+              border: `1px solid ${inDebt ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.3)'}`,
+            }}>
             <span className="text-lg">🪙</span>
-            <span className="font-bold text-amber-400 text-lg">{balance.toLocaleString()}</span>
+            <span className="font-bold text-lg" style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>
+              {balance.toLocaleString()}
+            </span>
           </motion.div>
         </div>
 
         {/* Tabs */}
         <div className="flex rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-input)' }}>
-  {[
-    { id: 'market',    label: '📈 Cotización' },
-    { id: 'powerups',  label: '⚡ Tienda' },
-    { id: 'portfolio', label: '💼 Cartera' },
-    { id: 'bank',      label: '🏦 Banco' },
-  ].map(t => (
-    <button key={t.id} onClick={() => setTab(t.id)}
-      className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
-      style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-      {tab === t.id && (
-        <motion.div layoutId="market-tab" className="absolute inset-0 rounded-lg"
-          style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : '#f59e0b' }}
-          transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
-      )}
-      {t.label}
-    </button>
-  ))}
-</div>
-
-        {/* Labels bajo las tabs */}
-        
+          {[
+            { id: 'market',    label: '📈 Cotización' },
+            { id: 'powerups',  label: '⚡ Tienda' },
+            { id: 'portfolio', label: '💼 Cartera' },
+            { id: 'bank',      label: '🏦 Banco' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+              style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
+              {tab === t.id && (
+                <motion.div layoutId="market-tab" className="absolute inset-0 rounded-lg"
+                  style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : '#f59e0b' }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+              )}
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── COTIZACIÓN ── */}
@@ -511,7 +517,7 @@ export default function Market() {
         </div>
       )}
 
-      {/* ── TIENDA POWERUPS ── */}
+      {/* ── TIENDA ── */}
       {tab === 'powerups' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
           {leagues.length > 0 && (
@@ -590,10 +596,22 @@ export default function Market() {
       {tab === 'portfolio' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
           <motion.div {...fadeIn} className="rounded-2xl p-6 mb-4 text-center"
-            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: `1px solid ${inDebt ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.2)'}`,
+            }}>
             <p className="text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Saldo disponible</p>
-            <p className="text-5xl font-bold text-amber-400">{balance.toLocaleString()}</p>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>🪙 Cervezas</p>
+            <p className="text-5xl font-bold" style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>
+              {balance.toLocaleString()}
+            </p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>
+              {inDebt ? '🔴 En números rojos' : '🪙 Cervezas'}
+            </p>
+            {inDebt && (
+              <p className="text-xs mt-2 text-red-400">
+                Cada moneda que ganes reducirá tu deuda automáticamente
+              </p>
+            )}
           </motion.div>
 
           <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -717,13 +735,12 @@ export default function Market() {
       {tab === 'bank' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
 
-          {/* Header banco */}
           <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4 text-center"
             style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.3)' }}>
             <div className="text-4xl mb-2">🏦</div>
             <h2 className="text-lg font-bold">Banco de la Espuma</h2>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-              Pide monedas adelantadas y devuélvelas con intereses
+              Pide monedas adelantadas · cuanto antes pagues, menos interés
             </p>
           </motion.div>
 
@@ -765,10 +782,12 @@ export default function Market() {
             <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
               style={{
                 backgroundColor: 'var(--bg-card)',
-                border: `2px solid ${loanDebt.is_overdue ? '#ef4444' : 'rgba(99,102,241,0.4)'}`,
+                border: `2px solid ${loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : 'rgba(99,102,241,0.4)'}`,
               }}>
               <div className="flex items-center justify-between mb-4">
-                <p className="font-bold">Préstamo activo</p>
+                <p className="font-bold">
+                  {loanDebt.is_defaulted ? '🔴 En números rojos' : 'Préstamo activo'}
+                </p>
                 {(() => {
                   const status = getDueStatus(activeLoan.due_date)
                   return (
@@ -783,6 +802,17 @@ export default function Market() {
                 })()}
               </div>
 
+              {/* Aviso números rojos */}
+              {loanDebt.is_defaulted && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="rounded-xl p-3 mb-4"
+                  style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  <p className="text-xs text-red-400 text-center">
+                    ⚠️ Tu saldo está en negativo. Cada moneda que ganes irá directamente a reducir tu deuda hasta que vuelvas a 0.
+                  </p>
+                </motion.div>
+              )}
+
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
                   <span style={{ color: 'var(--text-muted)' }}>Pedido</span>
@@ -794,15 +824,14 @@ export default function Market() {
                 </div>
                 {loanDebt.days_late > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span style={{ color: 'var(--text-muted)' }}>Penalización ({loanDebt.days_late}d retraso)</span>
+                    <span style={{ color: 'var(--text-muted)' }}>Penalización ({loanDebt.days_late}d)</span>
                     <span className="font-medium text-red-400">+{loanDebt.penalty_rate}%</span>
                   </div>
                 )}
-                <div className="border-t pt-2 flex justify-between text-sm"
-                  style={{ borderColor: 'var(--border)' }}>
+                <div className="border-t pt-2 flex justify-between text-sm" style={{ borderColor: 'var(--border)' }}>
                   <span className="font-bold">A pagar ahora</span>
                   <span className="font-bold text-lg"
-                    style={{ color: loanDebt.is_overdue ? '#ef4444' : 'var(--text-primary)' }}>
+                    style={{ color: loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : 'var(--text-primary)' }}>
                     {loanDebt.current_debt}🪙
                   </span>
                 </div>
@@ -810,29 +839,22 @@ export default function Market() {
 
               <motion.button whileTap={{ scale: 0.97 }} onClick={executeRepayLoan}
                 disabled={repaying || balance < loanDebt.current_debt}
-                className="w-full py-3 rounded-xl font-bold text-sm text-white transition-colors"
-                style={{ backgroundColor: loanDebt.is_overdue ? '#ef4444' : '#6366f1' }}>
+                className="w-full py-3 rounded-xl font-bold text-sm text-white"
+                style={{ backgroundColor: loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : '#6366f1' }}>
                 {repaying ? 'Pagando...' :
                   balance < loanDebt.current_debt
-                    ? `Necesitas ${loanDebt.current_debt - balance}🪙 más`
+                    ? `Te faltan ${loanDebt.current_debt - balance}🪙 — sigue bebiendo 🍺`
                     : `Saldar deuda · ${loanDebt.current_debt}🪙`}
               </motion.button>
-
-              {balance < loanDebt.current_debt && (
-                <p className="text-xs text-center mt-2" style={{ color: 'var(--text-hint)' }}>
-                  Registra consumiciones para ganar más 🪙
-                </p>
-              )}
             </motion.div>
           )}
 
-          {/* Formulario de préstamo */}
+          {/* Formulario nuevo préstamo */}
           {!activeLoan && (
             <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
               style={{ backgroundColor: 'var(--bg-card)' }}>
               <p className="text-sm font-bold mb-4">Solicitar préstamo</p>
 
-              {/* Cantidad */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
@@ -860,18 +882,17 @@ export default function Market() {
                 </div>
               </div>
 
-              {/* Plazo */}
               <div className="mb-5">
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Plazo de devolución</p>
                 <div className="flex gap-2">
                   {[
-                    { days: 1, label: '1 día', rate: '5%' },
-                    { days: 3, label: '3 días', rate: '8%' },
-                    { days: 7, label: '7 días', rate: '12%' },
+                    { days: 1, label: '1 día',   rate: '5%' },
+                    { days: 3, label: '3 días',  rate: '8%' },
+                    { days: 7, label: '7 días',  rate: '12%' },
                   ].map(opt => (
                     <motion.button key={opt.days} whileTap={{ scale: 0.95 }}
                       onClick={() => setLoanDays(opt.days)}
-                      className="flex-1 rounded-xl p-3 text-center transition-colors"
+                      className="flex-1 rounded-xl p-3 text-center"
                       style={{
                         backgroundColor: loanDays === opt.days ? 'rgba(99,102,241,0.2)' : 'var(--bg-input)',
                         border: loanDays === opt.days ? '2px solid #6366f1' : '2px solid transparent',
@@ -886,7 +907,6 @@ export default function Market() {
                 </div>
               </div>
 
-              {/* Resumen */}
               <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
                 <div className="flex justify-between text-sm mb-1">
                   <span style={{ color: 'var(--text-muted)' }}>Recibes ahora</span>
@@ -896,13 +916,12 @@ export default function Market() {
                   <span style={{ color: 'var(--text-muted)' }}>Interés ({getInterestRate(loanDays)}%)</span>
                   <span className="font-medium text-amber-400">+{getPreviewRepay() - loanAmount}🪙</span>
                 </div>
-                <div className="border-t pt-1 mt-1 flex justify-between text-sm"
-                  style={{ borderColor: 'var(--border)' }}>
+                <div className="border-t pt-1 mt-1 flex justify-between text-sm" style={{ borderColor: 'var(--border)' }}>
                   <span className="font-bold">Total a devolver</span>
                   <span className="font-bold text-indigo-400">{getPreviewRepay()}🪙</span>
                 </div>
                 <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-hint)' }}>
-                  +2% por cada día de retraso tras el plazo
+                  +2% adicional por cada día de retraso · sin límite
                 </p>
               </div>
 
@@ -915,7 +934,7 @@ export default function Market() {
             </motion.div>
           )}
 
-          {/* Historial de préstamos */}
+          {/* Historial */}
           {loanHistory.length > 0 && (
             <div>
               <p className="text-sm font-bold mb-3">Historial</p>
@@ -929,9 +948,7 @@ export default function Market() {
                       <span className="text-sm">{loan.status === 'repaid' ? '✅' : '❌'}</span>
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium">
-                        {loan.amount}🪙 prestadas
-                      </p>
+                      <p className="text-sm font-medium">{loan.amount}🪙 prestadas</p>
                       <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
                         {formatDate(loan.created_at)} · {loan.interest_rate}% interés
                       </p>
@@ -1001,14 +1018,14 @@ export default function Market() {
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
                 <div className="flex gap-2">
                   <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('long')}
-                    className="flex-1 py-3 rounded-xl font-bold text-sm transition-colors"
+                    className="flex-1 py-3 rounded-xl font-bold text-sm"
                     style={{
                       backgroundColor: tradeDirection === 'long' ? 'rgba(16,185,129,0.2)' : 'var(--bg-input)',
                       color: tradeDirection === 'long' ? '#10b981' : 'var(--text-muted)',
                       border: tradeDirection === 'long' ? '2px solid #10b981' : '2px solid transparent',
                     }}>▲ LONG<br /><span className="text-xs font-normal">sube multiplicador</span></motion.button>
                   <motion.button whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection('short')}
-                    className="flex-1 py-3 rounded-xl font-bold text-sm transition-colors"
+                    className="flex-1 py-3 rounded-xl font-bold text-sm"
                     style={{
                       backgroundColor: tradeDirection === 'short' ? 'rgba(239,68,68,0.2)' : 'var(--bg-input)',
                       color: tradeDirection === 'short' ? '#ef4444' : 'var(--text-muted)',
@@ -1021,7 +1038,7 @@ export default function Market() {
                   <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
                   <p className="text-xs text-amber-400 font-bold">{tradeAmount}🪙 / {balance}🪙</p>
                 </div>
-                <input type="range" min="10" max={Math.min(balance, 500)} step="10"
+                <input type="range" min="10" max={Math.min(Math.max(balance, 10), 500)} step="10"
                   value={tradeAmount} onChange={e => setTradeAmount(Number(e.target.value))}
                   className="w-full accent-amber-500" />
                 <div className="flex justify-between mt-2 gap-2">
@@ -1038,7 +1055,7 @@ export default function Market() {
               </div>
               <motion.button whileTap={{ scale: 0.97 }} onClick={executeTrade}
                 disabled={trading || tradeAmount > balance || tradeAmount < 10}
-                className="w-full font-bold py-4 rounded-2xl text-white transition-colors"
+                className="w-full font-bold py-4 rounded-2xl text-white"
                 style={{ backgroundColor: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
                 {trading ? 'Ejecutando...' : `${tradeDirection === 'long' ? '▲ LONG' : '▼ SHORT'} · ${tradeAmount}🪙`}
               </motion.button>

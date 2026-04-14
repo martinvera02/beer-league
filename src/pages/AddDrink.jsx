@@ -26,6 +26,7 @@ export default function AddDrink() {
   const [shieldBlocked, setShieldBlocked] = useState(false)
   const [result, setResult] = useState(null)
   const [activePowerups, setActivePowerups] = useState([])
+  const [balance, setBalance] = useState(0)
 
   useEffect(() => { fetchData() }, [])
 
@@ -36,6 +37,7 @@ export default function AddDrink() {
       { data: season },
       { data: market },
       { data: powerups },
+      { data: walletData },
     ] = await Promise.all([
       supabase.from('drink_types').select('*'),
       supabase.from('league_members').select('league_id').eq('user_id', user.id),
@@ -46,12 +48,14 @@ export default function AddDrink() {
         .eq('user_id', user.id)
         .eq('active', true)
         .or('expires_at.is.null,expires_at.gt.now()'),
+      supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
     ])
 
     setDrinkTypes(drinks || [])
     setLeagues(members?.map(m => m.league_id) || [])
     setSeasonId(season?.id || null)
     setActivePowerups(powerups || [])
+    setBalance(walletData?.balance || 0)
 
     const marketMap = {}
     market?.forEach(m => { marketMap[m.drink_type_id] = m.price })
@@ -122,15 +126,15 @@ export default function AddDrink() {
   const isFreezeActive = activePowerups.some(p => p.powerup_catalog?.effect_type === 'freeze')
   const isInvisibleActive = activePowerups.some(p => p.powerup_catalog?.effect_type === 'invisible')
   const isGambleActive = activePowerups.some(p => p.powerup_catalog?.effect_type === 'gamble')
-  const hasShield = activePowerups.some(p => p.powerup_catalog?.effect_type === 'shield')
+  const inDebt = balance < 0
 
   const getPowerupColor = (effectType) => {
     switch (effectType) {
-      case 'shield':    return { bg: 'rgba(99,102,241,0.15)',   color: '#818cf8',  border: 'rgba(99,102,241,0.3)' }
-      case 'freeze':    return { bg: 'rgba(59,130,246,0.15)',   color: '#60a5fa',  border: 'rgba(59,130,246,0.3)' }
-      case 'invisible': return { bg: 'rgba(156,163,175,0.15)', color: '#9ca3af',  border: 'rgba(156,163,175,0.3)' }
-      case 'gamble':    return { bg: 'rgba(168,85,247,0.15)',   color: '#c084fc',  border: 'rgba(168,85,247,0.3)' }
-      default:          return { bg: 'rgba(245,158,11,0.15)',   color: '#f59e0b',  border: 'rgba(245,158,11,0.3)' }
+      case 'shield':    return { bg: 'rgba(99,102,241,0.15)',   color: '#818cf8', border: 'rgba(99,102,241,0.3)' }
+      case 'freeze':    return { bg: 'rgba(59,130,246,0.15)',   color: '#60a5fa', border: 'rgba(59,130,246,0.3)' }
+      case 'invisible': return { bg: 'rgba(156,163,175,0.15)', color: '#9ca3af', border: 'rgba(156,163,175,0.3)' }
+      case 'gamble':    return { bg: 'rgba(168,85,247,0.15)',   color: '#c084fc', border: 'rgba(168,85,247,0.3)' }
+      default:          return { bg: 'rgba(245,158,11,0.15)',   color: '#f59e0b', border: 'rgba(245,158,11,0.3)' }
     }
   }
 
@@ -166,6 +170,29 @@ export default function AddDrink() {
 
         {/* Avisos de estado */}
         <AnimatePresence>
+
+          {/* Números rojos */}
+          {inDebt && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="rounded-2xl p-4 mb-4"
+              style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)' }}>
+              <div className="flex items-center gap-3">
+                <motion.span className="text-2xl flex-shrink-0"
+                  animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
+                  🔴
+                </motion.span>
+                <div>
+                  <p className="font-bold text-red-400 text-sm">Saldo en números rojos · {balance}🪙</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                    Tus monedas van directo a saldar tu deuda con el banco
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Freeze */}
           {isFreezeActive && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
@@ -175,26 +202,30 @@ export default function AddDrink() {
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>No puedes sumar puntos mientras dure el freeze</p>
             </motion.div>
           )}
+
+          {/* Invisible */}
           {isInvisibleActive && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
               style={{ backgroundColor: 'rgba(156,163,175,0.15)', border: '1px solid rgba(156,163,175,0.4)' }}>
               <div className="text-3xl mb-1">👻</div>
               <p className="font-bold" style={{ color: '#9ca3af' }}>Modo Invisible activo</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Tus consumiciones aparecen con 0 pts en el ranking, pero ganas monedas</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Tus consumiciones aparecen con 0pts pero ganas monedas</p>
             </motion.div>
           )}
+
+          {/* Apuesta */}
           {isGambleActive && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="rounded-2xl p-4 mb-4 text-center"
               style={{ backgroundColor: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)' }}>
               <motion.div className="text-3xl mb-1"
-                animate={{ rotate: [0, -10, 10, -5, 0] }}
-                transition={{ repeat: Infinity, duration: 1.5 }}>🎰</motion.div>
+                animate={{ rotate: [0, -10, 10, -5, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>🎰</motion.div>
               <p className="font-bold" style={{ color: '#c084fc' }}>¡Apuesta activa!</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Tu próxima consumición vale x0 o x4 de forma aleatoria</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Tu próxima consumición vale x0 o x4 aleatoriamente</p>
             </motion.div>
           )}
+
         </AnimatePresence>
 
         {/* Grid de bebidas */}
@@ -228,11 +259,9 @@ export default function AddDrink() {
 
                 <div className="mt-1">
                   {isGamble ? (
-                    <div>
-                      <span className="text-sm font-bold" style={{ color: isSelected ? '#fff' : '#c084fc' }}>
-                        🎰 x0 o x4
-                      </span>
-                    </div>
+                    <span className="text-sm font-bold" style={{ color: isSelected ? '#fff' : '#c084fc' }}>
+                      🎰 x0 o x4
+                    </span>
                   ) : isModified ? (
                     <div>
                       <span className="text-xs line-through mr-1"
@@ -252,8 +281,8 @@ export default function AddDrink() {
                   )}
                   {!isGamble && (
                     <div className="text-xs font-medium mt-0.5"
-                      style={{ color: isSelected ? 'rgba(255,255,255,0.9)' : '#f59e0b' }}>
-                      +{Math.floor((isGamble ? 0 : effectivePoints) * 10)}🪙
+                      style={{ color: isSelected ? 'rgba(255,255,255,0.9)' : inDebt ? '#ef4444' : '#f59e0b' }}>
+                      {inDebt ? '→ deuda' : `+${Math.floor(effectivePoints * 10)}🪙`}
                     </div>
                   )}
                 </div>
@@ -271,6 +300,7 @@ export default function AddDrink() {
            isFreezeActive ? '🧊 Congelado' :
            isGambleActive ? '🎰 ¡Apostar!' :
            leagues.length === 0 ? 'Únete a una liga primero' :
+           inDebt ? '🍺 Anotar (monedas → deuda)' :
            '¡Apuntar consumición!'}
         </motion.button>
 
@@ -335,8 +365,10 @@ export default function AddDrink() {
                 </div>
               </div>
               <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }} className="text-amber-400 font-bold mt-3 text-lg">
-                +{result.coins}🪙
+                transition={{ delay: 0.3 }}
+                className="font-bold mt-3 text-lg"
+                style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>
+                {inDebt ? `${result.coins}🪙 → reduciendo deuda` : `+${result.coins}🪙`}
               </motion.p>
               <p className="text-xs mt-2" style={{ color: 'var(--text-hint)' }}>
                 Anotado en {leagues.length} {leagues.length === 1 ? 'liga' : 'ligas'}

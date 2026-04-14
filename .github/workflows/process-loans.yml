@@ -1,0 +1,22 @@
+name: Process Defaulted Loans
+
+on:
+  schedule:
+    # Cada día a las 01:00 UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process defaulted loans
+        run: |
+          RESPONSE=$(curl -s -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/process_defaulted_loans" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"
+
+      - name: Done
+        run: echo "✅ Préstamos procesados"
