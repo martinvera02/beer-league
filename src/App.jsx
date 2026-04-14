@@ -9,6 +9,7 @@ import Ranking from './pages/Ranking'
 import GlobalRanking from './pages/GlobalRanking'
 import Social from './pages/Social'
 import Profile from './pages/Profile'
+import Casino from './pages/Casino'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 
@@ -23,6 +24,7 @@ function Dashboard() {
       case 'leagues':       return <Ranking selectedLeague={selectedLeague} setSelectedLeague={setSelectedLeague} />
       case 'globalranking': return <GlobalRanking />
       case 'social':        return <Social />
+      case 'casino':        return <Casino />
       case 'profile':       return <Profile />
       default:              return null
     }
