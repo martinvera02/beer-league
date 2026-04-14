@@ -1,0 +1,18 @@
+name: Market Daily Decay
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Cada día a las 6:00 UTC
+  workflow_dispatch:
+
+jobs:
+  decay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply market decay
+        run: |
+          RESPONSE=$(curl -s -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/decay_market_prices" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"

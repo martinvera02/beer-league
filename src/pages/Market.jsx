@@ -100,7 +100,7 @@ export default function Market() {
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [drinkHistory, setDrinkHistory] = useState([])
   const [tradeDirection, setTradeDirection] = useState('long')
-  const [tradeAmount, setTradeAmount] = useState(10)
+  const [tradeAmount, setTradeAmount] = useState(50)
   const [trading, setTrading] = useState(false)
 
   const [selectedPowerup, setSelectedPowerup] = useState(null)
@@ -200,7 +200,7 @@ export default function Market() {
 
   const openDrinkDetail = async (drink) => {
     setSelectedDrink(drink)
-    setTradeAmount(10)
+    setTradeAmount(50)
     setTradeDirection('long')
     const { data } = await supabase
       .from('drink_market_history').select('*')
@@ -212,7 +212,6 @@ export default function Market() {
   const executeTrade = async () => {
     if (!selectedDrink || tradeAmount < 10 || tradeAmount > balance) return
     setTrading(true)
-    // ✅ Sin p_user_id
     const result = await supabase.rpc('open_market_position', {
       p_drink_type_id: selectedDrink.drink_type_id,
       p_direction: tradeDirection,
@@ -229,7 +228,6 @@ export default function Market() {
 
   const executeClosePosition = async (positionId) => {
     setClosingPosition(positionId)
-    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('close_market_position', {
       p_position_id: positionId,
     })
@@ -256,7 +254,6 @@ export default function Market() {
     if (needsTurboDrink) extraData.drink_type_id = turboDrink
     if (needsResetDrink) extraData.drink_type_id = resetDrink
 
-    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('buy_powerup', {
       p_target_user_id: targetUser?.id || user.id,
       p_league_id: selectedLeague.id,
@@ -287,7 +284,6 @@ export default function Market() {
   const executeRequestLoan = async () => {
     if (loanAmount < 50 || loanAmount > 5000) return
     setRequesting(true)
-    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('request_bank_loan', {
       p_amount: loanAmount,
       p_days: loanDays,
@@ -307,7 +303,6 @@ export default function Market() {
   const executeRepayLoan = async () => {
     if (!activeLoan) return
     setRepaying(true)
-    // ✅ Sin p_user_id
     const { data } = await supabase.rpc('repay_bank_loan', { p_loan_id: activeLoan.id })
     if (data?.success) {
       soundSuccess()
@@ -325,6 +320,12 @@ export default function Market() {
 
   const getInterestRate = (days) => days === 1 ? 5 : days === 3 ? 8 : 12
   const getPreviewRepay = () => Math.ceil(loanAmount * (1 + getInterestRate(loanDays) / 100))
+
+  // Calcula el impacto estimado con la nueva fórmula de raíz cuadrada
+  const getImpactPreview = (amount) => {
+    const impact = Math.sqrt(amount) * 0.8
+    return (impact / 100).toFixed(3)
+  }
 
   const formatTime = (ts) => {
     if (!ts) return 'Permanente'
@@ -946,7 +947,7 @@ export default function Market() {
         </div>
       )}
 
-      {/* Modal detalle bebida */}
+      {/* Modal detalle bebida + trading */}
       <AnimatePresence>
         {selectedDrink && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -971,9 +972,11 @@ export default function Market() {
                   className="w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
+
               <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
                 <DetailChart history={drinkHistory} width={320} height={140} />
               </div>
+
               {(() => {
                 const mult = getMultiplier(selectedDrink.price)
                 const effPts = Math.round(selectedDrink.drink_types?.points * mult * 10) / 10
@@ -995,6 +998,7 @@ export default function Market() {
                   </div>
                 )
               })()}
+
               <div className="mb-4">
                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
                 <div className="flex gap-2">
@@ -1014,16 +1018,17 @@ export default function Market() {
                     }}>▼ SHORT<br /><span className="text-xs font-normal">baja multiplicador</span></motion.button>
                 </div>
               </div>
+
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
                   <p className="text-xs text-amber-400 font-bold">{tradeAmount}🪙 / {balance}🪙</p>
                 </div>
-                <input type="range" min="10" max={Math.min(Math.max(balance, 10), 500)} step="10"
+                <input type="range" min="10" max={Math.min(Math.max(balance, 10), 1000)} step="10"
                   value={tradeAmount} onChange={e => setTradeAmount(Number(e.target.value))}
                   className="w-full accent-amber-500" />
                 <div className="flex justify-between mt-2 gap-2">
-                  {[10, 50, 100, 250].map(v => (
+                  {[50, 100, 250, 500].map(v => (
                     <motion.button key={v} whileTap={{ scale: 0.9 }}
                       onClick={() => setTradeAmount(Math.min(v, balance))}
                       className="flex-1 text-xs py-1.5 rounded-lg font-medium"
@@ -1034,6 +1039,20 @@ export default function Market() {
                   ))}
                 </div>
               </div>
+
+              {/* Impacto estimado con nueva fórmula */}
+              <div className="rounded-xl p-3 mb-4 text-center"
+                style={{ backgroundColor: 'var(--bg-base)' }}>
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Impacto estimado</p>
+                <p className="text-sm font-bold mt-1"
+                  style={{ color: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
+                  {tradeDirection === 'long' ? '+' : '-'}x{getImpactPreview(tradeAmount)} en el multiplicador
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                  Los precios decaen solos cada día — actúa rápido
+                </p>
+              </div>
+
               <motion.button whileTap={{ scale: 0.97 }} onClick={executeTrade}
                 disabled={trading || tradeAmount > balance || tradeAmount < 10}
                 className="w-full font-bold py-4 rounded-2xl text-white"
