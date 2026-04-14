@@ -1,0 +1,18 @@
+name: Pay Stock Dividends
+
+on:
+  schedule:
+    - cron: '0 18 * * *'  # Cada día a las 18:00 UTC (al cierre del mercado)
+  workflow_dispatch:
+
+jobs:
+  dividends:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pay dividends
+        run: |
+          RESPONSE=$(curl -s -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/pay_stock_dividends" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"

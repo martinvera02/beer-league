@@ -6,14 +6,20 @@ import { staggerItem, fadeIn } from '../lib/animations'
 import SeasonCountdown from '../components/SeasonCountdown'
 import SeasonHistory from '../components/SeasonHistory'
 import Market from './Market'
+import StockMarket from './StockMarket'
 
 export default function GlobalRanking() {
   const { user } = useAuth()
   const [tab, setTab] = useState('ranking')
+  const [marketTab, setMarketTab] = useState('drinks') // drinks | stocks
   const [rankings, setRankings] = useState([])
   const [loading, setLoading] = useState(true)
+  const [balance, setBalance] = useState(0)
 
-  useEffect(() => { fetchRanking() }, [])
+  useEffect(() => {
+    fetchRanking()
+    fetchBalance()
+  }, [])
 
   const fetchRanking = async () => {
     setLoading(true)
@@ -25,7 +31,16 @@ export default function GlobalRanking() {
     setLoading(false)
   }
 
-  // Se llama cuando SeasonCountdown detecta una nueva temporada
+  const fetchBalance = async () => {
+    const { data } = await supabase
+      .from('wallets').select('balance').eq('user_id', user.id).single()
+    setBalance(data?.balance || 0)
+  }
+
+  const handleBalanceChange = (delta) => {
+    setBalance(prev => prev + delta)
+  }
+
   const handleSeasonReset = useCallback(() => {
     fetchRanking()
   }, [])
@@ -37,13 +52,16 @@ export default function GlobalRanking() {
     return url ? (
       <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
     ) : (
-      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+      <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0`}
+        style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
     )
   }
 
   return (
-    <div className="min-h-screen transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
+      {/* Header con tabs principales */}
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h1 className="text-2xl font-bold mb-4">Global 🌍</h1>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -64,33 +82,40 @@ export default function GlobalRanking() {
         </div>
       </div>
 
+      {/* ── RANKING ── */}
       {tab === 'ranking' && (
         <div className="pb-24 px-4 pt-4 max-w-md mx-auto">
-
           <SeasonCountdown onSeasonReset={handleSeasonReset} />
 
           {/* Podio top 3 */}
           {!loading && rankings.length >= 3 && (
-            <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="flex items-end justify-center gap-3 mb-8">
+            <motion.div {...fadeIn} transition={{ delay: 0.1 }}
+              className="flex items-end justify-center gap-3 mb-8">
               <div className="flex flex-col items-center flex-1">
                 <Avatar url={rankings[1]?.avatar_url} username={rankings[1]?.username} />
-                <p className="text-xs font-semibold mt-1 truncate w-full text-center" style={{ color: 'var(--text-muted)' }}>{rankings[1]?.username}</p>
+                <p className="text-xs font-semibold mt-1 truncate w-full text-center"
+                  style={{ color: 'var(--text-muted)' }}>{rankings[1]?.username}</p>
                 <p className="text-amber-400 font-bold text-sm">{rankings[1]?.total_points}pts</p>
-                <div className="w-full rounded-t-lg h-16 flex items-center justify-center text-2xl mt-1" style={{ backgroundColor: 'var(--bg-card)' }}>🥈</div>
+                <div className="w-full rounded-t-lg h-16 flex items-center justify-center text-2xl mt-1"
+                  style={{ backgroundColor: 'var(--bg-card)' }}>🥈</div>
               </div>
               <div className="flex flex-col items-center flex-1">
-                <motion.div animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}>
+                <motion.div animate={{ y: [0, -6, 0] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}>
                   <Avatar url={rankings[0]?.avatar_url} username={rankings[0]?.username} />
                 </motion.div>
-                <p className="text-xs font-semibold mt-1 truncate w-full text-center" style={{ color: 'var(--text-primary)' }}>{rankings[0]?.username}</p>
+                <p className="text-xs font-semibold mt-1 truncate w-full text-center"
+                  style={{ color: 'var(--text-primary)' }}>{rankings[0]?.username}</p>
                 <p className="text-amber-400 font-bold text-sm">{rankings[0]?.total_points}pts</p>
                 <div className="w-full bg-amber-500 rounded-t-lg h-24 flex items-center justify-center text-2xl mt-1">🥇</div>
               </div>
               <div className="flex flex-col items-center flex-1">
                 <Avatar url={rankings[2]?.avatar_url} username={rankings[2]?.username} />
-                <p className="text-xs font-semibold mt-1 truncate w-full text-center" style={{ color: 'var(--text-muted)' }}>{rankings[2]?.username}</p>
+                <p className="text-xs font-semibold mt-1 truncate w-full text-center"
+                  style={{ color: 'var(--text-muted)' }}>{rankings[2]?.username}</p>
                 <p className="text-amber-400 font-bold text-sm">{rankings[2]?.total_points}pts</p>
-                <div className="w-full rounded-t-lg h-10 flex items-center justify-center text-2xl mt-1" style={{ backgroundColor: 'var(--bg-hover)' }}>🥉</div>
+                <div className="w-full rounded-t-lg h-10 flex items-center justify-center text-2xl mt-1"
+                  style={{ backgroundColor: 'var(--bg-hover)' }}>🥉</div>
               </div>
             </motion.div>
           )}
@@ -120,22 +145,30 @@ export default function GlobalRanking() {
                       <Avatar url={entry.avatar_url} username={entry.username} />
                       <div className="flex-1">
                         <p className="font-bold">{entry.username} {isMe && '(tú)'}</p>
-                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>
+                        <p className="text-xs"
+                          style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>
                           {entry.total_drinks} consumiciones
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>{entry.total_points}</p>
-                        <p className="text-xs" style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>puntos</p>
+                        <p className={`text-2xl font-bold ${isMe ? 'text-white' : 'text-amber-400'}`}>
+                          {entry.total_points}
+                        </p>
+                        <p className="text-xs"
+                          style={{ color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}>puntos</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 pt-2 border-t" style={{ borderColor: isMe ? 'rgba(255,255,255,0.3)' : 'var(--border)' }}>
-                      {Object.entries(drinkCounts).sort(([, a], [, b]) => b.count - a.count).map(([name, { emoji, count }]) => (
-                        <div key={name} className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${isMe ? 'bg-amber-600 text-white' : ''}`}
-                          style={!isMe ? { backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' } : {}}>
-                          <span>{emoji}</span><span>{count}</span>
-                        </div>
-                      ))}
+                    <div className="flex flex-wrap gap-2 pt-2 border-t"
+                      style={{ borderColor: isMe ? 'rgba(255,255,255,0.3)' : 'var(--border)' }}>
+                      {Object.entries(drinkCounts)
+                        .sort(([, a], [, b]) => b.count - a.count)
+                        .map(([name, { emoji, count }]) => (
+                          <div key={name}
+                            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${isMe ? 'bg-amber-600 text-white' : ''}`}
+                            style={!isMe ? { backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' } : {}}>
+                            <span>{emoji}</span><span>{count}</span>
+                          </div>
+                        ))}
                     </div>
                   </motion.div>
                 )
@@ -143,12 +176,47 @@ export default function GlobalRanking() {
             </div>
           )}
 
-          {/* Historial de temporadas anteriores */}
           <SeasonHistory />
         </div>
       )}
 
-      {tab === 'market' && <Market />}
+      {/* ── MERCADO ── */}
+      {tab === 'market' && (
+        <div className="pb-24">
+          {/* Sub-pestañas: Bebidas vs S&PINTA 500 */}
+          <div className="px-4 pt-4 pb-0 max-w-md mx-auto">
+            <div className="flex rounded-xl p-1 mb-2" style={{ backgroundColor: 'var(--bg-input)' }}>
+              <button onClick={() => setMarketTab('drinks')}
+                className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+                style={{ color: marketTab === 'drinks' ? '#fff' : 'var(--text-muted)' }}>
+                {marketTab === 'drinks' && (
+                  <motion.div layoutId="market-sub-tab"
+                    className="absolute inset-0 bg-amber-500 rounded-lg"
+                    style={{ zIndex: -1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+                )}
+                🍺 Bebidas
+              </button>
+              <button onClick={() => setMarketTab('stocks')}
+                className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+                style={{ color: marketTab === 'stocks' ? '#fff' : 'var(--text-muted)' }}>
+                {marketTab === 'stocks' && (
+                  <motion.div layoutId="market-sub-tab"
+                    className="absolute inset-0 bg-indigo-600 rounded-lg"
+                    style={{ zIndex: -1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+                )}
+                📊 S&PINTA 500
+              </button>
+            </div>
+          </div>
+
+          {marketTab === 'drinks' && <Market />}
+          {marketTab === 'stocks' && (
+            <StockMarket balance={balance} onBalanceChange={handleBalanceChange} />
+          )}
+        </div>
+      )}
     </div>
   )
 }
