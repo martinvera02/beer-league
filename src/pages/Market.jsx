@@ -412,20 +412,7 @@ export default function Market() {
 </div>
 
         {/* Labels bajo las tabs */}
-        <div className="flex mt-1">
-          {[
-            { id: 'market',    label: 'Cotización' },
-            { id: 'powerups',  label: 'Tienda' },
-            { id: 'portfolio', label: 'Cartera' },
-            { id: 'bank',      label: 'Banco' },
-          ].map(t => (
-            <div key={t.id} className="flex-1 text-center">
-              <span className="text-xs" style={{ color: tab === t.id ? (t.id === 'bank' ? '#818cf8' : '#f59e0b') : 'var(--text-hint)' }}>
-                {t.label}
-              </span>
-            </div>
-          ))}
-        </div>
+        
       </div>
 
       {/* ── COTIZACIÓN ── */}
