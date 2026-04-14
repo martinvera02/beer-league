@@ -97,20 +97,20 @@ export default function SeasonCountdown({ onSeasonReset }) {
   const c = colors[urgency]
 
   const Unit = ({ value, label }) => (
-    <div className="flex flex-col items-center">
-      <motion.div
-        key={value}
-        initial={{ y: -6, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.2 }}
-        className="text-xl font-bold tabular-nums w-10 text-center"
-        style={{ color: c.text }}
-      >
-        {String(value).padStart(2, '0')}
-      </motion.div>
-      <span className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{label}</span>
-    </div>
-  )
+  <div className="flex flex-col items-center">
+    <motion.div
+      key={value}
+      initial={{ opacity: 0.4 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.6, ease: 'easeOut' }}
+      className="text-xl font-bold tabular-nums w-10 text-center"
+      style={{ color: c.text }}
+    >
+      {String(value).padStart(2, '0')}
+    </motion.div>
+    <span className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{label}</span>
+  </div>
+)
 
   const Divider = () => (
     <span className="text-lg font-bold mb-4" style={{ color: c.text }}>:</span>
