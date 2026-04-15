@@ -14,7 +14,6 @@ const getNumberColor = (n) => {
   return REDS.has(n) ? 'red' : 'black'
 }
 
-// Orden de los números en la ruleta europea
 const WHEEL_ORDER = [
   0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,
   5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26
@@ -26,7 +25,20 @@ const COLOR_STYLES = {
   green: { bg: '#16a34a', text: '#fff' },
 }
 
-// ─── RULETA GRATUITA (sectores de premios) ────────────────────────────────────
+// ─── SEGMENTOS RULETA GRATUITA ────────────────────────────────────────────────
+// IMPORTANTE: el índice aquí debe coincidir con FREE_LABEL_MAP y POWERUP_MAP
+// idx 0  → +2 pts     (prize_label: '+2 puntos')
+// idx 1  → +50 🪙     (prize_label: '+50 monedas')
+// idx 2  → Escudo     (prize_powerup: 'shield')
+// idx 3  → +5 pts     (prize_label: '+5 puntos')
+// idx 4  → +150 🪙    (prize_label: '+150 monedas')
+// idx 5  → Freeze     (prize_powerup: 'freeze')
+// idx 6  → +2 pts     (duplicado visual, mismo premio que idx 0)
+// idx 7  → +300 🪙    (prize_label: '+300 monedas')
+// idx 8  → Racha Doble(prize_powerup: 'double_points')
+// idx 9  → +5 pts     (duplicado visual, mismo premio que idx 3)
+// idx 10 → Turbo      (prize_powerup: 'turbo')
+// idx 11 → 💀 Nada    (prize_type: 'nothing')
 
 const FREE_SEGMENTS = [
   { label: '+2 pts',      emoji: '🍺', color: '#f59e0b', textColor: '#fff' },
@@ -42,6 +54,30 @@ const FREE_SEGMENTS = [
   { label: 'Turbo',       emoji: '⚡', color: '#eab308', textColor: '#fff' },
   { label: '💀 Nada',     emoji: '💀', color: '#374151', textColor: '#9ca3af' },
 ]
+
+// ✅ CORREGIDO: mapeo exacto de prize_label del servidor → índice de segmento visual
+const FREE_LABEL_MAP = {
+  '+2 puntos':    0,
+  '+50 monedas':  1,
+  'Escudo':       2,
+  '+5 puntos':    3,
+  '+150 monedas': 4,
+  'Freeze':       5,
+  '+300 monedas': 7,
+  'Racha Doble':  8,
+  'Turbo':        10,
+  '¡Mala suerte!': 11,
+}
+
+// ✅ CORREGIDO: fallback por prize_powerup cuando el label no matchea
+const FREE_POWERUP_MAP = {
+  'shield':        2,
+  'freeze':        5,
+  'double_points': 8,
+  'turbo':         10,
+  'sabotage':      11,
+  'sniper':        9,
+}
 
 function FreeRouletteWheel({ spinning, targetIndex, onSpinEnd }) {
   const [displayRotation, setDisplayRotation] = useState(0)
@@ -133,7 +169,7 @@ function FreeRouletteWheel({ spinning, targetIndex, onSpinEnd }) {
   )
 }
 
-// ─── RULETA EUROPEA CLÁSICA ───────────────────────────────────────────────────
+// ─── RULETA EUROPEA ───────────────────────────────────────────────────────────
 
 function EuropeanRouletteWheel({ spinning, targetNumber, onSpinEnd }) {
   const [displayRotation, setDisplayRotation] = useState(0)
@@ -191,14 +227,12 @@ function EuropeanRouletteWheel({ spinning, targetNumber, onSpinEnd }) {
 
   return (
     <div style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      {/* Bola indicadora */}
       <div style={{
         position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)',
         zIndex: 10, width: 14, height: 14, borderRadius: '50%',
         background: 'radial-gradient(circle at 35% 35%, #fff, #ccc)',
         boxShadow: '0 2px 6px rgba(0,0,0,0.6)',
       }} />
-      {/* Aro dorado */}
       <div style={{
         position: 'absolute', inset: 0, borderRadius: '50%',
         background: 'linear-gradient(135deg, #92400e, #d97706, #92400e)', padding: 6,
@@ -226,7 +260,6 @@ function EuropeanRouletteWheel({ spinning, targetNumber, onSpinEnd }) {
                 </g>
               )
             })}
-            {/* Centro */}
             <circle cx={cx} cy={cy} r={28} fill="#1a0a00" stroke="#d97706" strokeWidth="3" />
             <circle cx={cx} cy={cy} r={20} fill="#2d1500" stroke="#92400e" strokeWidth="2" />
             <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="#d97706" fontWeight="bold">
@@ -239,14 +272,13 @@ function EuropeanRouletteWheel({ spinning, targetNumber, onSpinEnd }) {
   )
 }
 
-// ─── CASINO COMPONENT ─────────────────────────────────────────────────────────
+// ─── CASINO ───────────────────────────────────────────────────────────────────
 
 function Casino() {
   const { user } = useAuth()
-  const [casinoTab, setCasinoTab] = useState('free') // free | bet
+  const [casinoTab, setCasinoTab] = useState('free')
   const [balance, setBalance] = useState(0)
 
-  // Ruleta gratuita
   const [freeSpinning, setFreeSpinning] = useState(false)
   const [freeTargetIdx, setFreeTargetIdx] = useState(0)
   const [freePrize, setFreePrize] = useState(null)
@@ -255,7 +287,6 @@ function Casino() {
   const [spinHistory, setSpinHistory] = useState([])
   const [loadingFree, setLoadingFree] = useState(true)
 
-  // Ruleta de apuestas
   const [betAmount, setBetAmount] = useState(50)
   const [betType, setBetType] = useState(null)
   const [betValue, setBetValue] = useState(null)
@@ -265,7 +296,6 @@ function Casino() {
   const [showBetResult, setShowBetResult] = useState(false)
   const [betHistory, setBetHistory] = useState([])
   const [loadingBet, setLoadingBet] = useState(true)
-  const [numberPicker, setNumberPicker] = useState(false)
 
   useEffect(() => { fetchBalance() }, [])
   useEffect(() => { if (casinoTab === 'free') fetchFreeData() }, [casinoTab])
@@ -298,11 +328,22 @@ function Casino() {
     setLoadingBet(false)
   }
 
-  // Mapear prize_label → índice segmento visual
-  const FREE_LABEL_MAP = {
-    '+2 puntos': 0, '+50 monedas': 1, 'Escudo': 2, '+5 puntos': 3,
-    '+150 monedas': 4, 'Freeze': 5, '+300 monedas': 7,
-    'Racha Doble': 8, 'Turbo': 10, '¡Mala suerte!': 11,
+  // ✅ CORREGIDO: búsqueda robusta en 3 pasos
+  const resolveSegmentIndex = (data) => {
+    // 1. Buscar por prize_label exacto
+    if (FREE_LABEL_MAP[data.prize_label] !== undefined) {
+      return FREE_LABEL_MAP[data.prize_label]
+    }
+    // 2. Fallback por prize_powerup
+    if (data.prize_powerup && FREE_POWERUP_MAP[data.prize_powerup] !== undefined) {
+      return FREE_POWERUP_MAP[data.prize_powerup]
+    }
+    // 3. Fallback por prize_type
+    if (data.prize_type === 'nothing') return 11
+    if (data.prize_type === 'coins') return 1
+    if (data.prize_type === 'points') return 0
+    // 4. Aleatorio como último recurso
+    return Math.floor(Math.random() * 12)
   }
 
   const handleFreeSpin = async () => {
@@ -310,12 +351,16 @@ function Casino() {
     setFreeSpinning(true)
     setFreePrize(null)
     setShowFreePrize(false)
+
     const { data } = await supabase.rpc('spin_roulette')
     if (!data?.success) {
-      soundError(); setFreeSpinning(false)
+      soundError()
+      setFreeSpinning(false)
       return
     }
-    const idx = FREE_LABEL_MAP[data.prize_label] ?? Math.floor(Math.random() * 12)
+
+    // ✅ CORREGIDO: usar resolveSegmentIndex para garantizar coincidencia
+    const idx = resolveSegmentIndex(data)
     setFreeTargetIdx(idx)
     setFreePrize(data)
   }
@@ -367,24 +412,23 @@ function Casino() {
   }
 
   const BET_TYPES = [
-    { id: 'red',    label: 'Rojo',    emoji: '🔴', payout: 'x2',  desc: '18 números' },
-    { id: 'black',  label: 'Negro',   emoji: '⚫', payout: 'x2',  desc: '18 números' },
-    { id: 'even',   label: 'Par',     emoji: '2️⃣', payout: 'x2',  desc: '2,4,6...' },
-    { id: 'odd',    label: 'Impar',   emoji: '1️⃣', payout: 'x2',  desc: '1,3,5...' },
-    { id: 'low',    label: '1-18',    emoji: '⬇️', payout: 'x2',  desc: 'Mitad baja' },
-    { id: 'high',   label: '19-36',   emoji: '⬆️', payout: 'x2',  desc: 'Mitad alta' },
-    { id: 'dozen1', label: '1ª Doc',  emoji: '🎲', payout: 'x3',  desc: '1-12' },
-    { id: 'dozen2', label: '2ª Doc',  emoji: '🎲', payout: 'x3',  desc: '13-24' },
-    { id: 'dozen3', label: '3ª Doc',  emoji: '🎲', payout: 'x3',  desc: '25-36' },
-    { id: 'col1',   label: 'Col 1',   emoji: '📊', payout: 'x3',  desc: '1,4,7...' },
-    { id: 'col2',   label: 'Col 2',   emoji: '📊', payout: 'x3',  desc: '2,5,8...' },
-    { id: 'col3',   label: 'Col 3',   emoji: '📊', payout: 'x3',  desc: '3,6,9...' },
-    { id: 'number', label: 'Número',  emoji: '🎯', payout: 'x36', desc: 'Pleno' },
+    { id: 'red',    label: 'Rojo',   emoji: '🔴', payout: 'x2',  desc: '18 números' },
+    { id: 'black',  label: 'Negro',  emoji: '⚫', payout: 'x2',  desc: '18 números' },
+    { id: 'even',   label: 'Par',    emoji: '2️⃣', payout: 'x2',  desc: '2,4,6...' },
+    { id: 'odd',    label: 'Impar',  emoji: '1️⃣', payout: 'x2',  desc: '1,3,5...' },
+    { id: 'low',    label: '1-18',   emoji: '⬇️', payout: 'x2',  desc: 'Mitad baja' },
+    { id: 'high',   label: '19-36',  emoji: '⬆️', payout: 'x2',  desc: 'Mitad alta' },
+    { id: 'dozen1', label: '1ª Doc', emoji: '🎲', payout: 'x3',  desc: '1-12' },
+    { id: 'dozen2', label: '2ª Doc', emoji: '🎲', payout: 'x3',  desc: '13-24' },
+    { id: 'dozen3', label: '3ª Doc', emoji: '🎲', payout: 'x3',  desc: '25-36' },
+    { id: 'col1',   label: 'Col 1',  emoji: '📊', payout: 'x3',  desc: '1,4,7...' },
+    { id: 'col2',   label: 'Col 2',  emoji: '📊', payout: 'x3',  desc: '2,5,8...' },
+    { id: 'col3',   label: 'Col 3',  emoji: '📊', payout: 'x3',  desc: '3,6,9...' },
+    { id: 'number', label: 'Número', emoji: '🎯', payout: 'x36', desc: 'Pleno' },
   ]
 
   return (
     <div className="max-w-md mx-auto px-4 pt-4 pb-6">
-      {/* Header */}
       <div className="text-center mb-5">
         <h2 className="text-2xl font-bold mb-1">Casino 🎰</h2>
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl"
@@ -394,7 +438,6 @@ function Casino() {
         </div>
       </div>
 
-      {/* Pestañas */}
       <div className="flex rounded-xl p-1 mb-6" style={{ backgroundColor: 'var(--bg-input)' }}>
         <button onClick={() => setCasinoTab('free')}
           className="relative flex-1 py-2 rounded-lg text-xs font-medium z-10"
@@ -485,23 +528,22 @@ function Casino() {
                 )}
               </AnimatePresence>
 
-              {/* Tabla premios */}
               <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
                 <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>Tabla de premios</p>
                 <div className="grid grid-cols-2 gap-1">
                   {[
-                    { emoji: '🍺', label: '+2 pts', prob: '20%', color: '#f59e0b' },
-                    { emoji: '🍺', label: '+5 pts', prob: '15%', color: '#f59e0b' },
-                    { emoji: '🪙', label: '+50🪙', prob: '15%', color: '#6366f1' },
-                    { emoji: '🪙', label: '+150🪙', prob: '10%', color: '#8b5cf6' },
-                    { emoji: '🪙', label: '+300🪙', prob: '8%', color: '#ec4899' },
-                    { emoji: '🔥', label: 'Racha x2', prob: '8%', color: '#f97316' },
-                    { emoji: '🛡️', label: 'Escudo', prob: '7%', color: '#10b981' },
-                    { emoji: '🧊', label: 'Freeze', prob: '7%', color: '#3b82f6' },
-                    { emoji: '⚡', label: 'Turbo', prob: '5%', color: '#eab308' },
-                    { emoji: '💣', label: 'Sabotaje', prob: '3%', color: '#ef4444' },
-                    { emoji: '🎯', label: 'Sniper', prob: '1%', color: '#a855f7' },
-                    { emoji: '💀', label: 'Nada', prob: '1%', color: '#6b7280' },
+                    { emoji: '🍺', label: '+2 pts',    prob: '20%', color: '#f59e0b' },
+                    { emoji: '🍺', label: '+5 pts',    prob: '15%', color: '#f59e0b' },
+                    { emoji: '🪙', label: '+50🪙',     prob: '15%', color: '#6366f1' },
+                    { emoji: '🪙', label: '+150🪙',    prob: '10%', color: '#8b5cf6' },
+                    { emoji: '🪙', label: '+300🪙',    prob: '8%',  color: '#ec4899' },
+                    { emoji: '🔥', label: 'Racha x2',  prob: '8%',  color: '#f97316' },
+                    { emoji: '🛡️', label: 'Escudo',    prob: '7%',  color: '#10b981' },
+                    { emoji: '🧊', label: 'Freeze',    prob: '7%',  color: '#3b82f6' },
+                    { emoji: '⚡', label: 'Turbo',     prob: '5%',  color: '#eab308' },
+                    { emoji: '💣', label: 'Sabotaje',  prob: '3%',  color: '#ef4444' },
+                    { emoji: '🎯', label: 'Sniper',    prob: '1%',  color: '#a855f7' },
+                    { emoji: '💀', label: 'Nada',      prob: '1%',  color: '#6b7280' },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center justify-between py-1 px-2 rounded-lg"
                       style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -515,7 +557,6 @@ function Casino() {
                 </div>
               </div>
 
-              {/* Historial gratuita */}
               {spinHistory.length > 0 && (
                 <div>
                   <p className="text-sm font-bold mb-3">Últimas tiradas</p>
@@ -545,16 +586,10 @@ function Casino() {
             Ruleta europea clásica · Sin límite de tiradas
           </p>
 
-          {/* Ruleta */}
           <div className="mb-5">
-            <EuropeanRouletteWheel
-              spinning={betSpinning}
-              targetNumber={betTargetNumber}
-              onSpinEnd={handleBetSpinEnd}
-            />
+            <EuropeanRouletteWheel spinning={betSpinning} targetNumber={betTargetNumber} onSpinEnd={handleBetSpinEnd} />
           </div>
 
-          {/* Resultado */}
           <AnimatePresence>
             {showBetResult && betResult && (
               <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }}
@@ -565,7 +600,6 @@ function Casino() {
                   backgroundColor: betResult.won ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
                   border: `2px solid ${betResult.won ? '#10b981' : '#ef4444'}`,
                 }}>
-                {/* Número resultado */}
                 <div className="flex justify-center mb-3">
                   <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black"
                     style={COLOR_STYLES[betResult.color]}>
@@ -594,7 +628,6 @@ function Casino() {
             )}
           </AnimatePresence>
 
-          {/* Cantidad a apostar */}
           <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-bold">Apuesta</p>
@@ -614,7 +647,6 @@ function Casino() {
             </div>
           </div>
 
-          {/* Tipo de apuesta */}
           <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
             <p className="text-sm font-bold mb-3">Tipo de apuesta</p>
             <div className="grid grid-cols-3 gap-2">
@@ -623,7 +655,6 @@ function Casino() {
                   onClick={() => {
                     setBetType(bt.id)
                     if (bt.id !== 'number') setBetValue(null)
-                    if (bt.id === 'number') setNumberPicker(true)
                   }}
                   className="rounded-xl p-2.5 text-center"
                   style={{
@@ -639,33 +670,27 @@ function Casino() {
               ))}
             </div>
 
-            {/* Selector de número */}
             {betType === 'number' && (
               <div className="mt-3">
                 <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
-                  Número elegido: {betValue !== null ? (
-                    <span className="font-black text-sm" style={COLOR_STYLES[getNumberColor(betValue)]}>
-                      {' '}{betValue}
-                    </span>
-                  ) : <span style={{ color: 'var(--text-hint)' }}> ninguno</span>}
+                  Número elegido:{' '}
+                  {betValue !== null
+                    ? <span className="font-black text-sm" style={COLOR_STYLES[getNumberColor(betValue)]}>{betValue}</span>
+                    : <span style={{ color: 'var(--text-hint)' }}>ninguno</span>}
                 </p>
                 <div className="grid grid-cols-9 gap-1 max-h-44 overflow-y-auto">
-                  {/* 0 */}
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => setBetValue(0)}
-                    className="aspect-square rounded-lg flex items-center justify-center text-xs font-bold col-span-9"
+                    className="col-span-9 rounded-lg flex items-center justify-center text-xs font-bold"
                     style={{ backgroundColor: betValue === 0 ? '#16a34a' : '#166534', color: '#fff', height: 28 }}>
                     0
                   </motion.button>
-                  {/* 1-36 */}
                   {Array.from({ length: 36 }, (_, i) => i + 1).map(n => {
                     const color = getNumberColor(n)
                     return (
                       <motion.button key={n} whileTap={{ scale: 0.9 }} onClick={() => setBetValue(n)}
                         className="aspect-square rounded-lg flex items-center justify-center text-xs font-bold"
                         style={{
-                          backgroundColor: betValue === n
-                            ? '#fbbf24'
-                            : color === 'red' ? '#991b1b' : '#111827',
+                          backgroundColor: betValue === n ? '#fbbf24' : color === 'red' ? '#991b1b' : '#111827',
                           color: betValue === n ? '#000' : '#fff',
                           border: betValue === n ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
                           minHeight: 28,
@@ -679,7 +704,6 @@ function Casino() {
             )}
           </div>
 
-          {/* Resumen apuesta */}
           {betType && (
             <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
               <div className="flex justify-between text-sm mb-1">
@@ -688,7 +712,8 @@ function Casino() {
               </div>
               <div className="flex justify-between text-sm mb-1">
                 <span style={{ color: 'var(--text-muted)' }}>Tipo</span>
-                <span className="font-medium">{BET_TYPES.find(b => b.id === betType)?.label}
+                <span className="font-medium">
+                  {BET_TYPES.find(b => b.id === betType)?.label}
                   {betType === 'number' && betValue !== null ? ` (${betValue})` : ''}
                 </span>
               </div>
@@ -701,7 +726,6 @@ function Casino() {
             </div>
           )}
 
-          {/* Botón girar */}
           <motion.button whileTap={{ scale: 0.97 }} onClick={handleBetSpin}
             disabled={betSpinning || !betType || betAmount > balance || betAmount < 10 || (betType === 'number' && betValue === null)}
             className="w-full py-4 rounded-2xl font-bold text-white text-base mb-6 relative overflow-hidden"
@@ -724,7 +748,6 @@ function Casino() {
             )}
           </motion.button>
 
-          {/* Historial apuestas */}
           {betHistory.length > 0 && (
             <div>
               <p className="text-sm font-bold mb-3">Historial de apuestas</p>
@@ -732,7 +755,6 @@ function Casino() {
                 {betHistory.map(bet => (
                   <motion.div key={bet.id} variants={staggerItem} initial="initial" animate="animate"
                     className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    {/* Número resultado */}
                     <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
                       style={COLOR_STYLES[bet.result_color]}>
                       {bet.result_number}
@@ -885,7 +907,9 @@ export default function Social() {
     if (!commentText.trim() || !openComments || sendingComment) return
     setSendingComment(true)
     soundMessage()
-    const { error } = await supabase.from('post_comments').insert({ post_id: openComments.id, user_id: user.id, content: commentText.trim() })
+    const { error } = await supabase.from('post_comments').insert({
+      post_id: openComments.id, user_id: user.id, content: commentText.trim()
+    })
     if (!error) { setCommentText(''); fetchFeed() }
     setSendingComment(false)
   }
@@ -908,7 +932,8 @@ export default function Social() {
     const dim = size === 'sm' ? 'w-9 h-9' : 'w-12 h-12'
     return url
       ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
-      : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+      : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`}
+          style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
   }
 
   const storiesByUser = stories.reduce((acc, s) => {
@@ -1047,7 +1072,6 @@ export default function Social() {
       {/* ── CASINO ── */}
       {tab === 'casino' && <Casino />}
 
-      {/* Botón flotante */}
       {tab === 'feed' && (
         <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}
           onClick={() => setShowNewPost(true)}
@@ -1115,7 +1139,10 @@ export default function Social() {
             <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }} src={selectedStory.image_url} alt="Historia" className="w-full h-full object-contain" />
             <div className="absolute top-6 left-4 flex items-center gap-2">
               <Avatar url={selectedStory.profiles?.avatar_url} username={selectedStory.profiles?.username} />
-              <div><p className="text-white font-bold text-sm">{selectedStory.profiles?.username}</p><p className="text-gray-300 text-xs">{formatTime(selectedStory.created_at)}</p></div>
+              <div>
+                <p className="text-white font-bold text-sm">{selectedStory.profiles?.username}</p>
+                <p className="text-gray-300 text-xs">{formatTime(selectedStory.created_at)}</p>
+              </div>
             </div>
             <button onClick={() => setSelectedStory(null)} className="absolute top-6 right-4 text-white text-2xl">✕</button>
           </motion.div>
@@ -1133,13 +1160,16 @@ export default function Social() {
               onClick={e => e.stopPropagation()}
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', height: '80vh' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-                <p style={{ fontWeight: 'bold', fontSize: 16 }}>Comentarios {comments.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 'normal', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 999 }}>{comments.length}</span>}</p>
+                <p style={{ fontWeight: 'bold', fontSize: 16 }}>
+                  Comentarios {comments.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 'normal', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 999 }}>{comments.length}</span>}
+                </p>
                 <button onClick={closeCommentsPanel} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✕</button>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px' }}>
                 {comments.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                    <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div><p style={{ fontSize: 14 }}>Sin comentarios todavía</p>
+                    <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
+                    <p style={{ fontSize: 14 }}>Sin comentarios todavía</p>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
