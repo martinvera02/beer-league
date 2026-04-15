@@ -13,6 +13,12 @@ const generateUUID = () => {
   })
 }
 
+const isMartesEnMadrid = () => {
+  const now = new Date()
+  const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+  return madrid.getDay() === 2 // 0=dom, 1=lun, 2=mar...
+}
+
 export default function AddDrink() {
   const { user } = useAuth()
   const [drinkTypes, setDrinkTypes] = useState([])
@@ -27,6 +33,8 @@ export default function AddDrink() {
   const [result, setResult] = useState(null)
   const [activePowerups, setActivePowerups] = useState([])
   const [balance, setBalance] = useState(0)
+
+  const isMartes = isMartesEnMadrid()
 
   useEffect(() => { fetchData() }, [])
 
@@ -45,8 +53,7 @@ export default function AddDrink() {
       supabase.from('drink_market').select('drink_type_id, price'),
       supabase.from('active_powerups')
         .select('*, powerup_catalog(name, emoji, effect_type)')
-        .eq('user_id', user.id)
-        .eq('active', true)
+        .eq('user_id', user.id).eq('active', true)
         .or('expires_at.is.null,expires_at.gt.now()'),
       supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
     ])
@@ -71,10 +78,11 @@ export default function AddDrink() {
       p.extra_data?.drink_type_id === drink.id
     )
     const hasGamble = activePowerups.some(p => p.powerup_catalog?.effect_type === 'gamble')
+    if (hasGamble) return '?'
     let multiplier = marketMultiplier
+    if (isMartes) multiplier *= 2
     if (hasDouble) multiplier *= 2
     if (hasTurbo) multiplier *= 3
-    if (hasGamble) return '?'
     return Math.round(drink.points * multiplier * 10) / 10
   }
 
@@ -90,7 +98,6 @@ export default function AddDrink() {
     setLoading(true)
     soundDrink()
 
-    // ✅ Sin p_user_id — el servidor usa auth.uid()
     const { data, error } = await supabase.rpc('add_drink_with_effects', {
       p_drink_type_id: selectedDrink,
       p_season_id: seasonId,
@@ -118,14 +125,14 @@ export default function AddDrink() {
     setSuccess(true)
     soundSuccess()
     await fetchData()
-    setTimeout(() => { setSuccess(false); setResult(null) }, 3500)
+    setTimeout(() => { setSuccess(false); setResult(null) }, 4000)
     setLoading(false)
     setSelectedDrink(null)
   }
 
-  const isFreezeActive = activePowerups.some(p => p.powerup_catalog?.effect_type === 'freeze')
+  const isFreezeActive    = activePowerups.some(p => p.powerup_catalog?.effect_type === 'freeze')
   const isInvisibleActive = activePowerups.some(p => p.powerup_catalog?.effect_type === 'invisible')
-  const isGambleActive = activePowerups.some(p => p.powerup_catalog?.effect_type === 'gamble')
+  const isGambleActive    = activePowerups.some(p => p.powerup_catalog?.effect_type === 'gamble')
   const inDebt = balance < 0
 
   const getPowerupColor = (effectType) => {
@@ -149,6 +156,47 @@ export default function AddDrink() {
             ¿Qué has tomado? Se anotará en todas tus ligas.
           </p>
         </motion.div>
+
+        {/* ── BANNER MARTES MACARRA ── */}
+        <AnimatePresence>
+          {isMartes && (
+            <motion.div
+              initial={{ opacity: 0, y: -16, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -16, scale: 0.95 }}
+              className="rounded-2xl p-4 mb-4 relative overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, #7c3aed, #dc2626)',
+                border: '2px solid rgba(255,255,255,0.2)',
+                boxShadow: '0 0 30px rgba(124,58,237,0.4)',
+              }}>
+              {/* Brillo animado */}
+              <motion.div
+                className="absolute inset-0"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)' }}
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 1 }}
+              />
+              <div className="flex items-center gap-3 relative">
+                <motion.div
+                  className="text-4xl flex-shrink-0"
+                  animate={{ rotate: [-5, 5, -5], scale: [1, 1.1, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}>
+                  😈
+                </motion.div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-white font-black text-lg tracking-tight">MARTES MACARRA</p>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">x2</span>
+                  </div>
+                  <p className="text-white/80 text-xs">
+                    ¡Doble de puntos y monedas todo el día! 🍺🍺
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Powerups activos */}
         {activePowerups.length > 0 && (
@@ -228,16 +276,30 @@ export default function AddDrink() {
             const effectivePoints = getEffectivePoints(drink)
             const basePoints = drink.points
             const isGamble = effectivePoints === '?'
-            const isModified = !isGamble && Math.abs(effectivePoints - basePoints) > 0.05
-            const trend = getMarketTrend(drink.id)
             const isSelected = selectedDrink === drink.id
+            const trend = getMarketTrend(drink.id)
+
+            // Puntos base sin martes (para mostrar el original tachado)
+            const price = drinkMarket[drink.id] || 100
+            const mktMult = Math.max(0.5, Math.min(2.0, price / 100))
+            const baseEffective = Math.round(basePoints * mktMult * 10) / 10
+            const isModified = !isGamble && Math.abs(effectivePoints - baseEffective) > 0.05
 
             return (
               <motion.button key={drink.id} variants={staggerItem}
                 whileHover={{ y: -2 }} whileTap={{ scale: 0.95 }}
                 onClick={() => setSelectedDrink(drink.id)}
-                className={`rounded-2xl p-5 text-center transition-all relative ${isSelected ? 'bg-amber-500 shadow-lg shadow-amber-900' : ''}`}
-                style={!isSelected ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' } : {}}>
+                className={`rounded-2xl p-5 text-center transition-all relative ${isSelected ? 'shadow-lg' : ''}`}
+                style={isSelected
+                  ? { background: isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b', color: '#fff' }
+                  : { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+
+                {/* Badge Martes */}
+                {isMartes && (
+                  <div className="absolute top-1.5 left-1.5 text-xs font-black px-1.5 py-0.5 rounded-full bg-white/20 text-white">
+                    x2
+                  </div>
+                )}
 
                 {trend.icon && (
                   <div className="absolute top-2 right-2 text-xs">{trend.icon}</div>
@@ -259,10 +321,9 @@ export default function AddDrink() {
                     <div>
                       <span className="text-xs line-through mr-1"
                         style={{ color: isSelected ? 'rgba(255,255,255,0.5)' : 'var(--text-hint)' }}>
-                        {basePoints}pts
+                        {baseEffective}pts
                       </span>
-                      <span className="text-sm font-bold"
-                        style={{ color: isSelected ? '#fff' : '#10b981' }}>
+                      <span className="text-sm font-bold" style={{ color: isSelected ? '#fff' : (isMartes ? '#a78bfa' : '#10b981') }}>
                         {effectivePoints}pts
                       </span>
                     </div>
@@ -288,12 +349,19 @@ export default function AddDrink() {
           disabled={!selectedDrink || loading || leagues.length === 0 || isFreezeActive}
           whileTap={{ scale: 0.97 }}
           whileHover={selectedDrink && !isFreezeActive ? { scale: 1.02 } : {}}
-          className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl text-lg transition-colors">
+          className="w-full disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl text-lg transition-all"
+          style={{
+            background: isMartes
+              ? 'linear-gradient(135deg, #7c3aed, #dc2626)'
+              : '#f59e0b',
+            boxShadow: isMartes ? '0 0 20px rgba(124,58,237,0.4)' : undefined,
+          }}>
           {loading ? 'Guardando...' :
            isFreezeActive ? '🧊 Congelado' :
            isGambleActive ? '🎰 ¡Apostar!' :
            leagues.length === 0 ? 'Únete a una liga primero' :
            inDebt ? '🍺 Anotar (monedas → deuda)' :
+           isMartes ? '😈 ¡Anotar — Martes Macarra!' :
            '¡Apuntar consumición!'}
         </motion.button>
 
@@ -311,11 +379,26 @@ export default function AddDrink() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
               className="mt-6 rounded-2xl py-5 px-4 text-center"
-              style={{ backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+              style={result.martes_macarra
+                ? { background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(220,38,38,0.2))', border: '2px solid rgba(124,58,237,0.5)' }
+                : { backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+
               <motion.div className="text-5xl mb-2"
                 animate={{ rotate: [0, -15, 15, -10, 0], scale: [1, 1.3, 1] }}
-                transition={{ duration: 0.6 }}>🎉</motion.div>
-              <p className="text-emerald-400 font-bold text-lg">¡Consumición anotada!</p>
+                transition={{ duration: 0.6 }}>
+                {result.martes_macarra ? '😈' : '🎉'}
+              </motion.div>
+
+              {result.martes_macarra && (
+                <p className="font-black text-sm mb-1" style={{ color: '#a78bfa' }}>
+                  ¡MARTES MACARRA!
+                </p>
+              )}
+
+              <p className="font-bold text-lg" style={{ color: result.martes_macarra ? '#fff' : '#10b981' }}>
+                ¡Consumición anotada!
+              </p>
+
               <div className="mt-3 space-y-1.5">
                 <div className="flex justify-between text-sm px-4">
                   <span style={{ color: 'var(--text-muted)' }}>Puntos base</span>
@@ -327,6 +410,12 @@ export default function AddDrink() {
                     <span className={`font-medium ${result.market_multiplier > 1 ? 'text-emerald-400' : 'text-red-400'}`}>
                       x{result.market_multiplier}
                     </span>
+                  </div>
+                )}
+                {result.martes_macarra && (
+                  <div className="flex justify-between text-sm px-4">
+                    <span style={{ color: 'var(--text-muted)' }}>😈 Martes Macarra</span>
+                    <span className="font-bold text-purple-400">x2</span>
                   </div>
                 )}
                 {result.double_active && (
@@ -348,15 +437,18 @@ export default function AddDrink() {
                   </div>
                 )}
                 <div className="border-t mt-2 pt-2 flex justify-between text-sm px-4"
-                  style={{ borderColor: 'rgba(16,185,129,0.3)' }}>
-                  <span className="font-bold text-emerald-400">Total</span>
-                  <span className="font-bold text-emerald-400">{result.final_points}pts</span>
+                  style={{ borderColor: result.martes_macarra ? 'rgba(124,58,237,0.4)' : 'rgba(16,185,129,0.3)' }}>
+                  <span className="font-bold" style={{ color: result.martes_macarra ? '#a78bfa' : '#10b981' }}>Total</span>
+                  <span className="font-bold" style={{ color: result.martes_macarra ? '#a78bfa' : '#10b981' }}>
+                    {result.final_points}pts
+                  </span>
                 </div>
               </div>
+
               <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
                 className="font-bold mt-3 text-lg"
-                style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>
+                style={{ color: inDebt ? '#ef4444' : result.martes_macarra ? '#a78bfa' : '#f59e0b' }}>
                 {inDebt ? `${result.coins}🪙 → reduciendo deuda` : `+${result.coins}🪙`}
               </motion.p>
               <p className="text-xs mt-2" style={{ color: 'var(--text-hint)' }}>
@@ -365,6 +457,7 @@ export default function AddDrink() {
             </motion.div>
           )}
 
+          {/* Resultado apuesta */}
           {success && result && result.gamble_active && (
             <motion.div
               initial={{ opacity: 0, scale: 0.5 }}
@@ -393,6 +486,7 @@ export default function AddDrink() {
             </motion.div>
           )}
 
+          {/* Freeze */}
           {frozen && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -408,6 +502,7 @@ export default function AddDrink() {
             </motion.div>
           )}
 
+          {/* Escudo bloqueó */}
           {shieldBlocked && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
