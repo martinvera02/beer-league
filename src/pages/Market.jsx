@@ -56,8 +56,7 @@ function DetailChart({ history, width = 320, height = 150 }) {
     const rect = svgRef.current.getBoundingClientRect()
     const scaleX = width / rect.width
     const mouseX = (clientX - rect.left) * scaleX
-    let closestIdx = 0
-    let closestDist = Infinity
+    let closestIdx = 0, closestDist = Infinity
     multipliers.forEach((_, i) => {
       const dist = Math.abs(toX(i) - mouseX)
       if (dist < closestDist) { closestDist = dist; closestIdx = i }
@@ -84,7 +83,6 @@ function DetailChart({ history, width = 320, height = 150 }) {
           {isUp ? '▲' : '▼'} {Math.abs(pct)}%
         </span>
       </div>
-
       <div style={{ position: 'relative' }}>
         <svg ref={svgRef} width="100%" viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none" style={{ cursor: 'crosshair', display: 'block' }}
@@ -104,14 +102,9 @@ function DetailChart({ history, width = 320, height = 150 }) {
               stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3 3" />
           ))}
           <polygon points={areaPoints} fill="url(#area-grad-d)" />
-          <polyline points={points} fill="none" stroke={lineColor}
-            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">
-            x{max.toFixed(2)}
-          </text>
-          <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">
-            x{min.toFixed(2)}
-          </text>
+          <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">x{max.toFixed(2)}</text>
+          <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">x{min.toFixed(2)}</text>
           <circle cx={toX(multipliers.length - 1)} cy={toY(current)} r="4" fill={lineColor} />
           {tooltip && (
             <>
@@ -121,37 +114,21 @@ function DetailChart({ history, width = 320, height = 150 }) {
             </>
           )}
         </svg>
-
         {tooltip && tooltip.point && (
           <div style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: tooltip.idx > multipliers.length * 0.65
-              ? 'auto' : `${(tooltip.x / width) * 100}%`,
-            right: tooltip.idx > multipliers.length * 0.65
-              ? `${(1 - tooltip.x / width) * 100}%` : 'auto',
-            marginBottom: 8,
-            pointerEvents: 'none',
-            zIndex: 10,
+            position: 'absolute', bottom: '100%',
+            left: tooltip.idx > multipliers.length * 0.65 ? 'auto' : `${(tooltip.x / width) * 100}%`,
+            right: tooltip.idx > multipliers.length * 0.65 ? `${(1 - tooltip.x / width) * 100}%` : 'auto',
+            marginBottom: 8, pointerEvents: 'none', zIndex: 10,
             transform: tooltip.idx <= multipliers.length * 0.65 ? 'translateX(-50%)' : 'none',
           }}>
             <div className="rounded-xl px-3 py-2 shadow-xl text-xs whitespace-nowrap"
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                border: `1px solid ${lineColor}`,
-                color: 'var(--text-primary)',
-              }}>
+              style={{ backgroundColor: 'var(--bg-card)', border: `1px solid ${lineColor}`, color: 'var(--text-primary)' }}>
               <p className="font-bold" style={{ color: lineColor }}>x{tooltip.mult.toFixed(3)}</p>
-              {tooltip.point.moved_by_username ? (
-                <p className="font-medium mt-0.5">
-                  {tooltip.point.direction === 'long' ? '▲' : '▼'} {tooltip.point.moved_by_username}
-                </p>
-              ) : (
-                <p style={{ color: 'var(--text-hint)' }}>Fluctuación auto</p>
-              )}
-              <p className="mt-0.5" style={{ color: 'var(--text-hint)', fontSize: 9 }}>
-                {formatTime(tooltip.point.recorded_at)}
-              </p>
+              {tooltip.point.moved_by_username
+                ? <p className="font-medium mt-0.5">{tooltip.point.direction === 'long' ? '▲' : '▼'} {tooltip.point.moved_by_username}</p>
+                : <p style={{ color: 'var(--text-hint)' }}>Fluctuación auto</p>}
+              <p className="mt-0.5" style={{ color: 'var(--text-hint)', fontSize: 9 }}>{formatTime(tooltip.point.recorded_at)}</p>
             </div>
           </div>
         )}
@@ -175,6 +152,11 @@ export default function Market() {
   const [opsToday, setOpsToday] = useState(0)
   const [lastPowerupTime, setLastPowerupTime] = useState(null)
 
+  // Acciones
+  const [stockCompanies, setStockCompanies] = useState([])
+  const [myStockPositions, setMyStockPositions] = useState([])
+  const [myDividends, setMyDividends] = useState([])
+
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [drinkHistory, setDrinkHistory] = useState([])
   const [tradeDirection, setTradeDirection] = useState('long')
@@ -189,7 +171,6 @@ export default function Market() {
   const [leagueMembers, setLeagueMembers] = useState([])
   const [buying, setBuying] = useState(false)
   const [buyResult, setBuyResult] = useState(null)
-
   const [closingPosition, setClosingPosition] = useState(null)
   const [closeResult, setCloseResult] = useState(null)
 
@@ -234,6 +215,9 @@ export default function Market() {
       { data: loanData },
       { data: loanHistoryData },
       { data: lastPowerupData },
+      { data: stockData },
+      { data: stockPosData },
+      { data: dividendsData },
     ] = await Promise.all([
       supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
       supabase.from('drink_market').select('*, drink_types(name, emoji, points)').order('drink_type_id'),
@@ -252,6 +236,14 @@ export default function Market() {
         .in('status', ['repaid', 'defaulted']).order('created_at', { ascending: false }).limit(5),
       supabase.from('active_powerups').select('created_at')
         .eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('stock_companies').select('*').eq('active', true).order('id'),
+      supabase.from('stock_positions')
+        .select('*, stock_companies(name, emoji, share_price, dividend_rate, base_price)')
+        .eq('user_id', user.id),
+      supabase.from('stock_dividends')
+        .select('*, stock_companies(name, emoji)')
+        .eq('user_id', user.id)
+        .order('paid_at', { ascending: false }).limit(5),
     ])
 
     setBalance(walletData?.balance || 0)
@@ -262,10 +254,11 @@ export default function Market() {
     setActiveLoan(loanData || null)
     setLoanHistory(loanHistoryData || [])
     setLastPowerupTime(lastPowerupData?.created_at || null)
+    setStockCompanies(stockData || [])
+    setMyStockPositions(stockPosData || [])
+    setMyDividends(dividendsData || [])
 
-    // Operaciones de hoy (desde medianoche hora española)
-    const now = new Date()
-    const madridMidnight = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+    const madridMidnight = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
     madridMidnight.setHours(0, 0, 0, 0)
     const { count } = await supabase.from('market_positions')
       .select('id', { count: 'exact', head: true })
@@ -279,7 +272,6 @@ export default function Market() {
 
     const { data: histData } = await supabase
       .from('drink_market_history').select('*').order('recorded_at', { ascending: true })
-
     if (histData) {
       const grouped = histData.reduce((acc, h) => {
         if (!acc[h.drink_type_id]) acc[h.drink_type_id] = []
@@ -357,30 +349,22 @@ export default function Market() {
     if (needsTarget && !targetUser) return
     if (selectedPowerup.effect_type === 'turbo' && !turboDrink) return
     if (selectedPowerup.effect_type === 'market_reset' && !resetDrink) return
-
     setBuying(true)
     let extraData = {}
     if (selectedPowerup.effect_type === 'turbo') extraData.drink_type_id = turboDrink
     if (selectedPowerup.effect_type === 'market_reset') extraData.drink_type_id = resetDrink
-
     const { data } = await supabase.rpc('buy_powerup', {
       p_target_user_id: targetUser?.id || user.id,
       p_league_id: selectedLeague.id,
       p_powerup_id: selectedPowerup.id,
       p_extra_data: extraData,
     })
-
     if (data?.success) {
-      soundSuccess()
-      setBalance(prev => prev - selectedPowerup.cost)
-      setLastPowerupTime(new Date().toISOString())
-      setBuyResult(data)
+      soundSuccess(); setBalance(prev => prev - selectedPowerup.cost)
+      setLastPowerupTime(new Date().toISOString()); setBuyResult(data)
       setTimeout(() => { setBuyResult(null); setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null); setResetDrink(null) }, 2000)
       fetchAll()
-    } else {
-      soundError(); setBuyResult(data)
-      setTimeout(() => setBuyResult(null), 4000)
-    }
+    } else { soundError(); setBuyResult(data); setTimeout(() => setBuyResult(null), 4000) }
     setBuying(false)
   }
 
@@ -436,6 +420,35 @@ export default function Market() {
   const needsTurboDrink = selectedPowerup?.effect_type === 'turbo'
   const needsResetDrink = selectedPowerup?.effect_type === 'market_reset'
 
+  // Cálculos cartera unificada
+  const totalStockValue = myStockPositions.reduce((sum, p) => {
+    const company = stockCompanies.find(c => c.id === p.company_id)
+    return sum + (company ? company.share_price * p.shares : 0)
+  }, 0)
+  const totalStockInvested = myStockPositions.reduce((sum, p) => sum + p.total_invested, 0)
+  const totalStockPnl = totalStockValue - totalStockInvested
+
+  const totalDrinkValue = myPositions.reduce((sum, pos) => {
+    const currentMarket = drinkMarket.find(d => d.drink_type_id === pos.drink_type_id)
+    const currentPrice = currentMarket?.price || pos.entry_price
+    const pnl = pos.direction === 'long'
+      ? Math.floor(pos.amount * ((currentPrice - pos.entry_price) / pos.entry_price))
+      : Math.floor(pos.amount * ((pos.entry_price - currentPrice) / pos.entry_price))
+    return sum + pos.amount + pnl
+  }, 0)
+  const totalDrinkInvested = myPositions.reduce((sum, p) => sum + p.amount, 0)
+  const totalDrinkPnl = totalDrinkValue - totalDrinkInvested
+
+  const totalPortfolio = totalStockValue + totalDrinkValue
+  const totalInvested = totalStockInvested + totalDrinkInvested
+  const totalPnl = totalStockPnl + totalDrinkPnl
+
+  const estimatedDailyDividend = myStockPositions.reduce((sum, pos) => {
+    const company = stockCompanies.find(c => c.id === pos.company_id)
+    if (!company) return sum
+    return sum + Math.floor(pos.shares * company.share_price * company.dividend_rate)
+  }, 0)
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
       <div className="text-center">
@@ -477,19 +490,20 @@ export default function Market() {
             </span>
           </motion.div>
         </div>
+
         <div className="flex rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
-            { id: 'market', label: '📈 Cotización' },
-            { id: 'powerups', label: '⚡ Tienda' },
+            { id: 'market',    label: '📈 Cotización' },
+            { id: 'powerups',  label: '⚡ Tienda' },
             { id: 'portfolio', label: '💼 Cartera' },
-            { id: 'bank', label: '🏦 Banco' },
+            { id: 'bank',      label: '🏦 Banco' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
               style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
               {tab === t.id && (
                 <motion.div layoutId="market-tab" className="absolute inset-0 rounded-lg"
-                  style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : '#f59e0b' }}
+                  style={{ zIndex: -1, backgroundColor: t.id === 'bank' ? '#6366f1' : t.id === 'portfolio' ? '#7c3aed' : '#f59e0b' }}
                   transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
               {t.label}
@@ -533,7 +547,6 @@ export default function Market() {
                 ? (((drink.price - drink.history[0].price) / drink.history[0].price) * 100).toFixed(1) : '0.0'
               const barPct = ((multiplier - 0.5) / 1.5) * 100
               const barColor = multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : '#9ca3af'
-
               return (
                 <motion.button key={drink.id} variants={staggerItem} initial="initial" animate="animate"
                   whileTap={{ scale: 0.98 }} onClick={() => openDrinkDetail(drink)}
@@ -607,7 +620,7 @@ export default function Market() {
               style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
               <p className="text-sm font-bold text-amber-400">⏱ Cooldown activo</p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                Próximo powerup disponible en {powerupCooldown} min
+                Próximo powerup en {powerupCooldown} min
               </p>
             </motion.div>
           )}
@@ -635,9 +648,7 @@ export default function Market() {
                     <div className="text-2xl mb-1">{ap.powerup_catalog?.emoji}</div>
                     <p className="text-xs font-semibold text-amber-400">{ap.powerup_catalog?.name}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{formatTime(ap.expires_at)}</p>
-                    {ap.extra_data?.uses_left && (
-                      <p className="text-xs mt-0.5 text-amber-400">{ap.extra_data.uses_left} usos</p>
-                    )}
+                    {ap.extra_data?.uses_left && <p className="text-xs mt-0.5 text-amber-400">{ap.extra_data.uses_left} usos</p>}
                   </div>
                 ))}
               </div>
@@ -662,18 +673,13 @@ export default function Market() {
                       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{pw.description}</p>
                       {pw.effect_type === 'freeze'
                         ? <p className="text-xs mt-0.5 text-blue-400">⏱ 15 minutos</p>
-                        : pw.duration_hours
-                          ? <p className="text-xs mt-0.5 text-amber-400">⏱ {pw.duration_hours}h de efecto</p>
-                          : null}
+                        : pw.duration_hours ? <p className="text-xs mt-0.5 text-amber-400">⏱ {pw.duration_hours}h</p> : null}
                     </div>
                     <motion.button whileTap={{ scale: 0.9 }}
                       disabled={!canAfford || !selectedLeague || onCooldown}
                       onClick={() => setSelectedPowerup(pw)}
                       className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold"
-                      style={{
-                        backgroundColor: canAfford && !onCooldown ? '#f59e0b' : 'var(--bg-input)',
-                        color: canAfford && !onCooldown ? '#fff' : 'var(--text-hint)',
-                      }}>
+                      style={{ backgroundColor: canAfford && !onCooldown ? '#f59e0b' : 'var(--bg-input)', color: canAfford && !onCooldown ? '#fff' : 'var(--text-hint)' }}>
                       {onCooldown ? `${powerupCooldown}m` : `${pw.cost}🪙`}
                     </motion.button>
                   </div>
@@ -684,62 +690,174 @@ export default function Market() {
         </div>
       )}
 
-      {/* ── CARTERA ── */}
+      {/* ── CARTERA UNIFICADA ── */}
       {tab === 'portfolio' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
-          <motion.div {...fadeIn} className="rounded-2xl p-6 mb-4 text-center"
-            style={{ backgroundColor: 'var(--bg-card)', border: `1px solid ${inDebt ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.2)'}` }}>
-            <p className="text-sm mb-1" style={{ color: 'var(--text-muted)' }}>Saldo disponible</p>
-            <p className="text-5xl font-bold" style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>{balance.toLocaleString()}</p>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>{inDebt ? '🔴 En números rojos' : '🪙 Cervezas'}</p>
-            {inDebt && <p className="text-xs mt-2 text-red-400">Cada moneda que ganes reducirá tu deuda automáticamente</p>}
+
+          {/* Resumen total */}
+          <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
+            style={{
+              background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(99,102,241,0.15))',
+              border: `1px solid ${totalPnl >= 0 ? 'rgba(124,58,237,0.4)' : 'rgba(239,68,68,0.3)'}`,
+            }}>
+            <p className="text-xs font-bold text-purple-400 mb-3">💼 Cartera total</p>
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="text-center">
+                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Valor total</p>
+                <p className="font-bold text-sm text-purple-400">{totalPortfolio.toLocaleString()}🪙</p>
+              </div>
+              <div className="text-center border-x" style={{ borderColor: 'rgba(124,58,237,0.3)' }}>
+                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Invertido</p>
+                <p className="font-bold text-sm">{totalInvested.toLocaleString()}🪙</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>P&L total</p>
+                <p className={`font-bold text-sm ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {totalPnl >= 0 ? '+' : ''}{totalPnl.toLocaleString()}🪙
+                </p>
+              </div>
+            </div>
+            {estimatedDailyDividend > 0 && (
+              <div className="pt-3 border-t flex items-center justify-between"
+                style={{ borderColor: 'rgba(124,58,237,0.3)' }}>
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>💰 Dividendo diario estimado</p>
+                <p className="text-sm font-bold text-amber-400">~{estimatedDailyDividend}🪙</p>
+              </div>
+            )}
+            {inDebt && (
+              <div className="pt-2 border-t mt-2" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+                <p className="text-xs text-red-400 text-center">
+                  🔴 Saldo en números rojos · {balance}🪙
+                </p>
+              </div>
+            )}
           </motion.div>
-          <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-sm font-bold mb-1">¿Cómo ganar 🪙?</p>
-            <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>Puntos × 10 = monedas</p>
-            <div className="space-y-2">
-              {drinkTypes.map(drink => {
-                const marketDrink = drinkMarket.find(d => d.drink_type_id === drink.id)
-                const multiplier = getMultiplier(marketDrink?.price || 100)
-                const effectivePoints = Math.round(drink.points * multiplier * 10) / 10
-                const coins = Math.floor(effectivePoints * 10)
-                const isModified = Math.abs(multiplier - 1) > 0.05
+
+          {/* ── Sección: S&PINTA 500 ── */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-bold">📊 S&PINTA 500</p>
+            {myStockPositions.length > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${totalStockPnl >= 0 ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
+                {totalStockPnl >= 0 ? '+' : ''}{totalStockPnl.toLocaleString()}🪙
+              </span>
+            )}
+          </div>
+
+          {myStockPositions.length === 0 ? (
+            <div className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <div className="text-3xl mb-2">📊</div>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin acciones todavía</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Ve al S&PINTA 500 para invertir</p>
+            </div>
+          ) : (
+            <div className="space-y-3 mb-6">
+              {myStockPositions.map(pos => {
+                const company = stockCompanies.find(c => c.id === pos.company_id)
+                if (!company) return null
+                const currentValue = company.share_price * pos.shares
+                const pnl = currentValue - pos.total_invested
+                const pnlPct = ((pnl / pos.total_invested) * 100).toFixed(1)
+                const dailyDiv = Math.floor(pos.shares * company.share_price * company.dividend_rate)
+                const myPct = ((pos.shares / company.total_shares) * 100).toFixed(1)
                 return (
-                  <div key={drink.id} className="flex justify-between items-center py-2 border-b last:border-0"
-                    style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{drink.emoji}</span>
-                      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{drink.name}</span>
+                  <motion.div key={pos.id} variants={staggerItem} initial="initial" animate="animate"
+                    className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                        style={{ backgroundColor: 'var(--bg-input)' }}>
+                        {company.emoji}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm">{company.name}</p>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-900 text-indigo-400">
+                            {myPct}%
+                          </span>
+                        </div>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                          {pos.shares} acc · precio medio {pos.avg_buy_price.toLocaleString()}🪙
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-sm">{currentValue.toLocaleString()}🪙</p>
+                        <p className={`text-xs font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {pnl >= 0 ? '+' : ''}{pnl.toLocaleString()}🪙 ({pnlPct}%)
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {isModified && <span className="text-xs font-bold" style={{ color: multiplier > 1 ? '#10b981' : '#ef4444' }}>x{multiplier.toFixed(1)}</span>}
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>{effectivePoints}pts</span>
-                      <span className="text-sm font-bold" style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>+{coins}🪙</span>
+                    <div className="flex items-center justify-between pt-2 border-t"
+                      style={{ borderColor: 'var(--border)' }}>
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                        💰 Dividendo diario estimado
+                      </span>
+                      <span className="text-xs font-bold text-amber-400">~{dailyDiv}🪙</span>
                     </div>
-                  </div>
+                  </motion.div>
                 )
               })}
             </div>
+          )}
+
+          {/* Últimos dividendos */}
+          {myDividends.length > 0 && (
+            <div className="mb-6">
+              <p className="text-sm font-bold mb-3">💰 Últimos dividendos</p>
+              <div className="space-y-2">
+                {myDividends.map(d => (
+                  <div key={d.id} className="rounded-2xl p-3 flex items-center gap-3"
+                    style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <span className="text-xl">{d.stock_companies?.emoji}</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{d.stock_companies?.name}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                        {formatDate(d.paid_at)} · {d.shares} acc
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-emerald-400">+{d.amount}🪙</p>
+                      {d.bonus_amount > 0 && (
+                        <p className="text-xs text-amber-400">+{d.bonus_amount}🪙 bonus</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Sección: Posiciones de bebidas ── */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-bold">🍺 Posiciones en bebidas</p>
+            {myPositions.length > 0 && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${totalDrinkPnl >= 0 ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
+                {totalDrinkPnl >= 0 ? '+' : ''}{totalDrinkPnl.toLocaleString()}🪙
+              </span>
+            )}
           </div>
+
           <AnimatePresence>
             {closeResult && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="rounded-2xl p-4 mb-4 text-center"
-                style={{ backgroundColor: closeResult.pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${closeResult.pnl >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                style={{
+                  backgroundColor: closeResult.pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                  border: `1px solid ${closeResult.pnl >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                }}>
                 <p className="font-bold" style={{ color: closeResult.pnl >= 0 ? '#10b981' : '#ef4444' }}>
                   {closeResult.pnl >= 0 ? '🎉 Ganancia' : '📉 Pérdida'}: {closeResult.pnl >= 0 ? '+' : ''}{closeResult.pnl}🪙
                 </p>
               </motion.div>
             )}
           </AnimatePresence>
-          <p className="text-sm font-bold mb-3">Posiciones abiertas</p>
+
           {myPositions.length === 0 ? (
-            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-4xl mb-2">📊</div>
-              <p className="text-sm">Sin posiciones abiertas</p>
+            <div className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <div className="text-3xl mb-2">📈</div>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin posiciones abiertas</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Ve a Cotización para invertir</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 mb-6">
               {myPositions.map(pos => {
                 const currentMarket = drinkMarket.find(d => d.drink_type_id === pos.drink_type_id)
                 const currentPrice = currentMarket?.price || pos.entry_price
@@ -751,7 +869,8 @@ export default function Market() {
                   <motion.div key={pos.id} variants={staggerItem} initial="initial" animate="animate"
                     className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                        style={{ backgroundColor: 'var(--bg-input)' }}>
                         {pos.drink_types?.emoji}
                       </div>
                       <div className="flex-1">
@@ -769,10 +888,15 @@ export default function Market() {
                         {isProfit ? '+' : ''}{pnl}🪙
                       </p>
                     </div>
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => executeClosePosition(pos.id)}
+                    <motion.button whileTap={{ scale: 0.97 }}
+                      onClick={() => executeClosePosition(pos.id)}
                       disabled={closingPosition === pos.id}
                       className="w-full py-2.5 rounded-xl text-sm font-semibold"
-                      style={{ backgroundColor: isProfit ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', color: isProfit ? '#10b981' : '#ef4444', border: `1px solid ${isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                      style={{
+                        backgroundColor: isProfit ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: isProfit ? '#10b981' : '#ef4444',
+                        border: `1px solid ${isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                      }}>
                       {closingPosition === pos.id ? 'Cerrando...' : `Cerrar (${isProfit ? '+' : ''}${pnl}🪙)`}
                     </motion.button>
                   </motion.div>
@@ -780,6 +904,45 @@ export default function Market() {
               })}
             </div>
           )}
+
+          {/* Tabla de puntos actuales por bebida */}
+          <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-sm font-bold mb-1">¿Cómo ganar 🪙?</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>Puntos × 10 = monedas · afectado por el mercado</p>
+            <div className="space-y-2">
+              {drinkTypes.map(drink => {
+                const marketDrink = drinkMarket.find(d => d.drink_type_id === drink.id)
+                const multiplier = getMultiplier(marketDrink?.price || 100)
+                const effectivePoints = Math.round(drink.points * multiplier * 10) / 10
+                const coins = Math.floor(effectivePoints * 10)
+                const isModified = Math.abs(multiplier - 1) > 0.05
+                return (
+                  <div key={drink.id} className="flex justify-between items-center py-2 border-b last:border-0"
+                    style={{ borderColor: 'var(--border)' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{drink.emoji}</span>
+                      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{drink.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isModified && (
+                        <span className="text-xs font-bold" style={{ color: multiplier > 1 ? '#10b981' : '#ef4444' }}>
+                          x{multiplier.toFixed(1)}
+                        </span>
+                      )}
+                      <span className="text-xs px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
+                        {effectivePoints}pts
+                      </span>
+                      <span className="text-sm font-bold"
+                        style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>
+                        +{coins}🪙
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -792,6 +955,7 @@ export default function Market() {
             <h2 className="text-lg font-bold">Banco de la Espuma</h2>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Pide monedas adelantadas · cuanto antes pagues, menos interés</p>
           </motion.div>
+
           <AnimatePresence>
             {loanResult && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -803,6 +967,7 @@ export default function Market() {
               </motion.div>
             )}
           </AnimatePresence>
+
           {activeLoan && loanDebt && (
             <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
               style={{ backgroundColor: 'var(--bg-card)', border: `2px solid ${loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : 'rgba(99,102,241,0.4)'}` }}>
@@ -821,10 +986,11 @@ export default function Market() {
                 disabled={repaying || balance < loanDebt.current_debt}
                 className="w-full py-3 rounded-xl font-bold text-sm text-white"
                 style={{ backgroundColor: loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : '#6366f1' }}>
-                {repaying ? 'Pagando...' : balance < loanDebt.current_debt ? `Te faltan ${loanDebt.current_debt - balance}🪙 — sigue bebiendo 🍺` : `Saldar deuda · ${loanDebt.current_debt}🪙`}
+                {repaying ? 'Pagando...' : balance < loanDebt.current_debt ? `Te faltan ${loanDebt.current_debt - balance}🪙` : `Saldar · ${loanDebt.current_debt}🪙`}
               </motion.button>
             </motion.div>
           )}
+
           {!activeLoan && (() => {
             const maxLoan = Math.min(2000, Math.max(100, balance * 2))
             return (
@@ -874,6 +1040,7 @@ export default function Market() {
               </motion.div>
             )
           })()}
+
           {loanHistory.length > 0 && (
             <div>
               <p className="text-sm font-bold mb-3">Historial</p>
@@ -924,14 +1091,10 @@ export default function Market() {
                     className="w-8 h-8 rounded-full flex items-center justify-center"
                     style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
                 </div>
-
                 <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
-                  <p className="text-xs mb-2" style={{ color: 'var(--text-hint)' }}>
-                    💡 Pasa el dedo por la gráfica para ver quién movió el precio
-                  </p>
+                  <p className="text-xs mb-2" style={{ color: 'var(--text-hint)' }}>💡 Pasa el dedo para ver quién movió el precio</p>
                   <DetailChart history={drinkHistory} width={320} height={150} />
                 </div>
-
                 {(() => {
                   const mult = getMultiplier(selectedDrink.price)
                   const effPts = Math.round(selectedDrink.drink_types?.points * mult * 10) / 10
@@ -953,30 +1116,22 @@ export default function Market() {
                     </div>
                   )
                 })()}
-
                 {!marketOpen && (
-                  <div className="rounded-xl p-3 mb-4 text-center"
-                    style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)' }}>
+                  <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)' }}>
                     <p className="text-sm font-bold text-indigo-400">🌙 Mercado cerrado</p>
                     <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Solo puedes operar de 20:00 a 02:00h</p>
                   </div>
                 )}
-
                 {opsRemaining === 0 && marketOpen && (
-                  <div className="rounded-xl p-3 mb-4 text-center"
-                    style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
                     <p className="text-sm font-bold text-red-400">⛔ Límite diario alcanzado</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Has usado tus 3 operaciones de hoy.</p>
                   </div>
                 )}
-
                 {tradeError && (
-                  <div className="rounded-xl p-3 mb-4 text-center"
-                    style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
                     <p className="text-sm font-bold text-red-400">⚠️ {tradeError}</p>
                   </div>
                 )}
-
                 {marketOpen && opsRemaining > 0 && (
                   <>
                     <div className="mb-4">
@@ -986,11 +1141,7 @@ export default function Market() {
                           { d: 'short', label: '▼ SHORT', sub: 'baja multiplicador', color: '#ef4444', bg: 'rgba(239,68,68,0.2)' }].map(opt => (
                           <motion.button key={opt.d} whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection(opt.d)}
                             className="flex-1 py-3 rounded-xl font-bold text-sm"
-                            style={{
-                              backgroundColor: tradeDirection === opt.d ? opt.bg : 'var(--bg-input)',
-                              color: tradeDirection === opt.d ? opt.color : 'var(--text-muted)',
-                              border: tradeDirection === opt.d ? `2px solid ${opt.color}` : '2px solid transparent',
-                            }}>
+                            style={{ backgroundColor: tradeDirection === opt.d ? opt.bg : 'var(--bg-input)', color: tradeDirection === opt.d ? opt.color : 'var(--text-muted)', border: tradeDirection === opt.d ? `2px solid ${opt.color}` : '2px solid transparent' }}>
                             {opt.label}<br /><span className="text-xs font-normal">{opt.sub}</span>
                           </motion.button>
                         ))}
@@ -1017,9 +1168,6 @@ export default function Market() {
                       <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Impacto estimado</p>
                       <p className="text-sm font-bold mt-1" style={{ color: tradeDirection === 'long' ? '#10b981' : '#ef4444' }}>
                         {tradeDirection === 'long' ? '+' : '-'}x{getImpactPreview(tradeAmount)} en el multiplicador
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                        20:00–02:00h · {opsRemaining} op{opsRemaining !== 1 ? 's' : ''} restante{opsRemaining !== 1 ? 's' : ''} hoy
                       </p>
                     </div>
                     <motion.button whileTap={{ scale: 0.97 }} onClick={executeTrade}
@@ -1053,11 +1201,8 @@ export default function Market() {
                   <div>
                     <h2 className="text-lg font-bold">{selectedPowerup.name}</h2>
                     <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{selectedPowerup.description}</p>
-                    {selectedPowerup.effect_type === 'freeze'
-                      ? <p className="text-xs mt-0.5 text-blue-400">⏱ Congela 15 minutos</p>
-                      : selectedPowerup.duration_hours
-                        ? <p className="text-xs mt-0.5 text-amber-400">⏱ {selectedPowerup.duration_hours}h</p>
-                        : null}
+                    {selectedPowerup.effect_type === 'freeze' ? <p className="text-xs mt-0.5 text-blue-400">⏱ 15 minutos</p>
+                      : selectedPowerup.duration_hours ? <p className="text-xs mt-0.5 text-amber-400">⏱ {selectedPowerup.duration_hours}h</p> : null}
                   </div>
                 </div>
                 <motion.button whileTap={{ scale: 0.9 }}
@@ -1071,8 +1216,7 @@ export default function Market() {
                     className="rounded-2xl p-3 mb-4 text-center"
                     style={{ backgroundColor: buyResult.success ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${buyResult.success ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                     <p className="text-sm font-bold" style={{ color: buyResult.success ? '#10b981' : '#ef4444' }}>
-                      {buyResult.success
-                        ? buyResult.extra?.target ? `✅ ${buyResult.extra.target} ha recibido el impacto` : '✅ Powerup activado'
+                      {buyResult.success ? buyResult.extra?.target ? `✅ ${buyResult.extra.target} ha recibido el impacto` : '✅ Powerup activado'
                         : `⚠️ ${buyResult.error || 'Escudo bloqueó el ataque 🛡️'}`}
                     </p>
                   </motion.div>
