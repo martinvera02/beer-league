@@ -25,21 +25,6 @@ const COLOR_STYLES = {
   green: { bg: '#16a34a', text: '#fff' },
 }
 
-// ─── SEGMENTOS RULETA GRATUITA ────────────────────────────────────────────────
-// IMPORTANTE: el índice aquí debe coincidir con FREE_LABEL_MAP y POWERUP_MAP
-// idx 0  → +2 pts     (prize_label: '+2 puntos')
-// idx 1  → +50 🪙     (prize_label: '+50 monedas')
-// idx 2  → Escudo     (prize_powerup: 'shield')
-// idx 3  → +5 pts     (prize_label: '+5 puntos')
-// idx 4  → +150 🪙    (prize_label: '+150 monedas')
-// idx 5  → Freeze     (prize_powerup: 'freeze')
-// idx 6  → +2 pts     (duplicado visual, mismo premio que idx 0)
-// idx 7  → +300 🪙    (prize_label: '+300 monedas')
-// idx 8  → Racha Doble(prize_powerup: 'double_points')
-// idx 9  → +5 pts     (duplicado visual, mismo premio que idx 3)
-// idx 10 → Turbo      (prize_powerup: 'turbo')
-// idx 11 → 💀 Nada    (prize_type: 'nothing')
-
 const FREE_SEGMENTS = [
   { label: '+2 pts',      emoji: '🍺', color: '#f59e0b', textColor: '#fff' },
   { label: '+50 🪙',      emoji: '🪙', color: '#6366f1', textColor: '#fff' },
@@ -55,21 +40,19 @@ const FREE_SEGMENTS = [
   { label: '💀 Nada',     emoji: '💀', color: '#374151', textColor: '#9ca3af' },
 ]
 
-// ✅ CORREGIDO: mapeo exacto de prize_label del servidor → índice de segmento visual
 const FREE_LABEL_MAP = {
-  '+2 puntos':    0,
-  '+50 monedas':  1,
-  'Escudo':       2,
-  '+5 puntos':    3,
-  '+150 monedas': 4,
-  'Freeze':       5,
-  '+300 monedas': 7,
-  'Racha Doble':  8,
-  'Turbo':        10,
+  '+2 puntos':     0,
+  '+50 monedas':   1,
+  'Escudo':        2,
+  '+5 puntos':     3,
+  '+150 monedas':  4,
+  'Freeze':        5,
+  '+300 monedas':  7,
+  'Racha Doble':   8,
+  'Turbo':         10,
   '¡Mala suerte!': 11,
 }
 
-// ✅ CORREGIDO: fallback por prize_powerup cuando el label no matchea
 const FREE_POWERUP_MAP = {
   'shield':        2,
   'freeze':        5,
@@ -79,22 +62,39 @@ const FREE_POWERUP_MAP = {
   'sniper':        9,
 }
 
+// ─── UTILIDAD: calcular rotación final para que el puntero (arriba) apunte al segmento ──
+// El puntero está fijo arriba. La rueda gira. Necesitamos que el CENTRO del segmento
+// target quede apuntando arriba (0° desde el top del SVG).
+// El segmento i ocupa [i*segAngle, (i+1)*segAngle] desde el origen del SVG (top).
+// Para que el centro del segmento quede arriba, la rueda debe rotar -segCenter grados
+// (más las vueltas completas).
+function calcFinalRotation(currentRotation, targetIndex, totalSegments, extraSpins = 6) {
+  const segAngle = 360 / totalSegments
+  // Centro del segmento en coordenadas del SVG (sin rotación)
+  const segCenter = targetIndex * segAngle + segAngle / 2
+  // Para que ese punto quede arriba (0°), necesitamos rotar -(segCenter) mod 360
+  // pero como la rueda siempre gira en positivo, buscamos el ángulo equivalente
+  const targetOffset = (360 - segCenter % 360) % 360
+  // Rotación actual normalizada
+  const currentNorm = ((currentRotation % 360) + 360) % 360
+  // Cuánto falta para llegar al target desde la posición actual
+  let delta = targetOffset - currentNorm
+  if (delta < 0) delta += 360
+  // Añadimos vueltas completas para el efecto visual
+  return currentRotation + extraSpins * 360 + delta
+}
+
 function FreeRouletteWheel({ spinning, targetIndex, onSpinEnd }) {
   const [displayRotation, setDisplayRotation] = useState(0)
   const rotationRef = useRef(0)
   const animRef = useRef(null)
 
-  const TOTAL = FREE_SEGMENTS.length
-  const SEGMENT_ANGLE = 360 / TOTAL
-
   useEffect(() => {
     if (!spinning) return
-    const segmentCenter = targetIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2
-    const targetAngle = 270 - segmentCenter
-    const normalized = ((targetAngle % 360) + 360) % 360
-    const spins = 5 + Math.floor(Math.random() * 3)
-    const finalRotation = rotationRef.current + spins * 360 + normalized - (rotationRef.current % 360)
-    const duration = 4000 + Math.random() * 1000
+    cancelAnimationFrame(animRef.current)
+
+    const finalRotation = calcFinalRotation(rotationRef.current, targetIndex, FREE_SEGMENTS.length, 5 + Math.floor(Math.random() * 3))
+    const duration = 4000 + Math.random() * 800
     let startTime = null
     const startRot = rotationRef.current
 
@@ -114,10 +114,11 @@ function FreeRouletteWheel({ spinning, targetIndex, onSpinEnd }) {
     }
     animRef.current = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(animRef.current)
-  }, [spinning])
+  }, [spinning, targetIndex])
 
   const size = 260
   const cx = size / 2, cy = size / 2, r = size / 2 - 8
+  const SEGMENT_ANGLE = 360 / FREE_SEGMENTS.length
 
   const polarToCartesian = (angle, radius) => {
     const rad = (angle - 90) * Math.PI / 180
@@ -178,15 +179,13 @@ function EuropeanRouletteWheel({ spinning, targetNumber, onSpinEnd }) {
 
   useEffect(() => {
     if (!spinning || targetNumber === null) return
+    cancelAnimationFrame(animRef.current)
+
     const targetIdx = WHEEL_ORDER.indexOf(targetNumber)
     if (targetIdx === -1) return
 
-    const segAngle = 360 / 37
-    const segCenter = targetIdx * segAngle + segAngle / 2
-    const targetAngle = 270 - segCenter
-    const normalized = ((targetAngle % 360) + 360) % 360
-    const spins = 6 + Math.floor(Math.random() * 4)
-    const finalRotation = rotationRef.current + spins * 360 + normalized - (rotationRef.current % 360)
+    // ✅ CORREGIDO: usar la misma función de cálculo fiable
+    const finalRotation = calcFinalRotation(rotationRef.current, targetIdx, 37, 6 + Math.floor(Math.random() * 4))
     const duration = 5000 + Math.random() * 1500
     let startTime = null
     const startRot = rotationRef.current
@@ -293,6 +292,7 @@ function Casino() {
   const [betSpinning, setBetSpinning] = useState(false)
   const [betTargetNumber, setBetTargetNumber] = useState(null)
   const [betResult, setBetResult] = useState(null)
+  const [pendingBetResult, setPendingBetResult] = useState(null) // ✅ resultado pendiente hasta fin animación
   const [showBetResult, setShowBetResult] = useState(false)
   const [betHistory, setBetHistory] = useState([])
   const [loadingBet, setLoadingBet] = useState(true)
@@ -328,21 +328,12 @@ function Casino() {
     setLoadingBet(false)
   }
 
-  // ✅ CORREGIDO: búsqueda robusta en 3 pasos
   const resolveSegmentIndex = (data) => {
-    // 1. Buscar por prize_label exacto
-    if (FREE_LABEL_MAP[data.prize_label] !== undefined) {
-      return FREE_LABEL_MAP[data.prize_label]
-    }
-    // 2. Fallback por prize_powerup
-    if (data.prize_powerup && FREE_POWERUP_MAP[data.prize_powerup] !== undefined) {
-      return FREE_POWERUP_MAP[data.prize_powerup]
-    }
-    // 3. Fallback por prize_type
+    if (FREE_LABEL_MAP[data.prize_label] !== undefined) return FREE_LABEL_MAP[data.prize_label]
+    if (data.prize_powerup && FREE_POWERUP_MAP[data.prize_powerup] !== undefined) return FREE_POWERUP_MAP[data.prize_powerup]
     if (data.prize_type === 'nothing') return 11
     if (data.prize_type === 'coins') return 1
     if (data.prize_type === 'points') return 0
-    // 4. Aleatorio como último recurso
     return Math.floor(Math.random() * 12)
   }
 
@@ -358,8 +349,6 @@ function Casino() {
       setFreeSpinning(false)
       return
     }
-
-    // ✅ CORREGIDO: usar resolveSegmentIndex para garantizar coincidencia
     const idx = resolveSegmentIndex(data)
     setFreeTargetIdx(idx)
     setFreePrize(data)
@@ -377,28 +366,39 @@ function Casino() {
     if (betType === 'number' && betValue === null) return
     setBetSpinning(true)
     setBetResult(null)
+    setPendingBetResult(null)
     setShowBetResult(false)
+
     const { data } = await supabase.rpc('spin_bet_roulette', {
       p_bet_amount: betAmount,
       p_bet_type: betType,
       p_bet_value: betType === 'number' ? String(betValue) : null,
     })
+
     if (!data?.success) {
-      soundError(); setBetSpinning(false)
+      soundError()
+      setBetSpinning(false)
       alert(data?.error || 'Error al apostar')
       return
     }
+
+    // ✅ CORREGIDO: guardamos el resultado pero NO actualizamos el saldo todavía
+    // El saldo se actualiza en handleBetSpinEnd, cuando la animación termina
     setBetTargetNumber(data.number)
-    setBetResult(data)
-    setBalance(data.new_balance)
+    setPendingBetResult(data)
   }
 
+  // ✅ CORREGIDO: el saldo y el resultado se muestran SOLO al terminar la animación
   const handleBetSpinEnd = useCallback(() => {
     setBetSpinning(false)
-    if (betResult?.won) soundSuccess()
-    else soundError()
-    setTimeout(() => { setShowBetResult(true); fetchBetData() }, 400)
-  }, [betResult])
+    if (pendingBetResult) {
+      setBetResult(pendingBetResult)
+      setBalance(pendingBetResult.new_balance) // ← ahora aquí, no antes
+      if (pendingBetResult.won) soundSuccess()
+      else soundError()
+      setTimeout(() => { setShowBetResult(true); fetchBetData() }, 400)
+    }
+  }, [pendingBetResult])
 
   const formatTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
@@ -412,19 +412,19 @@ function Casino() {
   }
 
   const BET_TYPES = [
-    { id: 'red',    label: 'Rojo',   emoji: '🔴', payout: 'x2',  desc: '18 números' },
-    { id: 'black',  label: 'Negro',  emoji: '⚫', payout: 'x2',  desc: '18 números' },
-    { id: 'even',   label: 'Par',    emoji: '2️⃣', payout: 'x2',  desc: '2,4,6...' },
-    { id: 'odd',    label: 'Impar',  emoji: '1️⃣', payout: 'x2',  desc: '1,3,5...' },
-    { id: 'low',    label: '1-18',   emoji: '⬇️', payout: 'x2',  desc: 'Mitad baja' },
-    { id: 'high',   label: '19-36',  emoji: '⬆️', payout: 'x2',  desc: 'Mitad alta' },
-    { id: 'dozen1', label: '1ª Doc', emoji: '🎲', payout: 'x3',  desc: '1-12' },
-    { id: 'dozen2', label: '2ª Doc', emoji: '🎲', payout: 'x3',  desc: '13-24' },
-    { id: 'dozen3', label: '3ª Doc', emoji: '🎲', payout: 'x3',  desc: '25-36' },
-    { id: 'col1',   label: 'Col 1',  emoji: '📊', payout: 'x3',  desc: '1,4,7...' },
-    { id: 'col2',   label: 'Col 2',  emoji: '📊', payout: 'x3',  desc: '2,5,8...' },
-    { id: 'col3',   label: 'Col 3',  emoji: '📊', payout: 'x3',  desc: '3,6,9...' },
-    { id: 'number', label: 'Número', emoji: '🎯', payout: 'x36', desc: 'Pleno' },
+    { id: 'red',    label: 'Rojo',   emoji: '🔴', payout: 'x2' },
+    { id: 'black',  label: 'Negro',  emoji: '⚫', payout: 'x2' },
+    { id: 'even',   label: 'Par',    emoji: '2️⃣', payout: 'x2' },
+    { id: 'odd',    label: 'Impar',  emoji: '1️⃣', payout: 'x2' },
+    { id: 'low',    label: '1-18',   emoji: '⬇️', payout: 'x2' },
+    { id: 'high',   label: '19-36',  emoji: '⬆️', payout: 'x2' },
+    { id: 'dozen1', label: '1ª Doc', emoji: '🎲', payout: 'x3' },
+    { id: 'dozen2', label: '2ª Doc', emoji: '🎲', payout: 'x3' },
+    { id: 'dozen3', label: '3ª Doc', emoji: '🎲', payout: 'x3' },
+    { id: 'col1',   label: 'Col 1',  emoji: '📊', payout: 'x3' },
+    { id: 'col2',   label: 'Col 2',  emoji: '📊', payout: 'x3' },
+    { id: 'col3',   label: 'Col 3',  emoji: '📊', payout: 'x3' },
+    { id: 'number', label: 'Número', emoji: '🎯', payout: 'x36' },
   ]
 
   return (
@@ -466,7 +466,6 @@ function Casino() {
           <p className="text-center text-sm mb-5" style={{ color: 'var(--text-muted)' }}>
             Una tirada gratis al día · Gana puntos, monedas o powerups
           </p>
-
           {loadingFree ? (
             <div className="text-center py-10">
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-4xl mb-2">🎡</motion.div>
@@ -476,7 +475,6 @@ function Casino() {
               <div className="mb-6">
                 <FreeRouletteWheel spinning={freeSpinning} targetIndex={freeTargetIdx} onSpinEnd={handleFreeSpinEnd} />
               </div>
-
               {alreadySpun && !freeSpinning ? (
                 <div className="rounded-2xl p-4 mb-5 text-center"
                   style={{ backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)' }}>
@@ -502,7 +500,6 @@ function Casino() {
                   )}
                 </motion.button>
               )}
-
               <AnimatePresence>
                 {showFreePrize && freePrize && (
                   <motion.div initial={{ opacity: 0, scale: 0.5, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -527,23 +524,22 @@ function Casino() {
                   </motion.div>
                 )}
               </AnimatePresence>
-
               <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
                 <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>Tabla de premios</p>
                 <div className="grid grid-cols-2 gap-1">
                   {[
-                    { emoji: '🍺', label: '+2 pts',    prob: '20%', color: '#f59e0b' },
-                    { emoji: '🍺', label: '+5 pts',    prob: '15%', color: '#f59e0b' },
-                    { emoji: '🪙', label: '+50🪙',     prob: '15%', color: '#6366f1' },
-                    { emoji: '🪙', label: '+150🪙',    prob: '10%', color: '#8b5cf6' },
-                    { emoji: '🪙', label: '+300🪙',    prob: '8%',  color: '#ec4899' },
-                    { emoji: '🔥', label: 'Racha x2',  prob: '8%',  color: '#f97316' },
-                    { emoji: '🛡️', label: 'Escudo',    prob: '7%',  color: '#10b981' },
-                    { emoji: '🧊', label: 'Freeze',    prob: '7%',  color: '#3b82f6' },
-                    { emoji: '⚡', label: 'Turbo',     prob: '5%',  color: '#eab308' },
-                    { emoji: '💣', label: 'Sabotaje',  prob: '3%',  color: '#ef4444' },
-                    { emoji: '🎯', label: 'Sniper',    prob: '1%',  color: '#a855f7' },
-                    { emoji: '💀', label: 'Nada',      prob: '1%',  color: '#6b7280' },
+                    { emoji: '🍺', label: '+2 pts',   prob: '20%', color: '#f59e0b' },
+                    { emoji: '🍺', label: '+5 pts',   prob: '15%', color: '#f59e0b' },
+                    { emoji: '🪙', label: '+50🪙',    prob: '15%', color: '#6366f1' },
+                    { emoji: '🪙', label: '+150🪙',   prob: '10%', color: '#8b5cf6' },
+                    { emoji: '🪙', label: '+300🪙',   prob: '8%',  color: '#ec4899' },
+                    { emoji: '🔥', label: 'Racha x2', prob: '8%',  color: '#f97316' },
+                    { emoji: '🛡️', label: 'Escudo',   prob: '7%',  color: '#10b981' },
+                    { emoji: '🧊', label: 'Freeze',   prob: '7%',  color: '#3b82f6' },
+                    { emoji: '⚡', label: 'Turbo',    prob: '5%',  color: '#eab308' },
+                    { emoji: '💣', label: 'Sabotaje', prob: '3%',  color: '#ef4444' },
+                    { emoji: '🎯', label: 'Sniper',   prob: '1%',  color: '#a855f7' },
+                    { emoji: '💀', label: 'Nada',     prob: '1%',  color: '#6b7280' },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center justify-between py-1 px-2 rounded-lg"
                       style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -556,7 +552,6 @@ function Casino() {
                   ))}
                 </div>
               </div>
-
               {spinHistory.length > 0 && (
                 <div>
                   <p className="text-sm font-bold mb-3">Últimas tiradas</p>
@@ -585,7 +580,6 @@ function Casino() {
           <p className="text-center text-sm mb-5" style={{ color: 'var(--text-muted)' }}>
             Ruleta europea clásica · Sin límite de tiradas
           </p>
-
           <div className="mb-5">
             <EuropeanRouletteWheel spinning={betSpinning} targetNumber={betTargetNumber} onSpinEnd={handleBetSpinEnd} />
           </div>
@@ -652,10 +646,7 @@ function Casino() {
             <div className="grid grid-cols-3 gap-2">
               {BET_TYPES.map(bt => (
                 <motion.button key={bt.id} whileTap={{ scale: 0.93 }}
-                  onClick={() => {
-                    setBetType(bt.id)
-                    if (bt.id !== 'number') setBetValue(null)
-                  }}
+                  onClick={() => { setBetType(bt.id); if (bt.id !== 'number') setBetValue(null) }}
                   className="rounded-xl p-2.5 text-center"
                   style={{
                     backgroundColor: betType === bt.id ? 'rgba(185,28,28,0.25)' : 'var(--bg-input)',
@@ -669,7 +660,6 @@ function Casino() {
                 </motion.button>
               ))}
             </div>
-
             {betType === 'number' && (
               <div className="mt-3">
                 <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
@@ -970,7 +960,6 @@ export default function Social() {
         </div>
       </div>
 
-      {/* ── FEED ── */}
       {tab === 'feed' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           {Object.keys(storiesByUser).length > 0 && (
@@ -1035,7 +1024,6 @@ export default function Social() {
         </div>
       )}
 
-      {/* ── HISTORIAS ── */}
       {tab === 'stories' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           <motion.button whileTap={{ scale: 0.96 }} onClick={() => storyImageRef.current?.click()} disabled={uploadingStory}
@@ -1069,7 +1057,6 @@ export default function Social() {
         </div>
       )}
 
-      {/* ── CASINO ── */}
       {tab === 'casino' && <Casino />}
 
       {tab === 'feed' && (
@@ -1080,7 +1067,6 @@ export default function Social() {
         </motion.button>
       )}
 
-      {/* Modal nuevo post */}
       <AnimatePresence>
         {showNewPost && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1131,7 +1117,6 @@ export default function Social() {
         )}
       </AnimatePresence>
 
-      {/* Visor historia */}
       <AnimatePresence>
         {selectedStory && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1149,7 +1134,6 @@ export default function Social() {
         )}
       </AnimatePresence>
 
-      {/* Panel comentarios */}
       <AnimatePresence>
         {openComments && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
