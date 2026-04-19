@@ -11,6 +11,10 @@ export default function Profile() {
   const { theme, setTheme } = useTheme()
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
+  const [history, setHistory] = useState([])
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historyHasMore, setHistoryHasMore] = useState(true)
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [section, setSection] = useState('profile')
@@ -25,42 +29,100 @@ export default function Profile() {
   const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef(null)
 
+  const PAGE_SIZE = 20
+
   useEffect(() => { fetchProfile() }, [])
+
+  useEffect(() => {
+    if (section === 'history' && history.length === 0) fetchHistory(0)
+  }, [section])
 
   const fetchProfile = async () => {
     const [{ data: profileData }, { data: drinksData }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      // Contar solo consumiciones únicas agrupando por drink_group_id
       supabase
         .from('drinks')
         .select('drink_group_id, points, drink_types(name, emoji)')
         .eq('user_id', user.id)
-        .order('consumed_at', { ascending: false })
     ])
 
     setProfile(profileData)
     setNewUsername(profileData?.username || '')
 
     if (drinksData) {
-      // Deduplicar por drink_group_id para no contar la misma consumición varias veces
       const seen = new Set()
       const unique = drinksData.filter(d => {
         if (seen.has(d.drink_group_id)) return false
         seen.add(d.drink_group_id)
         return true
       })
-
-      const total = unique.reduce((sum, d) => sum + d.points, 0)
+      const total = unique.reduce((sum, d) => sum + (d.points || 0), 0)
       const byType = unique.reduce((acc, d) => {
-        const name = d.drink_types.name
-        acc[name] = (acc[name] || 0) + 1
+        const name = d.drink_types?.name || 'Desconocido'
+        const emoji = d.drink_types?.emoji || '🍺'
+        if (!acc[name]) acc[name] = { count: 0, emoji }
+        acc[name].count++
         return acc
       }, {})
-
       setStats({ total, count: unique.length, byType })
     }
 
     setLoading(false)
+  }
+
+  const fetchHistory = async (page) => {
+    setLoadingHistory(true)
+    const from = page * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+
+    // Traemos todas las filas del usuario con la info necesaria y luego deduplicamos
+    // No podemos hacer distinct en supabase-js directamente, así que traemos
+    // un rango generoso y filtramos en cliente
+    const { data } = await supabase
+      .from('drinks')
+      .select(`
+        id, drink_group_id, points, consumed_at,
+        drink_types(name, emoji, points),
+        seasons(active),
+        leagues(name)
+      `)
+      .eq('user_id', user.id)
+      .order('consumed_at', { ascending: false })
+
+    if (!data) { setLoadingHistory(false); return }
+
+    // Deduplicar por drink_group_id manteniendo la primera ocurrencia
+    // pero adjuntando los nombres de todas las ligas
+    const grouped = {}
+    data.forEach(d => {
+      const key = d.drink_group_id
+      if (!grouped[key]) {
+        grouped[key] = {
+          drink_group_id: key,
+          points: d.points,
+          consumed_at: d.consumed_at,
+          drink_type: d.drink_types,
+          season_active: d.seasons?.active,
+          leagues: [],
+        }
+      }
+      if (d.leagues?.name) grouped[key].leagues.push(d.leagues.name)
+    })
+
+    const allUnique = Object.values(grouped)
+      .sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
+
+    const paginated = allUnique.slice(from, to + 1)
+
+    if (page === 0) {
+      setHistory(paginated)
+    } else {
+      setHistory(prev => [...prev, ...paginated])
+    }
+
+    setHistoryHasMore(allUnique.length > to + 1)
+    setHistoryPage(page)
+    setLoadingHistory(false)
   }
 
   const showSuccess = (msg) => {
@@ -124,6 +186,25 @@ export default function Profile() {
     await logout()
   }
 
+  const formatDate = (ts) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  const formatTime = (ts) => {
+    if (!ts) return ''
+    return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  // Agrupar historial por fecha
+  const groupedHistory = history.reduce((groups, item) => {
+    const date = formatDate(item.consumed_at)
+    if (!groups[date]) groups[date] = []
+    groups[date].push(item)
+    return groups
+  }, {})
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)' }}>
       <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>
@@ -131,31 +212,28 @@ export default function Profile() {
   )
 
   return (
-    <div className="min-h-screen pb-24 px-4 pt-6 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen pb-24 px-4 pt-6 transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       <div className="max-w-md mx-auto">
 
         <motion.div {...fadeIn} className="mb-6">
           <h1 className="text-2xl font-bold mb-4">
-            {section === 'profile' ? 'Tu perfil 👤' : 'Ajustes ⚙️'}
+            {section === 'profile' ? 'Tu perfil 👤' : section === 'history' ? 'Historial 🍺' : 'Ajustes ⚙️'}
           </h1>
           <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
             {[
               { id: 'profile',  label: '👤 Perfil' },
+              { id: 'history',  label: '🍺 Historial' },
               { id: 'settings', label: '⚙️ Ajustes' },
             ].map(s => (
-              <button
-                key={s.id}
+              <button key={s.id}
                 onClick={() => { setSection(s.id); setError(''); setSuccessMsg('') }}
-                className="relative flex-1 py-2 rounded-lg text-sm font-medium transition-colors z-10"
-                style={{ color: section === s.id ? '#fff' : 'var(--text-muted)' }}
-              >
+                className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+                style={{ color: section === s.id ? '#fff' : 'var(--text-muted)' }}>
                 {section === s.id && (
-                  <motion.div
-                    layoutId="profile-tab"
-                    className="absolute inset-0 bg-amber-500 rounded-lg"
+                  <motion.div layoutId="profile-tab" className="absolute inset-0 bg-amber-500 rounded-lg"
                     style={{ zIndex: -1 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
                 )}
                 {s.label}
               </button>
@@ -176,14 +254,12 @@ export default function Profile() {
                 {profile?.avatar_url ? (
                   <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-amber-500" />
                 ) : (
-                  <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>
+                  <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl"
+                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>
                 )}
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => fileInputRef.current?.click()}
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingAvatar}
-                  className="absolute bottom-0 right-0 bg-amber-500 hover:bg-amber-400 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm transition-colors"
-                >
+                  className="absolute bottom-0 right-0 bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
                   {uploadingAvatar ? '⏳' : '📷'}
                 </motion.button>
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
@@ -202,28 +278,169 @@ export default function Profile() {
                     { label: 'Consumiciones', value: stats.count },
                     { label: 'Puntos totales', value: stats.total },
                   ].map(stat => (
-                    <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate" className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate"
+                      className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
                       <p className="text-3xl font-bold text-amber-400">{stat.value}</p>
                       <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{stat.label}</p>
                     </motion.div>
                   ))}
                 </div>
 
-                <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <p className="text-sm font-medium mb-3" style={{ color: 'var(--text-muted)' }}>Desglose por bebida</p>
                   {Object.entries(stats.byType).length === 0 ? (
                     <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Aún no has anotado nada</p>
                   ) : (
                     <div className="space-y-2">
-                      {Object.entries(stats.byType).sort(([, a], [, b]) => b - a).map(([name, count]) => (
-                        <div key={name} className="flex justify-between items-center">
-                          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{name}</span>
-                          <span className="text-amber-400 font-bold">{count}</span>
-                        </div>
-                      ))}
+                      {Object.entries(stats.byType)
+                        .sort(([, a], [, b]) => b.count - a.count)
+                        .map(([name, { count, emoji }]) => (
+                          <div key={name} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{emoji}</span>
+                              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 rounded-full bg-amber-500 opacity-60"
+                                style={{ width: `${Math.round((count / stats.count) * 80)}px` }} />
+                              <span className="text-amber-400 font-bold text-sm">{count}</span>
+                            </div>
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
+
+                {/* Acceso rápido al historial */}
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={() => setSection('history')}
+                  className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
+                  style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                  <span>Ver historial completo</span>
+                  <span>→</span>
+                </motion.button>
+              </>
+            )}
+          </motion.div>
+        )}
+
+        {/* ── HISTORIAL ── */}
+        {section === 'history' && (
+          <motion.div {...fadeIn} key="history">
+
+            {/* Resumen rápido */}
+            {stats && (
+              <div className="grid grid-cols-3 gap-2 mb-5">
+                <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <p className="text-xl font-bold text-amber-400">{stats.count}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Total</p>
+                </div>
+                <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <p className="text-xl font-bold text-amber-400">{stats.total}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Puntos</p>
+                </div>
+                <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <p className="text-xl font-bold text-amber-400">
+                    {stats.count > 0 ? (stats.total / stats.count).toFixed(1) : '0'}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Media pts</p>
+                </div>
+              </div>
+            )}
+
+            {history.length === 0 && !loadingHistory ? (
+              <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-5xl mb-3">🍺</div>
+                <p>Aún no has anotado ninguna consumición</p>
+              </div>
+            ) : (
+              <>
+                {Object.entries(groupedHistory).map(([date, items]) => (
+                  <div key={date} className="mb-4">
+                    {/* Separador de fecha */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+                      <span className="text-xs font-semibold px-3 py-1 rounded-full"
+                        style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                        {date}
+                      </span>
+                      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+                    </div>
+
+                    <div className="space-y-2">
+                      {items.map((item, idx) => (
+                        <motion.div key={item.drink_group_id}
+                          variants={staggerItem} initial="initial" animate="animate"
+                          className="rounded-2xl p-3 flex items-center gap-3"
+                          style={{ backgroundColor: 'var(--bg-card)' }}>
+
+                          {/* Emoji bebida */}
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+                            style={{ backgroundColor: 'var(--bg-input)' }}>
+                            {item.drink_type?.emoji || '🍺'}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm">{item.drink_type?.name || 'Bebida'}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {/* Hora */}
+                              <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                                🕐 {formatTime(item.consumed_at)}
+                              </span>
+                              {/* Ligas */}
+                              {item.leagues.slice(0, 2).map(l => (
+                                <span key={l} className="text-xs px-2 py-0.5 rounded-full"
+                                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
+                                  {l}
+                                </span>
+                              ))}
+                              {item.leagues.length > 2 && (
+                                <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                                  +{item.leagues.length - 2}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Puntos */}
+                          <div className="text-right flex-shrink-0">
+                            <p className={`font-bold text-sm ${item.points > 0 ? 'text-amber-400' : item.points < 0 ? 'text-red-400' : ''}`}>
+                              {item.points > 0 ? '+' : ''}{item.points} pts
+                            </p>
+                            <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                              +{Math.floor(item.points * 10)}🪙
+                            </p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Cargar más */}
+                {historyHasMore && (
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    onClick={() => fetchHistory(historyPage + 1)}
+                    disabled={loadingHistory}
+                    className="w-full py-3 rounded-2xl text-sm font-medium mt-2"
+                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                    {loadingHistory ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <motion.div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full"
+                          animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
+                        Cargando...
+                      </div>
+                    ) : 'Cargar más →'}
+                  </motion.button>
+                )}
+
+                {loadingHistory && history.length === 0 && (
+                  <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                      className="text-3xl mb-2">🍺</motion.div>
+                    <p className="text-sm">Cargando historial...</p>
+                  </div>
+                )}
               </>
             )}
           </motion.div>
@@ -235,48 +452,30 @@ export default function Profile() {
 
             <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold mb-4">✏️ Cambiar nombre de usuario</h2>
-              <input
-                type="text"
-                value={newUsername}
-                onChange={e => setNewUsername(e.target.value)}
+              <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)}
                 placeholder="Nuevo nombre de usuario"
-                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3 transition-colors"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-              />
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={handleChangeUsername}
+                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <motion.button whileTap={{ scale: 0.97 }} onClick={handleChangeUsername}
                 disabled={savingUsername || !newUsername.trim() || newUsername === profile?.username}
-                className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
-              >
+                className="w-full bg-amber-500 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm">
                 {savingUsername ? 'Guardando...' : 'Guardar nombre'}
               </motion.button>
             </div>
 
             <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold mb-4">🔒 Cambiar contraseña</h2>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
                 placeholder="Nueva contraseña"
-                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3 transition-colors"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-              />
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
+                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
                 placeholder="Repetir contraseña"
-                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3 transition-colors"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-              />
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={handleChangePassword}
+                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <motion.button whileTap={{ scale: 0.97 }} onClick={handleChangePassword}
                 disabled={savingPassword || !newPassword || !confirmPassword}
-                className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
-              >
+                className="w-full bg-amber-500 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm">
                 {savingPassword ? 'Guardando...' : 'Cambiar contraseña'}
               </motion.button>
             </div>
@@ -289,17 +488,13 @@ export default function Profile() {
                   { id: 'light',  label: 'Claro',   emoji: '☀️' },
                   { id: 'system', label: 'Sistema', emoji: '⚙️' },
                 ].map(t => (
-                  <motion.button
-                    key={t.id}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setTheme(t.id)}
-                    className="flex flex-col items-center gap-2 py-4 rounded-2xl text-sm font-medium transition-colors border-2"
+                  <motion.button key={t.id} whileTap={{ scale: 0.95 }} onClick={() => setTheme(t.id)}
+                    className="flex flex-col items-center gap-2 py-4 rounded-2xl text-sm font-medium border-2"
                     style={{
                       borderColor: theme === t.id ? '#f59e0b' : 'var(--border)',
                       backgroundColor: theme === t.id ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)',
                       color: theme === t.id ? '#f59e0b' : 'var(--text-muted)',
-                    }}
-                  >
+                    }}>
                     <span className="text-2xl">{t.emoji}</span>
                     <span>{t.label}</span>
                     {theme === t.id && <motion.div layoutId="theme-check" className="w-2 h-2 rounded-full bg-amber-400" />}
@@ -313,11 +508,8 @@ export default function Profile() {
               <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>
                 Esta acción es irreversible. Se borrarán todos tus datos, consumiciones y puntos.
               </p>
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setShowDeleteConfirm(true)}
-                className="w-full bg-transparent hover:bg-red-950 text-red-500 hover:text-red-400 font-semibold py-3 rounded-xl border border-red-900 transition-colors text-sm"
-              >
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowDeleteConfirm(true)}
+                className="w-full bg-transparent text-red-500 font-semibold py-3 rounded-xl border border-red-900 text-sm">
                 Eliminar cuenta 🗑️
               </motion.button>
             </div>
@@ -327,35 +519,30 @@ export default function Profile() {
 
       <AnimatePresence>
         {showDeleteConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
-            onClick={() => setShowDeleteConfirm(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
+            onClick={() => setShowDeleteConfirm(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 20 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
               className="rounded-2xl p-6 w-full max-w-sm"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
-            >
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">🗑️</div>
                 <h2 className="text-xl font-bold">¿Eliminar cuenta?</h2>
                 <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
-                  Se borrarán todos tus datos, consumiciones y puntos de forma permanente. Esta acción no se puede deshacer.
+                  Se borrarán todos tus datos, consumiciones y puntos de forma permanente.
                 </p>
               </div>
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowDeleteConfirm(false)} disabled={deleting}
-                  className="flex-1 font-semibold py-3 rounded-xl transition-colors"
+                  className="flex-1 font-semibold py-3 rounded-xl"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   Cancelar
                 </motion.button>
                 <motion.button whileTap={{ scale: 0.96 }} onClick={handleDeleteAccount} disabled={deleting}
-                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-colors">
+                  className="flex-1 bg-red-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl">
                   {deleting ? 'Eliminando...' : 'Eliminar'}
                 </motion.button>
               </div>
