@@ -152,7 +152,6 @@ export default function Market() {
   const [opsToday, setOpsToday] = useState(0)
   const [lastPowerupTime, setLastPowerupTime] = useState(null)
 
-  // Acciones
   const [stockCompanies, setStockCompanies] = useState([])
   const [myStockPositions, setMyStockPositions] = useState([])
   const [myDividends, setMyDividends] = useState([])
@@ -186,11 +185,12 @@ export default function Market() {
   useEffect(() => { fetchAll() }, [])
   useEffect(() => { if (selectedLeague) fetchLeagueMembers(selectedLeague.id) }, [selectedLeague])
 
-    const isMarketOpen = () => {
+  // ✅ CORREGIDO: horario 22:00-02:00h
+  const isMarketOpen = () => {
     const now = new Date()
     const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
     const h = madrid.getHours()
-    return h >= 22 || h < 2  // ← antes era 20
+    return h >= 22 || h < 2
   }
   const marketOpen = isMarketOpen()
 
@@ -420,7 +420,6 @@ export default function Market() {
   const needsTurboDrink = selectedPowerup?.effect_type === 'turbo'
   const needsResetDrink = selectedPowerup?.effect_type === 'market_reset'
 
-  // Cálculos cartera unificada
   const totalStockValue = myStockPositions.reduce((sum, p) => {
     const company = stockCompanies.find(c => c.id === p.company_id)
     return sum + (company ? company.share_price * p.shares : 0)
@@ -438,7 +437,6 @@ export default function Market() {
   }, 0)
   const totalDrinkInvested = myPositions.reduce((sum, p) => sum + p.amount, 0)
   const totalDrinkPnl = totalDrinkValue - totalDrinkInvested
-
   const totalPortfolio = totalStockValue + totalDrinkValue
   const totalInvested = totalStockInvested + totalDrinkInvested
   const totalPnl = totalStockPnl + totalDrinkPnl
@@ -473,6 +471,7 @@ export default function Market() {
                 animate={marketOpen ? { opacity: [1, 0.3, 1] } : {}}
                 transition={{ repeat: Infinity, duration: 1.5 }}
                 style={{ backgroundColor: marketOpen ? '#10b981' : '#ef4444' }} />
+              {/* ✅ CORREGIDO: 22:00h */}
               <p className="text-xs" style={{ color: marketOpen ? '#10b981' : '#ef4444' }}>
                 {marketOpen ? 'Abierto · cierra a las 02:00h 🌙' : 'Cerrado · abre a las 22:00h'}
               </p>
@@ -619,9 +618,7 @@ export default function Market() {
             <motion.div {...fadeIn} className="rounded-2xl p-3 mb-4 text-center"
               style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
               <p className="text-sm font-bold text-amber-400">⏱ Cooldown activo</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                Próximo powerup en {powerupCooldown} min
-              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Próximo powerup en {powerupCooldown} min</p>
             </motion.div>
           )}
           {leagues.length > 0 && (
@@ -665,9 +662,7 @@ export default function Market() {
                   style={{ backgroundColor: 'var(--bg-card)', opacity: canAfford && !onCooldown ? 1 : 0.6 }}>
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ backgroundColor: 'var(--bg-input)' }}>
-                      {pw.emoji}
-                    </div>
+                      style={{ backgroundColor: 'var(--bg-input)' }}>{pw.emoji}</div>
                     <div className="flex-1">
                       <p className="font-bold text-sm">{pw.name}</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{pw.description}</p>
@@ -693,8 +688,6 @@ export default function Market() {
       {/* ── CARTERA UNIFICADA ── */}
       {tab === 'portfolio' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
-
-          {/* Resumen total */}
           <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
             style={{
               background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(99,102,241,0.15))',
@@ -718,22 +711,18 @@ export default function Market() {
               </div>
             </div>
             {estimatedDailyDividend > 0 && (
-              <div className="pt-3 border-t flex items-center justify-between"
-                style={{ borderColor: 'rgba(124,58,237,0.3)' }}>
+              <div className="pt-3 border-t flex items-center justify-between" style={{ borderColor: 'rgba(124,58,237,0.3)' }}>
                 <p className="text-xs" style={{ color: 'var(--text-hint)' }}>💰 Dividendo diario estimado</p>
                 <p className="text-sm font-bold text-amber-400">~{estimatedDailyDividend}🪙</p>
               </div>
             )}
             {inDebt && (
               <div className="pt-2 border-t mt-2" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
-                <p className="text-xs text-red-400 text-center">
-                  🔴 Saldo en números rojos · {balance}🪙
-                </p>
+                <p className="text-xs text-red-400 text-center">🔴 Saldo en números rojos · {balance}🪙</p>
               </div>
             )}
           </motion.div>
 
-          {/* ── Sección: S&PINTA 500 ── */}
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-bold">📊 S&PINTA 500</p>
             {myStockPositions.length > 0 && (
@@ -764,15 +753,11 @@ export default function Market() {
                     className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                     <div className="flex items-center gap-3 mb-2">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ backgroundColor: 'var(--bg-input)' }}>
-                        {company.emoji}
-                      </div>
+                        style={{ backgroundColor: 'var(--bg-input)' }}>{company.emoji}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-sm">{company.name}</p>
-                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-900 text-indigo-400">
-                            {myPct}%
-                          </span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-900 text-indigo-400">{myPct}%</span>
                         </div>
                         <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
                           {pos.shares} acc · precio medio {pos.avg_buy_price.toLocaleString()}🪙
@@ -785,11 +770,8 @@ export default function Market() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between pt-2 border-t"
-                      style={{ borderColor: 'var(--border)' }}>
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                        💰 Dividendo diario estimado
-                      </span>
+                    <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>💰 Dividendo diario estimado</span>
                       <span className="text-xs font-bold text-amber-400">~{dailyDiv}🪙</span>
                     </div>
                   </motion.div>
@@ -798,26 +780,20 @@ export default function Market() {
             </div>
           )}
 
-          {/* Últimos dividendos */}
           {myDividends.length > 0 && (
             <div className="mb-6">
               <p className="text-sm font-bold mb-3">💰 Últimos dividendos</p>
               <div className="space-y-2">
                 {myDividends.map(d => (
-                  <div key={d.id} className="rounded-2xl p-3 flex items-center gap-3"
-                    style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <div key={d.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
                     <span className="text-xl">{d.stock_companies?.emoji}</span>
                     <div className="flex-1">
                       <p className="text-sm font-medium">{d.stock_companies?.name}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                        {formatDate(d.paid_at)} · {d.shares} acc
-                      </p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatDate(d.paid_at)} · {d.shares} acc</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-emerald-400">+{d.amount}🪙</p>
-                      {d.bonus_amount > 0 && (
-                        <p className="text-xs text-amber-400">+{d.bonus_amount}🪙 bonus</p>
-                      )}
+                      {d.bonus_amount > 0 && <p className="text-xs text-amber-400">+{d.bonus_amount}🪙 bonus</p>}
                     </div>
                   </div>
                 ))}
@@ -825,7 +801,6 @@ export default function Market() {
             </div>
           )}
 
-          {/* ── Sección: Posiciones de bebidas ── */}
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-bold">🍺 Posiciones en bebidas</p>
             {myPositions.length > 0 && (
@@ -839,10 +814,7 @@ export default function Market() {
             {closeResult && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="rounded-2xl p-4 mb-4 text-center"
-                style={{
-                  backgroundColor: closeResult.pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-                  border: `1px solid ${closeResult.pnl >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                }}>
+                style={{ backgroundColor: closeResult.pnl >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${closeResult.pnl >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                 <p className="font-bold" style={{ color: closeResult.pnl >= 0 ? '#10b981' : '#ef4444' }}>
                   {closeResult.pnl >= 0 ? '🎉 Ganancia' : '📉 Pérdida'}: {closeResult.pnl >= 0 ? '+' : ''}{closeResult.pnl}🪙
                 </p>
@@ -870,9 +842,7 @@ export default function Market() {
                     className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ backgroundColor: 'var(--bg-input)' }}>
-                        {pos.drink_types?.emoji}
-                      </div>
+                        style={{ backgroundColor: 'var(--bg-input)' }}>{pos.drink_types?.emoji}</div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-sm">{pos.drink_types?.name}</p>
@@ -888,15 +858,10 @@ export default function Market() {
                         {isProfit ? '+' : ''}{pnl}🪙
                       </p>
                     </div>
-                    <motion.button whileTap={{ scale: 0.97 }}
-                      onClick={() => executeClosePosition(pos.id)}
+                    <motion.button whileTap={{ scale: 0.97 }} onClick={() => executeClosePosition(pos.id)}
                       disabled={closingPosition === pos.id}
                       className="w-full py-2.5 rounded-xl text-sm font-semibold"
-                      style={{
-                        backgroundColor: isProfit ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-                        color: isProfit ? '#10b981' : '#ef4444',
-                        border: `1px solid ${isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                      }}>
+                      style={{ backgroundColor: isProfit ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', color: isProfit ? '#10b981' : '#ef4444', border: `1px solid ${isProfit ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                       {closingPosition === pos.id ? 'Cerrando...' : `Cerrar (${isProfit ? '+' : ''}${pnl}🪙)`}
                     </motion.button>
                   </motion.div>
@@ -905,7 +870,6 @@ export default function Market() {
             </div>
           )}
 
-          {/* Tabla de puntos actuales por bebida */}
           <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
             <p className="text-sm font-bold mb-1">¿Cómo ganar 🪙?</p>
             <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>Puntos × 10 = monedas · afectado por el mercado</p>
@@ -924,19 +888,9 @@ export default function Market() {
                       <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{drink.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {isModified && (
-                        <span className="text-xs font-bold" style={{ color: multiplier > 1 ? '#10b981' : '#ef4444' }}>
-                          x{multiplier.toFixed(1)}
-                        </span>
-                      )}
-                      <span className="text-xs px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
-                        {effectivePoints}pts
-                      </span>
-                      <span className="text-sm font-bold"
-                        style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>
-                        +{coins}🪙
-                      </span>
+                      {isModified && <span className="text-xs font-bold" style={{ color: multiplier > 1 ? '#10b981' : '#ef4444' }}>x{multiplier.toFixed(1)}</span>}
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>{effectivePoints}pts</span>
+                      <span className="text-sm font-bold" style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>+{coins}🪙</span>
                     </div>
                   </div>
                 )
@@ -1119,6 +1073,7 @@ export default function Market() {
                 {!marketOpen && (
                   <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)' }}>
                     <p className="text-sm font-bold text-indigo-400">🌙 Mercado cerrado</p>
+                    {/* ✅ CORREGIDO: 22:00h */}
                     <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Solo puedes operar de 22:00 a 02:00h</p>
                   </div>
                 )}
@@ -1137,8 +1092,10 @@ export default function Market() {
                     <div className="mb-4">
                       <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
                       <div className="flex gap-2">
-                        {[{ d: 'long', label: '▲ LONG', sub: 'sube multiplicador', color: '#10b981', bg: 'rgba(16,185,129,0.2)' },
-                          { d: 'short', label: '▼ SHORT', sub: 'baja multiplicador', color: '#ef4444', bg: 'rgba(239,68,68,0.2)' }].map(opt => (
+                        {[
+                          { d: 'long',  label: '▲ LONG',  sub: 'sube multiplicador', color: '#10b981', bg: 'rgba(16,185,129,0.2)' },
+                          { d: 'short', label: '▼ SHORT', sub: 'baja multiplicador', color: '#ef4444', bg: 'rgba(239,68,68,0.2)' },
+                        ].map(opt => (
                           <motion.button key={opt.d} whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection(opt.d)}
                             className="flex-1 py-3 rounded-xl font-bold text-sm"
                             style={{ backgroundColor: tradeDirection === opt.d ? opt.bg : 'var(--bg-input)', color: tradeDirection === opt.d ? opt.color : 'var(--text-muted)', border: tradeDirection === opt.d ? `2px solid ${opt.color}` : '2px solid transparent' }}>
@@ -1201,7 +1158,8 @@ export default function Market() {
                   <div>
                     <h2 className="text-lg font-bold">{selectedPowerup.name}</h2>
                     <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{selectedPowerup.description}</p>
-                    {selectedPowerup.effect_type === 'freeze' ? <p className="text-xs mt-0.5 text-blue-400">⏱ 15 minutos</p>
+                    {selectedPowerup.effect_type === 'freeze'
+                      ? <p className="text-xs mt-0.5 text-blue-400">⏱ 15 minutos</p>
                       : selectedPowerup.duration_hours ? <p className="text-xs mt-0.5 text-amber-400">⏱ {selectedPowerup.duration_hours}h</p> : null}
                   </div>
                 </div>
@@ -1216,7 +1174,8 @@ export default function Market() {
                     className="rounded-2xl p-3 mb-4 text-center"
                     style={{ backgroundColor: buyResult.success ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${buyResult.success ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
                     <p className="text-sm font-bold" style={{ color: buyResult.success ? '#10b981' : '#ef4444' }}>
-                      {buyResult.success ? buyResult.extra?.target ? `✅ ${buyResult.extra.target} ha recibido el impacto` : '✅ Powerup activado'
+                      {buyResult.success
+                        ? buyResult.extra?.target ? `✅ ${buyResult.extra.target} ha recibido el impacto` : '✅ Powerup activado'
                         : `⚠️ ${buyResult.error || 'Escudo bloqueó el ataque 🛡️'}`}
                     </p>
                   </motion.div>
