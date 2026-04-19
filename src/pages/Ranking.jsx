@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { staggerItem } from '../lib/animations'
-import { soundMessage, soundMessageReceived } from '../lib/sounds'
+import { soundMessage, soundMessageReceived, soundSuccess, soundError } from '../lib/sounds'
 import SeasonCountdown from '../components/SeasonCountdown'
 
 export default function Ranking({ selectedLeague, setSelectedLeague }) {
@@ -25,6 +25,16 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [newLeagueName, setNewLeagueName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
+
+  // Transferencias
+  const [transfers, setTransfers] = useState([])
+  const [myBalance, setMyBalance] = useState(0)
+  const [selectedReceiver, setSelectedReceiver] = useState(null)
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferNote, setTransferNote] = useState('')
+  const [sendingTransfer, setSendingTransfer] = useState(false)
+  const [transferResult, setTransferResult] = useState(null)
+  const [loadingTransfers, setLoadingTransfers] = useState(false)
 
   // Unirse con código
   const [showJoinModal, setShowJoinModal] = useState(false)
@@ -72,6 +82,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
   useEffect(() => {
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (tab === 'transfers' && selectedLeague) fetchTransfers(selectedLeague.id)
   }, [messages, tab])
 
   const fetchLeagues = async () => {
@@ -125,12 +136,31 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setMessages(data || [])
   }
 
+  const fetchTransfers = async (leagueId) => {
+    setLoadingTransfers(true)
+    const [{ data: transferData }, { data: walletData }] = await Promise.all([
+      supabase.from('league_transfers')
+        .select('*, sender:profiles!league_transfers_sender_id_fkey(username, avatar_url), receiver:profiles!league_transfers_receiver_id_fkey(username, avatar_url)')
+        .eq('league_id', leagueId)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
+    ])
+    setTransfers(transferData || [])
+    setMyBalance(walletData?.balance || 0)
+    setLoadingTransfers(false)
+  }
+
   const handleSelectLeague = (league) => {
     setSelectedLeague(league)
     setMyRole(league.myRole || 'member')
     setNewLeagueName(league.name)
     setTab('ranking')
     setEditingName(false)
+    setSelectedReceiver(null)
+    setTransferAmount('')
+    setTransferNote('')
+    setTransferResult(null)
   }
 
   const saveLeagueName = async () => {
@@ -176,10 +206,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       setJoinSuccess(`¡Te has unido a ${data.league_name}! 🎉`)
       setJoinCode('')
       fetchLeagues()
-      setTimeout(() => {
-        setShowJoinModal(false)
-        setJoinSuccess('')
-      }, 2000)
+      setTimeout(() => { setShowJoinModal(false); setJoinSuccess('') }, 2000)
     }
     setJoining(false)
   }
@@ -273,8 +300,40 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     fetchMembers(selectedLeague.id)
   }
 
+  const handleSendTransfer = async () => {
+    if (!selectedReceiver || !transferAmount || parseInt(transferAmount) < 1) return
+    setSendingTransfer(true)
+    setTransferResult(null)
+
+    const { data } = await supabase.rpc('send_coins_to_member', {
+      p_league_id: selectedLeague.id,
+      p_receiver_id: selectedReceiver.id,
+      p_amount: parseInt(transferAmount),
+      p_note: transferNote.trim() || null,
+    })
+
+    if (data?.success) {
+      soundSuccess()
+      setTransferResult({ success: true, amount: data.amount, receiver: data.receiver })
+      setMyBalance(prev => prev - data.amount)
+      setTransferAmount('')
+      setTransferNote('')
+      setSelectedReceiver(null)
+      fetchTransfers(selectedLeague.id)
+    } else {
+      soundError()
+      setTransferResult({ success: false, error: data?.error || 'Error al enviar' })
+    }
+
+    setSendingTransfer(false)
+    setTimeout(() => setTransferResult(null), 4000)
+  }
+
   const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
   const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+  const formatDateShort = (ts) => new Date(ts).toLocaleDateString('es-ES', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+  })
 
   const groupedMessages = messages.reduce((groups, msg) => {
     const date = new Date(msg.created_at).toDateString()
@@ -302,6 +361,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     )
   }
 
+  // Miembros de la liga excluyéndome a mí
+  const otherMembers = members.filter(m => m.id !== user.id)
+
   return (
     <div className={`flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`}
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
@@ -309,7 +371,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* Header */}
       <div className="px-4 pt-6 pb-3 flex-shrink-0">
 
-        {/* Selector de liga + botones crear/unirse */}
+        {/* Selector de liga + botones */}
         <div className="flex gap-2 flex-wrap mb-4 items-center">
           {leagues.map(league => (
             <motion.button key={league.id} whileTap={{ scale: 0.95 }}
@@ -320,18 +382,18 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </motion.button>
           ))}
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowJoinModal(true)}
-            className="px-3 py-2 rounded-xl text-sm font-medium transition-colors"
+            className="px-3 py-2 rounded-xl text-sm font-medium"
             style={{ backgroundColor: 'var(--bg-card)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
             + Unirse
           </motion.button>
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowCreateModal(true)}
-            className="px-3 py-2 rounded-xl text-sm font-medium transition-colors"
+            className="px-3 py-2 rounded-xl text-sm font-medium"
             style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
             + Crear
           </motion.button>
         </div>
 
-        {/* Nombre de liga + editar */}
+        {/* Nombre de liga */}
         {selectedLeague && (
           <div className="mb-4">
             {editingName ? (
@@ -345,7 +407,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold">
                   {savingName ? '...' : 'Guardar'}
                 </motion.button>
-                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setEditingName(false); setNewLeagueName(selectedLeague.name) }}
+                <motion.button whileTap={{ scale: 0.95 }}
+                  onClick={() => { setEditingName(false); setNewLeagueName(selectedLeague.name) }}
                   className="px-3 py-2 rounded-xl text-sm"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
@@ -354,10 +417,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 <h1 className="text-2xl font-bold">{selectedLeague.name}</h1>
                 {myRole === 'owner' && (
                   <motion.button whileTap={{ scale: 0.9 }} onClick={() => setEditingName(true)}
-                    className="p-1.5 rounded-lg text-sm transition-colors"
-                    style={{ color: 'var(--text-hint)', backgroundColor: 'var(--bg-input)' }}>
-                    ✏️
-                  </motion.button>
+                    className="p-1.5 rounded-lg text-sm"
+                    style={{ color: 'var(--text-hint)', backgroundColor: 'var(--bg-input)' }}>✏️</motion.button>
                 )}
               </div>
             )}
@@ -377,7 +438,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               </p>
             </div>
             <motion.button whileTap={{ scale: 0.9 }} onClick={copyCode}
-              className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl transition-colors font-medium"
+              className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl font-medium"
               style={{
                 backgroundColor: codeCopied ? 'rgba(16,185,129,0.15)' : 'var(--bg-input)',
                 color: codeCopied ? '#10b981' : 'var(--text-muted)',
@@ -387,20 +448,23 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Pestañas */}
+        {/* Pestañas — ahora con 💸 Transferencias */}
         {selectedLeague && (
           <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
             {[
-              { id: 'ranking', label: '🏆 Ranking' },
-              { id: 'members', label: '👥 Miembros' },
-              { id: 'chat',    label: '💬 Chat' },
+              { id: 'ranking',   label: '🏆 Ranking' },
+              { id: 'members',   label: '👥 Miembros' },
+              { id: 'transfers', label: '💸 Enviar' },
+              { id: 'chat',      label: '💬 Chat' },
             ].map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
                 style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
                 {tab === t.id && (
-                  <motion.div layoutId="tab-indicator" className="absolute inset-0 bg-amber-500 rounded-lg"
-                    style={{ zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+                  <motion.div layoutId="tab-indicator"
+                    className="absolute inset-0 rounded-lg"
+                    style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : '#f59e0b' }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
                 )}
                 {t.label}
               </button>
@@ -408,7 +472,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Estado vacío si no hay ligas */}
         {leagues.length === 0 && (
           <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
             <div className="text-5xl mb-3">🏆</div>
@@ -536,11 +599,236 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
             {myRole !== 'owner' && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={leaveLeague}
-                className="w-full mt-2 bg-transparent text-red-500 font-semibold py-3 rounded-2xl border border-red-900 transition-colors">
+                className="w-full mt-2 bg-transparent text-red-500 font-semibold py-3 rounded-2xl border border-red-900">
                 Abandonar liga 🚪
               </motion.button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── TRANSFERENCIAS ── */}
+      {tab === 'transfers' && selectedLeague && (
+        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+
+          {/* Saldo actual */}
+          <div className="rounded-2xl p-4 mb-5 flex items-center justify-between"
+            style={{
+              backgroundColor: myBalance < 0 ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+              border: `1px solid ${myBalance < 0 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.25)'}`,
+            }}>
+            <div>
+              <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-muted)' }}>Tu saldo disponible</p>
+              <p className="text-2xl font-black" style={{ color: myBalance < 0 ? '#ef4444' : '#10b981' }}>
+                {myBalance.toLocaleString()}🪙
+              </p>
+            </div>
+            <span className="text-3xl">{myBalance < 0 ? '🔴' : '🪙'}</span>
+          </div>
+
+          {/* Resultado de la última transferencia */}
+          <AnimatePresence>
+            {transferResult && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="rounded-2xl p-4 mb-4 text-center"
+                style={{
+                  backgroundColor: transferResult.success ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                  border: `1px solid ${transferResult.success ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                }}>
+                {transferResult.success ? (
+                  <>
+                    <p className="text-xl mb-1">💸</p>
+                    <p className="font-bold text-emerald-400">
+                      ¡{transferResult.amount}🪙 enviadas a {transferResult.receiver}!
+                    </p>
+                  </>
+                ) : (
+                  <p className="font-bold text-red-400">⚠️ {transferResult.error}</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Formulario de envío */}
+          <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-sm font-bold mb-3">Enviar monedas 💸</p>
+
+            {/* Selector de receptor */}
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>¿A quién?</p>
+            {otherMembers.length === 0 ? (
+              <div className="rounded-xl p-3 text-center mb-3"
+                style={{ backgroundColor: 'var(--bg-input)' }}>
+                <p className="text-sm" style={{ color: 'var(--text-hint)' }}>No hay otros miembros en la liga</p>
+              </div>
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+                {otherMembers.map(member => (
+                  <motion.button key={member.id} whileTap={{ scale: 0.93 }}
+                    onClick={() => setSelectedReceiver(selectedReceiver?.id === member.id ? null : member)}
+                    className="flex-shrink-0 flex flex-col items-center gap-1 p-2 rounded-2xl min-w-16"
+                    style={{
+                      backgroundColor: selectedReceiver?.id === member.id ? 'rgba(16,185,129,0.15)' : 'var(--bg-input)',
+                      border: selectedReceiver?.id === member.id ? '2px solid #10b981' : '2px solid transparent',
+                    }}>
+                    <Avatar url={member.avatar_url} username={member.username} size="sm" />
+                    <p className="text-xs font-medium truncate w-14 text-center"
+                      style={{ color: selectedReceiver?.id === member.id ? '#10b981' : 'var(--text-muted)' }}>
+                      {member.username}
+                    </p>
+                    {selectedReceiver?.id === member.id && (
+                      <span className="text-xs text-emerald-400">✓</span>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
+            )}
+
+            {/* Cantidad */}
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Cantidad</p>
+            <div className="relative mb-3">
+              <input
+                type="number"
+                value={transferAmount}
+                onChange={e => setTransferAmount(e.target.value)}
+                placeholder="0"
+                min="1"
+                max={myBalance}
+                className="w-full rounded-xl px-4 py-3 text-lg font-bold outline-none focus:ring-2 focus:ring-emerald-500 pr-10"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lg">🪙</span>
+            </div>
+
+            {/* Accesos rápidos */}
+            <div className="flex gap-2 mb-3">
+              {[50, 100, 250, 500].filter(v => v <= myBalance).map(v => (
+                <motion.button key={v} whileTap={{ scale: 0.9 }}
+                  onClick={() => setTransferAmount(String(v))}
+                  className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                  style={{
+                    backgroundColor: parseInt(transferAmount) === v ? '#10b981' : 'var(--bg-input)',
+                    color: parseInt(transferAmount) === v ? '#fff' : 'var(--text-muted)',
+                  }}>
+                  {v}
+                </motion.button>
+              ))}
+              <motion.button whileTap={{ scale: 0.9 }}
+                onClick={() => setTransferAmount(String(Math.max(0, myBalance)))}
+                className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                style={{
+                  backgroundColor: 'var(--bg-input)',
+                  color: 'var(--text-muted)',
+                }}>
+                Max
+              </motion.button>
+            </div>
+
+            {/* Nota opcional */}
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Nota (opcional)</p>
+            <input
+              type="text"
+              value={transferNote}
+              onChange={e => setTransferNote(e.target.value)}
+              placeholder="¿Por qué le envías? 🍺"
+              maxLength={60}
+              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
+              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
+            />
+
+            {/* Resumen */}
+            {selectedReceiver && transferAmount && parseInt(transferAmount) > 0 && (
+              <div className="rounded-xl p-3 mb-4 flex items-center justify-between"
+                style={{ backgroundColor: 'var(--bg-base)' }}>
+                <div className="flex items-center gap-2">
+                  <Avatar url={selectedReceiver.avatar_url} username={selectedReceiver.username} size="sm" />
+                  <span className="text-sm font-medium">{selectedReceiver.username}</span>
+                </div>
+                <span className="font-black text-emerald-400 text-lg">+{transferAmount}🪙</span>
+              </div>
+            )}
+
+            <motion.button whileTap={{ scale: 0.97 }} onClick={handleSendTransfer}
+              disabled={
+                sendingTransfer ||
+                !selectedReceiver ||
+                !transferAmount ||
+                parseInt(transferAmount) < 1 ||
+                parseInt(transferAmount) > myBalance
+              }
+              className="w-full py-4 rounded-2xl font-bold text-white text-sm disabled:opacity-40"
+              style={{ backgroundColor: '#10b981' }}>
+              {sendingTransfer ? 'Enviando...' :
+                !selectedReceiver ? '← Elige un destinatario' :
+                !transferAmount || parseInt(transferAmount) < 1 ? '← Escribe una cantidad' :
+                parseInt(transferAmount) > myBalance ? 'Saldo insuficiente' :
+                `💸 Enviar ${transferAmount}🪙 a ${selectedReceiver.username}`}
+            </motion.button>
+          </div>
+
+          {/* Historial de la liga */}
+          <p className="text-sm font-bold mb-3">Historial de la liga</p>
+          {loadingTransfers ? (
+            <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                className="text-3xl mb-2">💸</motion.div>
+              <p className="text-sm">Cargando...</p>
+            </div>
+          ) : transfers.length === 0 ? (
+            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+              <div className="text-4xl mb-2">💸</div>
+              <p className="text-sm">Aún no hay transferencias en esta liga</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {transfers.map(tx => {
+                const isMe = tx.sender_id === user.id
+                const isMeReceiver = tx.receiver_id === user.id
+                return (
+                  <motion.div key={tx.id} variants={staggerItem} initial="initial" animate="animate"
+                    className="rounded-2xl p-3 flex items-center gap-3"
+                    style={{
+                      backgroundColor: 'var(--bg-card)',
+                      border: isMe || isMeReceiver
+                        ? `1px solid ${isMeReceiver ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.2)'}`
+                        : '1px solid transparent',
+                    }}>
+
+                    {/* Avatar del emisor */}
+                    <div className="relative flex-shrink-0">
+                      <Avatar url={tx.sender?.avatar_url} username={tx.sender?.username} size="sm" />
+                      <div className="absolute -bottom-1 -right-1 text-sm">💸</div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        <span style={{ color: isMe ? '#f59e0b' : 'var(--text-primary)' }}>
+                          {isMe ? 'Tú' : tx.sender?.username}
+                        </span>
+                        <span style={{ color: 'var(--text-hint)' }}> → </span>
+                        <span style={{ color: isMeReceiver ? '#10b981' : 'var(--text-primary)' }}>
+                          {isMeReceiver ? 'Tú' : tx.receiver?.username}
+                        </span>
+                      </p>
+                      {tx.note && (
+                        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-hint)' }}>
+                          "{tx.note}"
+                        </p>
+                      )}
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                        {formatDateShort(tx.created_at)}
+                      </p>
+                    </div>
+
+                    <div className="text-right flex-shrink-0">
+                      <p className={`font-black text-base ${isMeReceiver ? 'text-emerald-400' : isMe ? 'text-amber-400' : 'var(--text-muted)'}`}>
+                        {isMeReceiver ? '+' : isMe ? '-' : ''}{tx.amount}🪙
+                      </p>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -625,7 +913,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '120px' }} />
               <motion.button whileTap={{ scale: 0.9 }} onClick={sendMessage}
                 disabled={!newMessage.trim() || sending}
-                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white p-3 rounded-2xl flex-shrink-0">
+                className="bg-amber-500 disabled:opacity-40 text-white p-3 rounded-2xl flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                   <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                 </svg>
@@ -654,8 +942,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
             onClick={() => setKickTarget(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 20 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
@@ -675,7 +962,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   Cancelar
                 </motion.button>
                 <motion.button whileTap={{ scale: 0.96 }} onClick={kickMember}
-                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl">
+                  className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl">
                   Expulsar
                 </motion.button>
               </div>
@@ -690,8 +977,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
             onClick={() => setRoleTarget(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 20 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
@@ -752,14 +1038,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL UNIRSE CON CÓDIGO ── */}
+      {/* Modal unirse */}
       <AnimatePresence>
         {showJoinModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
             onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 20 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
@@ -768,46 +1053,32 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">🔑</div>
                 <h2 className="text-xl font-bold">Unirse a una liga</h2>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Introduce el código de invitación
-                </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Introduce el código de invitación</p>
               </div>
-
-              <input
-                type="text"
-                value={joinCode}
+              <input type="text" value={joinCode}
                 onChange={e => { setJoinCode(e.target.value.toUpperCase()); setJoinError('') }}
                 placeholder="BEER-XXXX-XXXX"
                 className="w-full rounded-xl px-4 py-3 text-center font-bold tracking-widest text-lg outline-none focus:ring-2 focus:ring-amber-500 mb-3"
                 style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                maxLength={14}
-              />
-
+                maxLength={14} />
               <AnimatePresence>
                 {joinError && (
                   <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                    className="text-red-400 text-sm text-center mb-3">
-                    ⚠️ {joinError}
-                  </motion.p>
+                    className="text-red-400 text-sm text-center mb-3">⚠️ {joinError}</motion.p>
                 )}
                 {joinSuccess && (
                   <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                    className="text-emerald-400 text-sm text-center mb-3 font-bold">
-                    {joinSuccess}
-                  </motion.p>
+                    className="text-emerald-400 text-sm text-center mb-3 font-bold">{joinSuccess}</motion.p>
                 )}
               </AnimatePresence>
-
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }}
                   onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }}
                   className="flex-1 font-semibold py-3 rounded-xl"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
-                  Cancelar
-                </motion.button>
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
                 <motion.button whileTap={{ scale: 0.96 }} onClick={handleJoinLeague}
                   disabled={!joinCode.trim() || joining}
-                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-3 rounded-xl">
+                  className="flex-1 bg-amber-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl">
                   {joining ? 'Uniéndose...' : 'Unirse'}
                 </motion.button>
               </div>
@@ -816,14 +1087,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL CREAR LIGA ── */}
+      {/* Modal crear liga */}
       <AnimatePresence>
         {showCreateModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
             onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 20 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
@@ -846,12 +1116,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 <motion.button whileTap={{ scale: 0.96 }}
                   onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }}
                   className="flex-1 font-semibold py-3 rounded-xl"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
-                  Cancelar
-                </motion.button>
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
                 <motion.button whileTap={{ scale: 0.96 }} onClick={handleCreateLeague}
                   disabled={!newLeagueCreateName.trim() || creating}
-                  className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold py-3 rounded-xl">
+                  className="flex-1 bg-amber-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl">
                   {creating ? 'Creando...' : 'Crear'}
                 </motion.button>
               </div>
