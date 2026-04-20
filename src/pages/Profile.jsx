@@ -11,69 +11,100 @@ import { soundError, soundSuccess as soundOk } from '../lib/sounds'
 
 const ACHIEVEMENTS = [
   // Consumiciones
-  { id: 'first_drink',     emoji: '🍺', name: 'Primera ronda',      desc: 'Anota tu primera consumición',             category: 'consumiciones' },
-  { id: 'drinks_10',       emoji: '🔟', name: 'Bebedor consistente', desc: 'Acumula 10 consumiciones',                 category: 'consumiciones' },
-  { id: 'drinks_50',       emoji: '🏅', name: 'Veterano',            desc: 'Acumula 50 consumiciones',                 category: 'consumiciones' },
-  { id: 'drinks_100',      emoji: '👑', name: 'Leyenda',             desc: 'Acumula 100 consumiciones',                category: 'consumiciones' },
-  { id: 'martes_macarra',  emoji: '🔥', name: 'Martes Macarra',      desc: 'Anota una consumición en Martes Macarra',  category: 'consumiciones' },
-  { id: 'variety_5',       emoji: '🌈', name: 'Paladar exquisito',   desc: 'Prueba 5 tipos de bebida distintos',       category: 'consumiciones' },
-  // Casino & Mercado
-  { id: 'roulette_win',    emoji: '🎰', name: 'Golpe de suerte',     desc: 'Gana en la ruleta de apuestas',            category: 'casino' },
-  { id: 'roulette_3wins',  emoji: '🎯', name: 'En racha',            desc: 'Gana 3 veces seguidas en ruleta',          category: 'casino' },
-  { id: 'millionaire',     emoji: '💰', name: 'Millonario',          desc: 'Acumula 1000 monedas',                     category: 'casino' },
-  { id: 'market_5',        emoji: '📈', name: 'Tiburón del mercado', desc: 'Abre 5 posiciones en el mercado',          category: 'casino' },
-  { id: 'big_bet',         emoji: '🎲', name: 'Todo o nada',         desc: 'Apuesta 500+ en una sola tirada',          category: 'casino' },
+  { id: 'first_drink',       emoji: '🍺', name: 'Primera ronda',          desc: 'Anota tu primera consumición',                        category: 'consumiciones' },
+  { id: 'drinks_10',         emoji: '🔟', name: 'Bebedor consistente',     desc: 'Acumula 10 consumiciones',                            category: 'consumiciones' },
+  { id: 'drinks_50',         emoji: '🏅', name: 'Veterano',                desc: 'Acumula 50 consumiciones',                            category: 'consumiciones' },
+  { id: 'drinks_100',        emoji: '👑', name: 'Leyenda',                 desc: 'Acumula 100 consumiciones',                           category: 'consumiciones' },
+  { id: 'martes_macarra',    emoji: '🔥', name: 'Martes Macarra',          desc: 'Anota una consumición en Martes Macarra',             category: 'consumiciones' },
+  { id: 'variety_5',         emoji: '🌈', name: 'Paladar exquisito',       desc: 'Prueba 5 tipos de bebida distintos',                  category: 'consumiciones' },
+  { id: 'drinks_day_3',      emoji: '🚀', name: 'Calentando motores',      desc: 'Anota 3 consumiciones en un mismo día',               category: 'consumiciones' },
+  { id: 'drinks_day_10',     emoji: '🚨', name: 'Esto ya es un problema',  desc: 'Anota 10 consumiciones en un mismo día',              category: 'consumiciones' },
+  { id: 'top1_league',       emoji: '🥇', name: 'El último en pie',        desc: 'Llega al top 1 del ranking de tu liga',               category: 'consumiciones' },
+  { id: 'come_back',         emoji: '🧟', name: 'Abstemio rehabilitado',   desc: 'Vuelve a anotar tras 7 días sin nada',                category: 'consumiciones' },
+  { id: 'most_active',       emoji: '🏃', name: 'El del bar',              desc: 'Sé el miembro más activo de tu liga',                 category: 'consumiciones' },
+  // Casino & Dinero
+  { id: 'roulette_win',      emoji: '🎰', name: 'Golpe de suerte',         desc: 'Gana en la ruleta de apuestas',                       category: 'casino' },
+  { id: 'roulette_3wins',    emoji: '🎯', name: 'En racha',                desc: 'Gana 3 veces seguidas en ruleta',                     category: 'casino' },
+  { id: 'millionaire',       emoji: '💰', name: 'Millonario',              desc: 'Acumula 1000 monedas',                                category: 'casino' },
+  { id: 'market_5',          emoji: '📈', name: 'Tiburón del mercado',     desc: 'Abre 5 posiciones en el mercado',                     category: 'casino' },
+  { id: 'big_bet',           emoji: '🎲', name: 'Todo o nada',             desc: 'Apuesta 500+ en una sola tirada',                     category: 'casino' },
+  { id: 'broke',             emoji: '🪙', name: 'Pelado',                  desc: 'Llega a 0 monedas exactas',                           category: 'casino' },
+  { id: 'negative_balance',  emoji: '📉', name: 'En números rojos',        desc: 'Ten saldo negativo',                                  category: 'casino' },
+  { id: 'lender',            emoji: '🏦', name: 'Prestamista',             desc: 'Envía monedas a 3 personas distintas',                category: 'casino' },
+  { id: 'big_sender',        emoji: '💸', name: 'El que invita',           desc: 'Envía más de 1000 monedas en total',                  category: 'casino' },
+  { id: 'roulette_10bets',   emoji: '🎡', name: 'Tahúr',                   desc: 'Haz 10 apuestas en la ruleta',                        category: 'casino' },
+  { id: 'big_win',           emoji: '🤑', name: 'Rompebancos',             desc: 'Gana más de 500 monedas en una sola tirada',          category: 'casino' },
   // Social & Powerups
-  { id: 'sabotage',        emoji: '💣', name: 'Saboteador',          desc: 'Aplica un Sabotaje a otro miembro',        category: 'social' },
-  { id: 'shield',          emoji: '🛡️', name: 'Protegido',           desc: 'Usa un Escudo',                            category: 'social' },
-  { id: 'generous',        emoji: '💸', name: 'Generoso',            desc: 'Envía monedas a otro miembro',             category: 'social' },
-  { id: 'popular',         emoji: '❤️', name: 'Popular',             desc: 'Recibe 10 likes en tus posts',             category: 'social' },
+  { id: 'sabotage',          emoji: '💣', name: 'Saboteador',              desc: 'Aplica un Sabotaje a otro miembro',                   category: 'social' },
+  { id: 'shield',            emoji: '🛡️', name: 'Protegido',               desc: 'Usa un Escudo',                                       category: 'social' },
+  { id: 'generous',          emoji: '💸', name: 'Generoso',                desc: 'Envía monedas a otro miembro',                        category: 'social' },
+  { id: 'popular',           emoji: '❤️', name: 'Popular',                 desc: 'Recibe 10 likes en tus posts',                        category: 'social' },
+  { id: 'pacifist',          emoji: '☮️', name: 'Pacifista',               desc: 'Lleva 7 días sin usar ningún powerup de ataque',      category: 'social' },
+  { id: 'war_mode',          emoji: '⚔️', name: 'Guerra total',            desc: 'Usa Sabotaje y Sniper en el mismo día',               category: 'social' },
+  { id: 'revenge',           emoji: '🗡️', name: 'Venganza servida fría',   desc: 'Usa Sabotaje a alguien que te lo usó antes',          category: 'social' },
+  { id: 'influencer',        emoji: '🌟', name: 'Influencer',              desc: 'Ten 5 seguidores',                                    category: 'social' },
+  { id: 'chatterbox',        emoji: '💬', name: 'Tertuliano',              desc: 'Escribe 50 mensajes en chats de liga',                category: 'social' },
+  { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas',      desc: 'Sube 5 historias',                                   category: 'social' },
 ]
 
 const CATEGORY_LABELS = {
   consumiciones: '🍺 Consumiciones',
-  casino:        '🎰 Casino & Mercado',
+  casino:        '🎰 Casino & Dinero',
   social:        '⚡ Social & Powerups',
 }
 
-// ─── LÓGICA DE DETECCIÓN DE LOGROS ───────────────────────────────────────────
+// ─── LÓGICA DE DETECCIÓN ──────────────────────────────────────────────────────
 
-async function detectAchievements(userId, stats, supabase) {
+async function detectAchievements(userId, stats, supabaseClient) {
   const toUnlock = []
 
-  // Datos adicionales necesarios
   const [
     { data: drinks },
     { data: wallet },
     { data: marketPositions },
     { data: rouletteBets },
-    { data: activePoweups },
+    { data: activePowerups },
     { data: transfers },
-    { data: postLikes },
+    { data: followers },
+    { data: stories },
+    { data: messages },
+    { data: leagueMembers },
   ] = await Promise.all([
-    supabase.from('drinks').select('drink_type_id, consumed_at').eq('user_id', userId),
-    supabase.from('wallets').select('balance').eq('user_id', userId).single(),
-    supabase.from('market_positions').select('id').eq('user_id', userId),
-    supabase.from('roulette_bets').select('won, created_at').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('active_powerups').select('powerup_id, effect_type').eq('user_id', userId),
-    supabase.from('league_transfers').select('id').eq('sender_id', userId),
-    supabase.from('post_likes').select('posts(user_id)').eq('posts.user_id', userId),
+    supabaseClient.from('drinks').select('drink_type_id, consumed_at, league_id, user_id').eq('user_id', userId),
+    supabaseClient.from('wallets').select('balance').eq('user_id', userId).single(),
+    supabaseClient.from('market_positions').select('id').eq('user_id', userId),
+    supabaseClient.from('roulette_bets').select('won, net, created_at, bet_amount').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabaseClient.from('active_powerups').select('powerup_id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
+    supabaseClient.from('league_transfers').select('receiver_id, amount, created_at').eq('sender_id', userId),
+    supabaseClient.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', userId),
+    supabaseClient.from('stories').select('id').eq('user_id', userId),
+    supabaseClient.from('messages').select('id').eq('user_id', userId),
+    supabaseClient.from('league_members').select('league_id').eq('user_id', userId),
   ])
 
   const uniqueDrinks = stats?.count || 0
   const drinkTypes = new Set((drinks || []).map(d => d.drink_type_id))
   const balance = wallet?.balance || 0
   const marketCount = marketPositions?.length || 0
-  const transferCount = transfers?.length || 0
+  const followersCount = followers?.count || 0
+  const storiesCount = stories?.length || 0
+  const messagesCount = messages?.length || 0
 
-  // Martes Macarra: consumición un martes
+  // Consumiciones por día
+  const drinksByDay = (drinks || []).reduce((acc, d) => {
+    const day = new Date(d.consumed_at).toDateString()
+    acc[day] = (acc[day] || 0) + 1
+    return acc
+  }, {})
+  const maxDrinksInDay = Math.max(0, ...Object.values(drinksByDay))
+
+  // Martes Macarra
   const hasMartesM = (drinks || []).some(d => {
-    const date = new Date(d.consumed_at)
-    const madridDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+    const madridDate = new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
     return madridDate.getDay() === 2
   })
 
-  // Rachas ruleta
+  // Racha ruleta
   let rouletteStreak = 0
   for (const bet of (rouletteBets || [])) {
     if (bet.won) rouletteStreak++
@@ -81,43 +112,132 @@ async function detectAchievements(userId, stats, supabase) {
   }
 
   // Big bet
-  const { data: bigBets } = await supabase
-    .from('roulette_bets').select('bet_amount').eq('user_id', userId).gte('bet_amount', 500).limit(1)
+  const hasBigBet = (rouletteBets || []).some(b => b.bet_amount >= 500)
 
-  // Sabotaje y escudo
-  const hasSabotage = (activePoweups || []).some(p => p.effect_type === 'sabotage')
-  const hasShield = (activePoweups || []).some(p => p.effect_type === 'shield')
+  // Big win
+  const hasBigWin = (rouletteBets || []).some(b => b.won && b.net >= 500)
+
+  // Apuestas totales
+  const totalBets = (rouletteBets || []).length
+
+  // Ruleta ganada alguna vez
+  const hasRouletteWin = (rouletteBets || []).some(b => b.won)
+
+  // Transfers
+  const uniqueReceivers = new Set((transfers || []).map(t => t.receiver_id))
+  const totalSent = (transfers || []).reduce((s, t) => s + (t.amount || 0), 0)
+
+  // Powerups
+  const hasSabotage = (activePowerups || []).some(p => p.effect_type === 'sabotage')
+  const hasShieldUsed = (activePowerups || []).some(p => p.effect_type === 'shield')
+
+  // Guerra total: sabotaje y sniper el mismo día
+  const attackPowerupsByDay = (activePowerups || []).reduce((acc, p) => {
+    if (['sabotage', 'sniper'].includes(p.effect_type)) {
+      const day = new Date(p.created_at).toDateString()
+      if (!acc[day]) acc[day] = new Set()
+      acc[day].add(p.effect_type)
+    }
+    return acc
+  }, {})
+  const hasWarMode = Object.values(attackPowerupsByDay).some(s => s.has('sabotage') && s.has('sniper'))
+
+  // Venganza: alguien me usó sabotaje y yo se lo devolví
+  let hasRevenge = false
+  if (hasSabotage) {
+    const { data: receivedSabotage } = await supabaseClient
+      .from('active_powerups').select('user_id, created_at')
+      .eq('target_user_id', userId).eq('effect_type', 'sabotage')
+    if (receivedSabotage && receivedSabotage.length > 0) {
+      const attackerIds = new Set(receivedSabotage.map(s => s.user_id))
+      const myAttacks = (activePowerups || []).filter(p => p.effect_type === 'sabotage')
+      hasRevenge = myAttacks.some(a => attackerIds.has(a.target_user_id))
+    }
+  }
+
+  // Pacifista: sin powerups de ataque en 7 días
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const recentAttacks = (activePowerups || []).filter(p =>
+    ['sabotage', 'sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo
+  )
+  const isPacifist = uniqueDrinks > 0 && recentAttacks.length === 0
+
+  // Come back: última consumición hace más de 7 días y ahora hay una nueva
+  const sortedDrinks = [...(drinks || [])].sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
+  let hasComeBack = false
+  if (sortedDrinks.length >= 2) {
+    const latest = new Date(sortedDrinks[0].consumed_at)
+    const previous = new Date(sortedDrinks[1].consumed_at)
+    const daysBetween = (latest - previous) / (1000 * 60 * 60 * 24)
+    hasComeBack = daysBetween >= 7
+  }
+
+  // Top 1 en alguna liga
+  let isTop1 = false
+  for (const lm of (leagueMembers || [])) {
+    const { data: ranking } = await supabaseClient
+      .from('league_rankings').select('user_id')
+      .eq('league_id', lm.league_id)
+      .order('total_points', { ascending: false })
+      .limit(1).maybeSingle()
+    if (ranking?.user_id === userId) { isTop1 = true; break }
+  }
+
+  // Miembro más activo en alguna liga
+  let isMostActive = false
+  for (const lm of (leagueMembers || [])) {
+    const { data: rankingAll } = await supabaseClient
+      .from('league_rankings').select('user_id, total_drinks')
+      .eq('league_id', lm.league_id)
+      .order('total_drinks', { ascending: false })
+      .limit(1).maybeSingle()
+    if (rankingAll?.user_id === userId) { isMostActive = true; break }
+  }
 
   // Likes en posts propios
-  const { data: myPosts } = await supabase.from('posts').select('id').eq('user_id', userId)
+  const { data: myPosts } = await supabaseClient.from('posts').select('id').eq('user_id', userId)
   let totalLikes = 0
   if (myPosts && myPosts.length > 0) {
-    const { count } = await supabase.from('post_likes')
+    const { count } = await supabaseClient.from('post_likes')
       .select('id', { count: 'exact', head: true })
       .in('post_id', myPosts.map(p => p.id))
     totalLikes = count || 0
   }
 
-  // Ruleta ganada
-  const hasRouletteWin = (rouletteBets || []).some(b => b.won)
-
-  // Mapeo de condiciones
+  // Mapa de condiciones
   const conditions = {
-    first_drink:    uniqueDrinks >= 1,
-    drinks_10:      uniqueDrinks >= 10,
-    drinks_50:      uniqueDrinks >= 50,
-    drinks_100:     uniqueDrinks >= 100,
-    martes_macarra: hasMartesM,
-    variety_5:      drinkTypes.size >= 5,
-    roulette_win:   hasRouletteWin,
-    roulette_3wins: rouletteStreak >= 3,
-    millionaire:    balance >= 1000,
-    market_5:       marketCount >= 5,
-    big_bet:        (bigBets || []).length > 0,
-    sabotage:       hasSabotage,
-    shield:         hasShield,
-    generous:       transferCount >= 1,
-    popular:        totalLikes >= 10,
+    first_drink:      uniqueDrinks >= 1,
+    drinks_10:        uniqueDrinks >= 10,
+    drinks_50:        uniqueDrinks >= 50,
+    drinks_100:       uniqueDrinks >= 100,
+    martes_macarra:   hasMartesM,
+    variety_5:        drinkTypes.size >= 5,
+    drinks_day_3:     maxDrinksInDay >= 3,
+    drinks_day_10:    maxDrinksInDay >= 10,
+    top1_league:      isTop1,
+    come_back:        hasComeBack,
+    most_active:      isMostActive,
+    roulette_win:     hasRouletteWin,
+    roulette_3wins:   rouletteStreak >= 3,
+    millionaire:      balance >= 1000,
+    market_5:         marketCount >= 5,
+    big_bet:          hasBigBet,
+    broke:            balance === 0 && uniqueDrinks > 0,
+    negative_balance: balance < 0,
+    lender:           uniqueReceivers.size >= 3,
+    big_sender:       totalSent >= 1000,
+    roulette_10bets:  totalBets >= 10,
+    big_win:          hasBigWin,
+    sabotage:         hasSabotage,
+    shield:           hasShieldUsed,
+    generous:         (transfers || []).length >= 1,
+    popular:          totalLikes >= 10,
+    pacifist:         isPacifist,
+    war_mode:         hasWarMode,
+    revenge:          hasRevenge,
+    influencer:       followersCount >= 5,
+    chatterbox:       messagesCount >= 50,
+    photographer:     storiesCount >= 5,
   }
 
   for (const [id, condition] of Object.entries(conditions)) {
@@ -127,7 +247,7 @@ async function detectAchievements(userId, stats, supabase) {
   return toUnlock
 }
 
-// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
+// ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 
 export default function Profile() {
   const { user, logout } = useAuth()
@@ -152,16 +272,14 @@ export default function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Logros
   const [unlockedIds, setUnlockedIds] = useState(new Set())
-  const [newlyUnlocked, setNewlyUnlocked] = useState([]) // para animación
+  const [newlyUnlocked, setNewlyUnlocked] = useState([])
   const [loadingAchievements, setLoadingAchievements] = useState(false)
 
   const fileInputRef = useRef(null)
   const PAGE_SIZE = 20
 
   useEffect(() => { fetchProfile() }, [])
-
   useEffect(() => {
     if (section === 'history' && history.length === 0) fetchHistory(0)
     if (section === 'notifications') markAllRead()
@@ -179,16 +297,14 @@ export default function Profile() {
       const seen = new Set()
       const unique = drinksData.filter(d => {
         if (seen.has(d.drink_group_id)) return false
-        seen.add(d.drink_group_id)
-        return true
+        seen.add(d.drink_group_id); return true
       })
       const total = unique.reduce((sum, d) => sum + (d.points || 0), 0)
       const byType = unique.reduce((acc, d) => {
         const name = d.drink_types?.name || 'Desconocido'
         const emoji = d.drink_types?.emoji || '🍺'
         if (!acc[name]) acc[name] = { count: 0, emoji }
-        acc[name].count++
-        return acc
+        acc[name].count++; return acc
       }, {})
       setStats({ total, count: unique.length, byType })
     }
@@ -197,60 +313,35 @@ export default function Profile() {
 
   const fetchHistory = async (page) => {
     setLoadingHistory(true)
-    const { data } = await supabase
-      .from('drinks')
+    const { data } = await supabase.from('drinks')
       .select('id, drink_group_id, points, consumed_at, drink_types(name, emoji), seasons(active), leagues(name)')
-      .eq('user_id', user.id)
-      .order('consumed_at', { ascending: false })
-
+      .eq('user_id', user.id).order('consumed_at', { ascending: false })
     if (!data) { setLoadingHistory(false); return }
-
     const grouped = {}
     data.forEach(d => {
       const key = d.drink_group_id
-      if (!grouped[key]) {
-        grouped[key] = { drink_group_id: key, points: d.points, consumed_at: d.consumed_at, drink_type: d.drink_types, leagues: [] }
-      }
+      if (!grouped[key]) grouped[key] = { drink_group_id: key, points: d.points, consumed_at: d.consumed_at, drink_type: d.drink_types, leagues: [] }
       if (d.leagues?.name) grouped[key].leagues.push(d.leagues.name)
     })
-
     const allUnique = Object.values(grouped).sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
     const from = page * PAGE_SIZE
     const paginated = allUnique.slice(from, from + PAGE_SIZE)
-
-    if (page === 0) setHistory(paginated)
-    else setHistory(prev => [...prev, ...paginated])
-
+    if (page === 0) setHistory(paginated); else setHistory(prev => [...prev, ...paginated])
     setHistoryHasMore(allUnique.length > from + PAGE_SIZE)
-    setHistoryPage(page)
-    setLoadingHistory(false)
+    setHistoryPage(page); setLoadingHistory(false)
   }
 
   const fetchAndCheckAchievements = async () => {
     setLoadingAchievements(true)
-
-    // Cargar logros ya desbloqueados
-    const { data: existing } = await supabase
-      .from('achievements')
-      .select('achievement_id')
-      .eq('user_id', user.id)
-
+    const { data: existing } = await supabase.from('achievements').select('achievement_id').eq('user_id', user.id)
     const existingIds = new Set((existing || []).map(a => a.achievement_id))
-
-    // Detectar nuevos logros
     const earned = await detectAchievements(user.id, stats, supabase)
-
-    // Filtrar los que aún no están desbloqueados
     const toInsert = earned.filter(id => !existingIds.has(id))
-
     if (toInsert.length > 0) {
-      await supabase.from('achievements').insert(
-        toInsert.map(achievement_id => ({ user_id: user.id, achievement_id }))
-      )
+      await supabase.from('achievements').insert(toInsert.map(achievement_id => ({ user_id: user.id, achievement_id })))
       setNewlyUnlocked(toInsert)
       setTimeout(() => setNewlyUnlocked([]), 5000)
     }
-
     setUnlockedIds(new Set([...existingIds, ...toInsert]))
     setLoadingAchievements(false)
   }
@@ -258,8 +349,7 @@ export default function Profile() {
   const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000) }
 
   const handleAvatarChange = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+    const file = e.target.files[0]; if (!file) return
     setUploadingAvatar(true); setError('')
     const ext = file.name.split('.').pop()
     const path = `${user.id}/avatar.${ext}`
@@ -301,20 +391,14 @@ export default function Profile() {
   const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
   const formatNotifTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
-    const mins = Math.floor(diff / 60000)
-    const hours = Math.floor(mins / 60)
-    const days = Math.floor(hours / 24)
-    if (days > 0) return `hace ${days}d`
-    if (hours > 0) return `hace ${hours}h`
-    if (mins > 0) return `hace ${mins}m`
-    return 'ahora'
+    const mins = Math.floor(diff / 60000), hours = Math.floor(mins / 60), days = Math.floor(hours / 24)
+    if (days > 0) return `hace ${days}d`; if (hours > 0) return `hace ${hours}h`; if (mins > 0) return `hace ${mins}m`; return 'ahora'
   }
 
   const groupedHistory = history.reduce((groups, item) => {
     const date = formatDate(item.consumed_at)
     if (!groups[date]) groups[date] = []
-    groups[date].push(item)
-    return groups
+    groups[date].push(item); return groups
   }, {})
 
   const getNotifStyle = (type) => {
@@ -327,12 +411,9 @@ export default function Profile() {
 
   const unlockedCount = unlockedIds.size
   const totalCount = ACHIEVEMENTS.length
-
-  // Agrupar logros por categoría
   const achievementsByCategory = ACHIEVEMENTS.reduce((acc, a) => {
     if (!acc[a.category]) acc[a.category] = []
-    acc[a.category].push(a)
-    return acc
+    acc[a.category].push(a); return acc
   }, {})
 
   if (loading) return (
@@ -354,7 +435,6 @@ export default function Profile() {
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       <div className="max-w-md mx-auto">
 
-        {/* Header */}
         <motion.div {...fadeIn} className="mb-6">
           <h1 className="text-2xl font-bold mb-4">
             {{ profile: 'Tu perfil 👤', history: 'Historial 🍺', achievements: 'Logros 🏅', notifications: 'Notificaciones 🔔', settings: 'Ajustes ⚙️' }[section]}
@@ -393,10 +473,8 @@ export default function Profile() {
               <div className="relative inline-block mb-3">
                 {profile?.avatar_url
                   ? <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-amber-500" />
-                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl"
-                      style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingAvatar}
+                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
                   className="absolute bottom-0 right-0 bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
                   {uploadingAvatar ? '⏳' : '📷'}
                 </motion.button>
@@ -404,13 +482,10 @@ export default function Profile() {
               </div>
               <p className="text-xl font-bold">{profile?.username}</p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
-              {/* Mini progreso de logros */}
               {unlockedCount > 0 && (
                 <div className="mt-3 flex items-center justify-center gap-2">
                   <span className="text-sm">🏅</span>
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-                    {unlockedCount}/{totalCount} logros
-                  </span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{unlockedCount}/{totalCount} logros</span>
                 </div>
               )}
             </div>
@@ -418,10 +493,7 @@ export default function Profile() {
             {stats && (
               <>
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[
-                    { label: 'Consumiciones', value: stats.count },
-                    { label: 'Puntos totales', value: stats.total },
-                  ].map(stat => (
+                  {[{ label: 'Consumiciones', value: stats.count }, { label: 'Puntos totales', value: stats.total }].map(stat => (
                     <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate"
                       className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
                       <p className="text-3xl font-bold text-amber-400">{stat.value}</p>
@@ -442,8 +514,7 @@ export default function Profile() {
                               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{name}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="h-1.5 rounded-full bg-amber-500 opacity-60"
-                                style={{ width: `${Math.round((count / stats.count) * 80)}px` }} />
+                              <div className="h-1.5 rounded-full bg-amber-500 opacity-60" style={{ width: `${Math.round((count / stats.count) * 80)}px` }} />
                               <span className="text-amber-400 font-bold text-sm">{count}</span>
                             </div>
                           </div>
@@ -473,23 +544,18 @@ export default function Profile() {
           <motion.div {...fadeIn} key="history">
             {stats && (
               <div className="grid grid-cols-3 gap-2 mb-5">
-                <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <p className="text-xl font-bold text-amber-400">{stats.count}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Total</p>
-                </div>
-                <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <p className="text-xl font-bold text-amber-400">{stats.total}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Puntos</p>
-                </div>
-                <div className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <p className="text-xl font-bold text-amber-400">
-                    {stats.count > 0 ? (stats.total / stats.count).toFixed(1) : '0'}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Media pts</p>
-                </div>
+                {[
+                  { label: 'Total', value: stats.count },
+                  { label: 'Puntos', value: stats.total },
+                  { label: 'Media pts', value: stats.count > 0 ? (stats.total / stats.count).toFixed(1) : '0' },
+                ].map(s => (
+                  <div key={s.label} className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <p className="text-xl font-bold text-amber-400">{s.value}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{s.label}</p>
+                  </div>
+                ))}
               </div>
             )}
-
             {history.length === 0 && !loadingHistory ? (
               <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
                 <div className="text-5xl mb-3">🍺</div>
@@ -509,8 +575,7 @@ export default function Profile() {
                       {items.map(item => (
                         <motion.div key={item.drink_group_id} variants={staggerItem} initial="initial" animate="animate"
                           className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                            style={{ backgroundColor: 'var(--bg-input)' }}>
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)' }}>
                             {item.drink_type?.emoji || '🍺'}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -536,8 +601,7 @@ export default function Profile() {
                   </div>
                 ))}
                 {historyHasMore && (
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => fetchHistory(historyPage + 1)}
-                    disabled={loadingHistory}
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => fetchHistory(historyPage + 1)} disabled={loadingHistory}
                     className="w-full py-3 rounded-2xl text-sm font-medium mt-2"
                     style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
                     {loadingHistory ? 'Cargando...' : 'Cargar más →'}
@@ -551,8 +615,6 @@ export default function Profile() {
         {/* ── LOGROS ── */}
         {section === 'achievements' && (
           <motion.div {...fadeIn} key="achievements">
-
-            {/* Nuevos logros desbloqueados */}
             <AnimatePresence>
               {newlyUnlocked.length > 0 && (
                 <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -567,8 +629,7 @@ export default function Profile() {
                           transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold"
                           style={{ backgroundColor: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>
-                          <span>{a.emoji}</span>
-                          <span>{a.name}</span>
+                          <span>{a.emoji}</span><span>{a.name}</span>
                         </motion.div>
                       ) : null
                     })}
@@ -577,7 +638,6 @@ export default function Profile() {
               )}
             </AnimatePresence>
 
-            {/* Progreso global */}
             <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="font-bold text-sm">Progreso total</p>
@@ -589,59 +649,47 @@ export default function Profile() {
                   animate={{ width: `${(unlockedCount / totalCount) * 100}%` }}
                   transition={{ duration: 0.8, ease: 'easeOut' }} />
               </div>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                {totalCount - unlockedCount} logros restantes
-              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{totalCount - unlockedCount} logros restantes</p>
             </div>
 
             {loadingAchievements ? (
               <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
-                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                  className="text-3xl mb-2">🏅</motion.div>
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">🏅</motion.div>
                 <p className="text-sm">Comprobando logros...</p>
               </div>
             ) : (
               Object.entries(achievementsByCategory).map(([category, items]) => (
                 <div key={category} className="mb-5">
-                  <p className="text-sm font-bold mb-3">{CATEGORY_LABELS[category]}</p>
+                  <p className="text-sm font-bold mb-3">
+                    {category === 'consumiciones' ? '🍺 Consumiciones' : category === 'casino' ? '🎰 Casino & Dinero' : '⚡ Social & Powerups'}
+                    <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-hint)' }}>
+                      {items.filter(a => unlockedIds.has(a.id)).length}/{items.length}
+                    </span>
+                  </p>
                   <div className="space-y-2">
                     {items.map(achievement => {
                       const unlocked = unlockedIds.has(achievement.id)
                       const isNew = newlyUnlocked.includes(achievement.id)
                       return (
-                        <motion.div key={achievement.id}
-                          variants={staggerItem} initial="initial" animate="animate"
+                        <motion.div key={achievement.id} variants={staggerItem} initial="initial" animate="animate"
                           className="rounded-2xl p-4 flex items-center gap-3"
                           style={{
-                            backgroundColor: unlocked ? 'var(--bg-card)' : 'var(--bg-card)',
+                            backgroundColor: 'var(--bg-card)',
                             border: isNew ? '2px solid #f59e0b' : unlocked ? '2px solid rgba(245,158,11,0.3)' : '2px solid transparent',
                             opacity: unlocked ? 1 : 0.5,
                           }}>
-                          {/* Emoji con filtro gris si bloqueado */}
                           <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-                            style={{
-                              backgroundColor: unlocked ? 'rgba(245,158,11,0.12)' : 'var(--bg-input)',
-                              filter: unlocked ? 'none' : 'grayscale(100%)',
-                            }}>
+                            style={{ backgroundColor: unlocked ? 'rgba(245,158,11,0.12)' : 'var(--bg-input)', filter: unlocked ? 'none' : 'grayscale(100%)' }}>
                             {achievement.emoji}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-sm">{achievement.name}</p>
                             <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{achievement.desc}</p>
                           </div>
-                          {unlocked && (
-                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-                              className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                              style={{ backgroundColor: 'rgba(245,158,11,0.2)' }}>
-                              <span className="text-xs text-amber-400">✓</span>
-                            </motion.div>
-                          )}
-                          {!unlocked && (
-                            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                              style={{ backgroundColor: 'var(--bg-input)' }}>
-                              <span className="text-xs" style={{ color: 'var(--text-hint)' }}>🔒</span>
-                            </div>
-                          )}
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: unlocked ? 'rgba(245,158,11,0.2)' : 'var(--bg-input)' }}>
+                            <span className="text-xs" style={{ color: unlocked ? '#f59e0b' : 'var(--text-hint)' }}>{unlocked ? '✓' : '🔒'}</span>
+                          </div>
                         </motion.div>
                       )
                     })}
@@ -650,8 +698,7 @@ export default function Profile() {
               ))
             )}
 
-            <motion.button whileTap={{ scale: 0.97 }} onClick={fetchAndCheckAchievements}
-              disabled={loadingAchievements}
+            <motion.button whileTap={{ scale: 0.97 }} onClick={fetchAndCheckAchievements} disabled={loadingAchievements}
               className="w-full py-3 rounded-2xl text-sm font-medium mt-2"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
               🔄 Comprobar nuevos logros
@@ -666,9 +713,6 @@ export default function Profile() {
               <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
                 <div className="text-5xl mb-3">🔔</div>
                 <p>Sin notificaciones todavía</p>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>
-                  Aquí aparecerán los powerups recibidos y transferencias
-                </p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -683,8 +727,7 @@ export default function Profile() {
                         border: notif.read ? '1px solid transparent' : `1px solid ${style.color}30`,
                         opacity: notif.read ? 0.7 : 1,
                       }}>
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ backgroundColor: style.bg }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: style.bg }}>
                         {style.icon}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -739,18 +782,10 @@ export default function Profile() {
             <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold mb-4">🎨 Apariencia</h2>
               <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'dark',   label: 'Oscuro',  emoji: '🌙' },
-                  { id: 'light',  label: 'Claro',   emoji: '☀️' },
-                  { id: 'system', label: 'Sistema', emoji: '⚙️' },
-                ].map(t => (
+                {[{ id: 'dark', label: 'Oscuro', emoji: '🌙' }, { id: 'light', label: 'Claro', emoji: '☀️' }, { id: 'system', label: 'Sistema', emoji: '⚙️' }].map(t => (
                   <motion.button key={t.id} whileTap={{ scale: 0.95 }} onClick={() => setTheme(t.id)}
                     className="flex flex-col items-center gap-2 py-4 rounded-2xl text-sm font-medium border-2"
-                    style={{
-                      borderColor: theme === t.id ? '#f59e0b' : 'var(--border)',
-                      backgroundColor: theme === t.id ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)',
-                      color: theme === t.id ? '#f59e0b' : 'var(--text-muted)',
-                    }}>
+                    style={{ borderColor: theme === t.id ? '#f59e0b' : 'var(--border)', backgroundColor: theme === t.id ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)', color: theme === t.id ? '#f59e0b' : 'var(--text-muted)' }}>
                     <span className="text-2xl">{t.emoji}</span>
                     <span>{t.label}</span>
                     {theme === t.id && <motion.div layoutId="theme-check" className="w-2 h-2 rounded-full bg-amber-400" />}
@@ -785,9 +820,7 @@ export default function Profile() {
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">🗑️</div>
                 <h2 className="text-xl font-bold">¿Eliminar cuenta?</h2>
-                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
-                  Se borrarán todos tus datos de forma permanente.
-                </p>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se borrarán todos tus datos de forma permanente.</p>
               </div>
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowDeleteConfirm(false)} disabled={deleting}
