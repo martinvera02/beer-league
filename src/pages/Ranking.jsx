@@ -26,6 +26,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [savingName, setSavingName] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
 
+  // Mensajes no leídos por liga
+  const [unreadByLeague, setUnreadByLeague] = useState({}) // { leagueId: count }
+
   // Transferencias
   const [transfers, setTransfers] = useState([])
   const [myBalance, setMyBalance] = useState(0)
@@ -74,7 +77,16 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         async (payload) => {
           const { data: profile } = await supabase
             .from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
-          if (payload.new.user_id !== user.id) soundMessageReceived()
+          if (payload.new.user_id !== user.id) {
+            soundMessageReceived()
+            // Si no estamos en el chat, incrementar contador
+            if (tab !== 'chat') {
+              setUnreadByLeague(prev => ({
+                ...prev,
+                [selectedLeague.id]: (prev[selectedLeague.id] || 0) + 1
+              }))
+            }
+          }
           setMessages(prev => [...prev, {
             ...payload.new,
             profiles: { username: profile?.username || 'Desconocido', avatar_url: profile?.avatar_url }
@@ -83,13 +95,21 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [selectedLeague])
+  }, [selectedLeague, tab])
+
+  useEffect(() => {
+    if (tab === 'chat') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      // Marcar como leído al abrir el chat
+      if (selectedLeague) markChatRead(selectedLeague.id)
+    }
+    if (tab === 'transfers' && selectedLeague) fetchTransfers(selectedLeague.id)
+    if (tab === 'admin' && selectedLeague) fetchAdminStats(selectedLeague.id)
+  }, [tab])
 
   useEffect(() => {
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    if (tab === 'transfers' && selectedLeague) fetchTransfers(selectedLeague.id)
-    if (tab === 'admin' && selectedLeague) fetchAdminStats(selectedLeague.id)
-  }, [messages, tab])
+  }, [messages])
 
   const fetchLeagues = async () => {
     const { data } = await supabase
@@ -98,12 +118,57 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .eq('user_id', user.id)
     const userLeagues = data?.map(d => ({ ...d.leagues, myRole: d.role })) || []
     setLeagues(userLeagues)
+
     if (!selectedLeague && userLeagues.length > 0) {
       const first = userLeagues[0]
       setSelectedLeague(first)
       setMyRole(first.myRole || 'member')
       setNewLeagueName(first.name)
     }
+
+    // Calcular no leídos para todas las ligas
+    if (userLeagues.length > 0) {
+      fetchAllUnread(userLeagues.map(l => l.id))
+    }
+  }
+
+  const fetchAllUnread = async (leagueIds) => {
+    // Para cada liga, contar mensajes más nuevos que last_read_at
+    const counts = {}
+    await Promise.all(leagueIds.map(async (leagueId) => {
+      // Obtener last_read_at del usuario para esta liga
+      const { data: readData } = await supabase
+        .from('message_reads')
+        .select('last_read_at')
+        .eq('user_id', user.id)
+        .eq('league_id', leagueId)
+        .single()
+
+      const lastRead = readData?.last_read_at || '1970-01-01'
+
+      // Contar mensajes de otros usuarios más nuevos que last_read_at
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('league_id', leagueId)
+        .neq('user_id', user.id)
+        .gt('created_at', lastRead)
+
+      counts[leagueId] = count || 0
+    }))
+    setUnreadByLeague(counts)
+  }
+
+  const markChatRead = async (leagueId) => {
+    // Upsert last_read_at a ahora
+    await supabase.from('message_reads').upsert({
+      user_id: user.id,
+      league_id: leagueId,
+      last_read_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,league_id' })
+
+    // Limpiar badge de esta liga
+    setUnreadByLeague(prev => ({ ...prev, [leagueId]: 0 }))
   }
 
   const fetchRanking = async (leagueId) => {
@@ -153,27 +218,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
   const handleResetSeason = async () => {
     if (!selectedLeague) return
-    setResetting(true)
-    setShowResetConfirm(false)
+    setResetting(true); setShowResetConfirm(false)
     const { data: season } = await supabase.from('seasons').select('id').eq('active', true).single()
-    if (!season) {
-      setAdminMsg({ success: false, text: 'No hay temporada activa' })
-      setResetting(false)
-      return
-    }
-    const { error } = await supabase.from('drinks')
-      .delete()
-      .eq('league_id', selectedLeague.id)
-      .eq('season_id', season.id)
-    if (error) {
-      soundError()
-      setAdminMsg({ success: false, text: 'Error al resetear: ' + error.message })
-    } else {
-      soundSuccess()
-      setAdminMsg({ success: true, text: '✅ Puntos reseteados correctamente' })
-      fetchRanking(selectedLeague.id)
-      fetchAdminStats(selectedLeague.id)
-    }
+    if (!season) { setAdminMsg({ success: false, text: 'No hay temporada activa' }); setResetting(false); return }
+    const { error } = await supabase.from('drinks').delete()
+      .eq('league_id', selectedLeague.id).eq('season_id', season.id)
+    if (error) { soundError(); setAdminMsg({ success: false, text: 'Error al resetear: ' + error.message }) }
+    else { soundSuccess(); setAdminMsg({ success: true, text: '✅ Puntos reseteados correctamente' }); fetchRanking(selectedLeague.id); fetchAdminStats(selectedLeague.id) }
     setResetting(false)
     setTimeout(() => setAdminMsg(null), 4000)
   }
@@ -185,11 +236,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setTab('ranking')
     setEditingName(false)
     setSelectedReceiver(null)
-    setTransferAmount('')
-    setTransferNote('')
-    setTransferResult(null)
-    setAdminStats(null)
-    setAdminMsg(null)
+    setTransferAmount(''); setTransferNote(''); setTransferResult(null)
+    setAdminStats(null); setAdminMsg(null)
   }
 
   const saveLeagueName = async () => {
@@ -201,27 +249,23 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       setSelectedLeague(updated)
       setLeagues(prev => prev.map(l => l.id === selectedLeague.id ? { ...l, name: newLeagueName.trim() } : l))
     }
-    setSavingName(false)
-    setEditingName(false)
+    setSavingName(false); setEditingName(false)
   }
 
   const copyCode = () => {
     if (!selectedLeague?.invite_code) return
     navigator.clipboard.writeText(selectedLeague.invite_code)
-    setCodeCopied(true)
-    setTimeout(() => setCodeCopied(false), 2000)
+    setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000)
   }
 
   const handleJoinLeague = async () => {
     if (!joinCode.trim()) return
     setJoining(true); setJoinError(''); setJoinSuccess('')
     const { data, error } = await supabase.rpc('join_league_by_code', { p_code: joinCode.trim().toUpperCase() })
-    if (error || !data?.success) {
-      setJoinError(data?.error || 'Código no válido')
-    } else {
+    if (error || !data?.success) { setJoinError(data?.error || 'Código no válido') }
+    else {
       setJoinSuccess(`¡Te has unido a ${data.league_name}! 🎉`)
-      setJoinCode('')
-      fetchLeagues()
+      setJoinCode(''); fetchLeagues()
       setTimeout(() => { setShowJoinModal(false); setJoinSuccess('') }, 2000)
     }
     setJoining(false)
@@ -234,9 +278,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .insert({ name: newLeagueCreateName.trim(), created_by: user.id }).select().single()
     if (!error && data) {
       await supabase.from('league_members').insert({ league_id: data.id, user_id: user.id, role: 'owner' })
-      setNewLeagueCreateName('')
-      setShowCreateModal(false)
-      fetchLeagues()
+      setNewLeagueCreateName(''); setShowCreateModal(false); fetchLeagues()
     }
     setCreating(false)
   }
@@ -244,8 +286,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const changeRole = async (memberId, newRole) => {
     await supabase.from('league_members').update({ role: newRole })
       .eq('league_id', selectedLeague.id).eq('user_id', memberId)
-    setRoleTarget(null)
-    fetchMembers(selectedLeague.id)
+    setRoleTarget(null); fetchMembers(selectedLeague.id)
   }
 
   const sendMessage = async () => {
@@ -283,8 +324,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const kickMember = async () => {
     if (!kickTarget || !selectedLeague) return
     await supabase.from('league_members').delete().eq('league_id', selectedLeague.id).eq('user_id', kickTarget.id)
-    setKickTarget(null)
-    fetchMembers(selectedLeague.id)
+    setKickTarget(null); fetchMembers(selectedLeague.id)
     soundSuccess()
     setAdminMsg({ success: true, text: `✅ ${kickTarget.username} expulsado de la liga` })
     setTimeout(() => setAdminMsg(null), 3000)
@@ -332,6 +372,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   }
   const canManage = myRole === 'owner' || myRole === 'admin'
   const otherMembers = members.filter(m => m.id !== user.id)
+  const manageableMembers = members.filter(m => {
+    if (m.id === user.id) return false
+    if (m.role === 'owner') return false
+    if (myRole === 'admin' && m.role === 'admin') return false
+    return true
+  })
 
   const Avatar = ({ url, username, size = 'sm' }) => {
     const dim = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10'
@@ -341,21 +387,26 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
   }
 
+  const UnreadBadge = ({ count }) => {
+    if (!count || count === 0) return null
+    return (
+      <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
+        className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-white font-black"
+        style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
+        {count > 9 ? '9+' : count}
+      </motion.span>
+    )
+  }
+
+  const currentUnread = selectedLeague ? (unreadByLeague[selectedLeague.id] || 0) : 0
+
   const visibleTabs = [
     { id: 'ranking',   label: '🏆 Ranking' },
     { id: 'members',   label: '👥 Miembros' },
     { id: 'transfers', label: '💸 Enviar' },
-    { id: 'chat',      label: '💬 Chat' },
+    { id: 'chat',      label: '💬 Chat', unread: currentUnread },
     ...(canManage ? [{ id: 'admin', label: '👑 Admin' }] : []),
   ]
-
-  // Miembros que el admin puede gestionar (excluye owner y al propio usuario)
-  const manageableMembers = members.filter(m => {
-    if (m.id === user.id) return false
-    if (m.role === 'owner') return false
-    if (myRole === 'admin' && m.role === 'admin') return false
-    return true
-  })
 
   return (
     <div className={`flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`}
@@ -363,14 +414,28 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
       {/* Header */}
       <div className="px-4 pt-6 pb-3 flex-shrink-0">
+
+        {/* Selector de ligas con badges */}
         <div className="flex gap-2 flex-wrap mb-4 items-center">
-          {leagues.map(league => (
-            <motion.button key={league.id} whileTap={{ scale: 0.95 }} onClick={() => handleSelectLeague(league)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${selectedLeague?.id === league.id ? 'bg-amber-500 text-white' : ''}`}
-              style={selectedLeague?.id !== league.id ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}>
-              {league.name}
-            </motion.button>
-          ))}
+          {leagues.map(league => {
+            const unread = unreadByLeague[league.id] || 0
+            const isSelected = selectedLeague?.id === league.id
+            return (
+              <motion.button key={league.id} whileTap={{ scale: 0.95 }}
+                onClick={() => handleSelectLeague(league)}
+                className={`relative px-4 py-2 rounded-xl text-sm font-medium transition-colors ${isSelected ? 'bg-amber-500 text-white' : ''}`}
+                style={!isSelected ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}>
+                {league.name}
+                {/* Badge de no leídos en el selector de liga */}
+                {unread > 0 && !isSelected && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-white font-black"
+                    style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </motion.button>
+            )
+          })}
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowJoinModal(true)}
             className="px-3 py-2 rounded-xl text-sm font-medium"
             style={{ backgroundColor: 'var(--bg-card)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
@@ -383,6 +448,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </motion.button>
         </div>
 
+        {/* Nombre de liga */}
         {selectedLeague && (
           <div className="mb-4">
             {editingName ? (
@@ -410,6 +476,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
+        {/* Código invitación */}
         {selectedLeague && (
           <div className="rounded-2xl px-4 py-3 mb-4 flex items-center justify-between" style={{ backgroundColor: 'var(--bg-card)' }}>
             <div>
@@ -424,18 +491,20 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
+        {/* Pestañas con badge en Chat */}
         {selectedLeague && (
           <div className="flex rounded-xl p-1 gap-0.5" style={{ backgroundColor: 'var(--bg-input)' }}>
             {visibleTabs.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+                className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
                 style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
                 {tab === t.id && (
                   <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg"
                     style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : '#f59e0b' }}
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
                 )}
-                {t.label}
+                <span>{t.label}</span>
+                {t.unread > 0 && <UnreadBadge count={t.unread} />}
               </button>
             ))}
           </div>
@@ -509,7 +578,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         </div>
       )}
 
-      {/* ── MIEMBROS ── solo vista, sin acciones de gestión */}
+      {/* ── MIEMBROS ── */}
       {tab === 'members' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
           <div className="space-y-3 pt-4">
@@ -523,9 +592,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     <Avatar url={member.avatar_url} username={member.username} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>
-                          {member.username} {isMe && '(tú)'}
-                        </p>
+                        <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>{member.username} {isMe && '(tú)'}</p>
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0" style={roleBadgeStyle[member.role]}>
                           {roleLabel[member.role]}
                         </span>
@@ -535,14 +602,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 </motion.div>
               )
             })}
-
             {myRole !== 'owner' && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={leaveLeague}
                 className="w-full mt-2 bg-transparent text-red-500 font-semibold py-3 rounded-2xl border border-red-900">
                 Abandonar liga 🚪
               </motion.button>
             )}
-
             {canManage && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setTab('admin')}
                 className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
@@ -713,7 +778,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* ── ADMIN ── */}
       {tab === 'admin' && selectedLeague && canManage && (
         <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-
           <div className="rounded-2xl p-4 mb-5 flex items-center gap-3"
             style={{ backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)' }}>
             <span className="text-3xl">👑</span>
@@ -738,7 +802,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             )}
           </AnimatePresence>
 
-          {/* Estadísticas */}
           <p className="text-sm font-bold mb-3">📊 Estadísticas del grupo</p>
           {loadingStats ? (
             <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
@@ -781,7 +844,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </>
           ) : null}
 
-          {/* Gestión de miembros */}
           <p className="text-sm font-bold mb-3">👥 Gestión de miembros</p>
           {manageableMembers.length === 0 ? (
             <div className="rounded-2xl p-4 mb-5 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -803,21 +865,16 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     {myRole === 'owner' && (
                       <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)}
                         className="text-xs font-semibold px-3 py-2 rounded-xl"
-                        style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
-                        Rol
-                      </motion.button>
+                        style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>Rol</motion.button>
                     )}
                     <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)}
-                      className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">
-                      Expulsar
-                    </motion.button>
+                      className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">Expulsar</motion.button>
                   </div>
                 </motion.div>
               ))}
             </div>
           )}
 
-          {/* Reset temporada */}
           <p className="text-sm font-bold mb-3">⚠️ Gestión de temporada</p>
           <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.2)' }}>
             <div className="flex items-start gap-3 mb-4">
@@ -972,9 +1029,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <div className="text-center mb-4">
                 <div className="text-4xl mb-2">🚫</div>
                 <h2 className="text-xl font-bold">¿Expulsar a {kickTarget?.username}?</h2>
-                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
-                  Se eliminará de la liga y perderá su historial en esta temporada.
-                </p>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminará de la liga y perderá su historial en esta temporada.</p>
               </div>
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }} onClick={() => setKickTarget(null)}
