@@ -84,7 +84,7 @@ function PrivateChat({ chat, otherUser, onClose }) {
   return (
     <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
       transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-      className="fixed inset-0 z-50 flex flex-col"
+      className="fixed inset-0 z-[60] flex flex-col"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
@@ -100,7 +100,7 @@ function PrivateChat({ chat, otherUser, onClose }) {
       </div>
 
       {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3 pb-4">
         {messages.length === 0 ? (
           <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
             <div className="text-5xl mb-3">💬</div>
@@ -144,7 +144,7 @@ function PrivateChat({ chat, otherUser, onClose }) {
       </div>
 
       {/* Input */}
-      <div className="px-4 py-3 pb-8 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-4 py-3 pb-28 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
         <div className="flex gap-2 items-end">
           <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={handleKeyDown}
             placeholder="Escribe un mensaje..." rows={1}
