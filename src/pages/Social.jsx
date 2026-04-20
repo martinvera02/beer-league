@@ -3,25 +3,41 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerItem } from '../lib/animations'
-import { soundLike, soundMessage, soundSuccess } from '../lib/sounds'
+import { soundLike, soundMessage, soundSuccess, soundMessageReceived } from '../lib/sounds'
 
-// Definición de logros (igual que en Profile.jsx)
 const ACHIEVEMENTS = [
-  { id: 'first_drink',    emoji: '🍺', name: 'Primera ronda' },
-  { id: 'drinks_10',      emoji: '🔟', name: 'Bebedor consistente' },
-  { id: 'drinks_50',      emoji: '🏅', name: 'Veterano' },
-  { id: 'drinks_100',     emoji: '👑', name: 'Leyenda' },
-  { id: 'martes_macarra', emoji: '🔥', name: 'Martes Macarra' },
-  { id: 'variety_5',      emoji: '🌈', name: 'Paladar exquisito' },
-  { id: 'roulette_win',   emoji: '🎰', name: 'Golpe de suerte' },
-  { id: 'roulette_3wins', emoji: '🎯', name: 'En racha' },
-  { id: 'millionaire',    emoji: '💰', name: 'Millonario' },
-  { id: 'market_5',       emoji: '📈', name: 'Tiburón del mercado' },
-  { id: 'big_bet',        emoji: '🎲', name: 'Todo o nada' },
-  { id: 'sabotage',       emoji: '💣', name: 'Saboteador' },
-  { id: 'shield',         emoji: '🛡️', name: 'Protegido' },
-  { id: 'generous',       emoji: '💸', name: 'Generoso' },
-  { id: 'popular',        emoji: '❤️', name: 'Popular' },
+  { id: 'first_drink',       emoji: '🍺', name: 'Primera ronda' },
+  { id: 'drinks_10',         emoji: '🔟', name: 'Bebedor consistente' },
+  { id: 'drinks_50',         emoji: '🏅', name: 'Veterano' },
+  { id: 'drinks_100',        emoji: '👑', name: 'Leyenda' },
+  { id: 'martes_macarra',    emoji: '🔥', name: 'Martes Macarra' },
+  { id: 'variety_5',         emoji: '🌈', name: 'Paladar exquisito' },
+  { id: 'roulette_win',      emoji: '🎰', name: 'Golpe de suerte' },
+  { id: 'roulette_3wins',    emoji: '🎯', name: 'En racha' },
+  { id: 'millionaire',       emoji: '💰', name: 'Millonario' },
+  { id: 'market_5',          emoji: '📈', name: 'Tiburón del mercado' },
+  { id: 'big_bet',           emoji: '🎲', name: 'Todo o nada' },
+  { id: 'sabotage',          emoji: '💣', name: 'Saboteador' },
+  { id: 'shield',            emoji: '🛡️', name: 'Protegido' },
+  { id: 'generous',          emoji: '💸', name: 'Generoso' },
+  { id: 'popular',           emoji: '❤️', name: 'Popular' },
+  { id: 'drinks_day_3',      emoji: '🚀', name: 'Calentando motores' },
+  { id: 'drinks_day_10',     emoji: '🚨', name: 'Esto ya es un problema' },
+  { id: 'top1_league',       emoji: '🥇', name: 'El último en pie' },
+  { id: 'come_back',         emoji: '🧟', name: 'Abstemio rehabilitado' },
+  { id: 'most_active',       emoji: '🏃', name: 'El del bar' },
+  { id: 'broke',             emoji: '🪙', name: 'Pelado' },
+  { id: 'negative_balance',  emoji: '📉', name: 'En números rojos' },
+  { id: 'lender',            emoji: '🏦', name: 'Prestamista' },
+  { id: 'big_sender',        emoji: '💸', name: 'El que invita' },
+  { id: 'roulette_10bets',   emoji: '🎡', name: 'Tahúr' },
+  { id: 'big_win',           emoji: '🤑', name: 'Rompebancos' },
+  { id: 'pacifist',          emoji: '☮️', name: 'Pacifista' },
+  { id: 'war_mode',          emoji: '⚔️', name: 'Guerra total' },
+  { id: 'revenge',           emoji: '🗡️', name: 'Venganza servida fría' },
+  { id: 'influencer',        emoji: '🌟', name: 'Influencer' },
+  { id: 'chatterbox',        emoji: '💬', name: 'Tertuliano' },
+  { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas' },
 ]
 
 // ─── CHAT PRIVADO ─────────────────────────────────────────────────────────────
@@ -30,17 +46,24 @@ function PrivateChat({ chat, otherUser, onClose }) {
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const bottomRef = useRef(null)
+  const imageInputRef = useRef(null)
 
   useEffect(() => {
     fetchMessages()
+    markRead()
+
     const channel = supabase.channel(`private_chat:${chat.id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chat.id}` },
         async (payload) => {
           const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.sender_id).single()
+          if (payload.new.sender_id !== user.id) soundMessageReceived()
           setMessages(prev => [...prev, { ...payload.new, profiles: profile }])
           setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+          markRead()
         })
       .subscribe()
     return () => supabase.removeChannel(channel)
@@ -57,11 +80,37 @@ function PrivateChat({ chat, otherUser, onClose }) {
     setMessages(data || [])
   }
 
+  const markRead = async () => {
+    await supabase.from('private_message_reads').upsert({
+      user_id: user.id,
+      chat_id: chat.id,
+      last_read_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,chat_id' })
+  }
+
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return
     setSending(true); soundMessage()
     await supabase.from('private_messages').insert({ chat_id: chat.id, sender_id: user.id, content: newMessage.trim() })
     setNewMessage(''); setSending(false)
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingImage(true)
+    const ext = file.name.split('.').pop()
+    const path = `private/${user.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('chat-images').upload(path, file)
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
+      soundMessage()
+      await supabase.from('private_messages').insert({
+        chat_id: chat.id, sender_id: user.id, content: '', image_url: publicUrl
+      })
+    }
+    setUploadingImage(false)
+    e.target.value = ''
   }
 
   const handleKeyDown = (e) => {
@@ -88,7 +137,8 @@ function PrivateChat({ chat, otherUser, onClose }) {
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
+      <div className="flex items-center gap-3 px-4 py-4 border-b flex-shrink-0"
+        style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
         <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
           className="w-8 h-8 rounded-full flex items-center justify-center"
           style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>←</motion.button>
@@ -100,7 +150,7 @@ function PrivateChat({ chat, otherUser, onClose }) {
       </div>
 
       {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 pb-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
           <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
             <div className="text-5xl mb-3">💬</div>
@@ -126,6 +176,11 @@ function PrivateChat({ chat, otherUser, onClose }) {
                       </div>
                     )}
                     <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      {msg.image_url && (
+                        <img src={msg.image_url} alt="Imagen"
+                          onClick={() => setLightboxUrl(msg.image_url)}
+                          className={`max-w-52 rounded-2xl cursor-pointer object-cover ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} />
+                      )}
                       {msg.content && (
                         <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
                           style={{ backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)', color: isMe ? '#fff' : 'var(--text-primary)' }}>
@@ -144,8 +199,17 @@ function PrivateChat({ chat, otherUser, onClose }) {
       </div>
 
       {/* Input */}
-      <div className="px-4 py-3 pb-28 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-4 py-3 pb-10 border-t flex-shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-base)' }}>
         <div className="flex gap-2 items-end">
+          {/* Botón foto */}
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()}
+            disabled={uploadingImage}
+            className="p-3 rounded-2xl flex-shrink-0"
+            style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+            {uploadingImage ? '⏳' : '📷'}
+          </motion.button>
+          <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+
           <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={handleKeyDown}
             placeholder="Escribe un mensaje..." rows={1}
             className="flex-1 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
@@ -158,6 +222,19 @@ function PrivateChat({ chat, otherUser, onClose }) {
           </motion.button>
         </div>
       </div>
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[70] p-4"
+            onClick={() => setLightboxUrl(null)}>
+            <motion.img initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
+              src={lightboxUrl} alt="Imagen ampliada"
+              className="max-w-full max-h-full rounded-2xl object-contain" />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
@@ -186,7 +263,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       { data: followData },
       { data: followersData },
       { data: followingData },
-      { data: chatFollow }, // ¿el otro también me sigue?
+      { data: chatFollow },
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', profileId).single(),
       supabase.from('drinks').select('drink_group_id, points').eq('user_id', profileId),
@@ -201,8 +278,6 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
     setIsFollowing(!!followData)
     setFollowersCount(followersData?.count || 0)
     setFollowingCount(followingData?.count || 0)
-
-    // Puede chatear si me sigue y yo le sigo (mutuo)
     setCanChat(!!followData && !!chatFollow)
 
     if (drinksData) {
@@ -224,25 +299,19 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setIsFollowing(true); setFollowersCount(prev => prev + 1); soundSuccess()
     }
-    // Recalcular si puede chatear
     const { data: chatFollow } = await supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle()
     setCanChat(!isFollowing && !!chatFollow)
     setToggling(false)
   }
 
   const handleOpenChat = async () => {
-    // Buscar o crear chat privado
     const userA = user.id < profileId ? user.id : profileId
     const userB = user.id < profileId ? profileId : user.id
-
-    let { data: existing } = await supabase.from('private_chats').select('*')
-      .eq('user_a', userA).eq('user_b', userB).maybeSingle()
-
+    let { data: existing } = await supabase.from('private_chats').select('*').eq('user_a', userA).eq('user_b', userB).maybeSingle()
     if (!existing) {
       const { data: created } = await supabase.from('private_chats').insert({ user_a: userA, user_b: userB }).select().single()
       existing = created
     }
-
     onOpenChat(existing, profile)
   }
 
@@ -264,7 +333,6 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       className="fixed inset-0 z-50 overflow-y-auto pb-24"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
-      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-4 border-b sticky top-0 z-10"
         style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
         <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
@@ -274,7 +342,6 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       </div>
 
       <div className="px-4 pt-6 max-w-md mx-auto">
-        {/* Avatar y datos */}
         <div className="flex items-center gap-4 mb-6">
           {profile?.avatar_url
             ? <img src={profile.avatar_url} alt={profile.username} className="w-20 h-20 rounded-full object-cover border-4 border-amber-500" />
@@ -282,51 +349,38 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
           <div className="flex-1">
             <p className="text-xl font-bold">{profile?.username}</p>
             <div className="flex gap-4 mt-2">
-              <div className="text-center">
-                <p className="font-bold text-amber-400">{stats?.count || 0}</p>
-                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>consumiciones</p>
-              </div>
-              <div className="text-center">
-                <p className="font-bold text-amber-400">{followersCount}</p>
-                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>seguidores</p>
-              </div>
-              <div className="text-center">
-                <p className="font-bold text-amber-400">{followingCount}</p>
-                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>siguiendo</p>
-              </div>
+              {[{ v: stats?.count || 0, l: 'consumiciones' }, { v: followersCount, l: 'seguidores' }, { v: followingCount, l: 'siguiendo' }].map(s => (
+                <div key={s.l} className="text-center">
+                  <p className="font-bold text-amber-400">{s.v}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{s.l}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Botones acción */}
         {!isMe && (
           <div className="flex gap-3 mb-6">
             <motion.button whileTap={{ scale: 0.96 }} onClick={toggleFollow} disabled={toggling}
               className="flex-1 py-3 rounded-2xl font-bold text-sm"
-              style={{
-                backgroundColor: isFollowing ? 'var(--bg-card)' : '#f59e0b',
-                color: isFollowing ? 'var(--text-primary)' : '#fff',
-                border: isFollowing ? '1px solid var(--border)' : 'none',
-              }}>
+              style={{ backgroundColor: isFollowing ? 'var(--bg-card)' : '#f59e0b', color: isFollowing ? 'var(--text-primary)' : '#fff', border: isFollowing ? '1px solid var(--border)' : 'none' }}>
               {toggling ? '...' : isFollowing ? 'Siguiendo ✓' : '+ Seguir'}
             </motion.button>
-            {canChat && (
+            {canChat ? (
               <motion.button whileTap={{ scale: 0.96 }} onClick={handleOpenChat}
                 className="flex-1 py-3 rounded-2xl font-bold text-sm"
                 style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
                 💬 Mensaje
               </motion.button>
-            )}
-            {isFollowing && !canChat && (
+            ) : isFollowing ? (
               <div className="flex-1 py-3 rounded-2xl text-center text-xs flex items-center justify-center"
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-hint)' }}>
                 Chat disponible si te sigue
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
-        {/* Stats */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
             <p className="text-2xl font-bold text-amber-400">{stats?.total || 0}</p>
@@ -338,7 +392,6 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
           </div>
         </div>
 
-        {/* Logros desbloqueados */}
         <p className="text-sm font-bold mb-3">🏅 Logros desbloqueados</p>
         {unlockedAchievements.length === 0 ? (
           <div className="rounded-2xl p-6 text-center mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -357,7 +410,6 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
           </div>
         )}
 
-        {/* Logros bloqueados (grises) */}
         {ACHIEVEMENTS.filter(a => !achievements.includes(a.id)).length > 0 && (
           <>
             <p className="text-sm font-bold mb-3" style={{ color: 'var(--text-muted)' }}>🔒 Sin desbloquear</p>
@@ -396,17 +448,17 @@ export default function Social() {
   const [comments, setComments] = useState([])
   const [sendingComment, setSendingComment] = useState(false)
 
-  // Búsqueda y social
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
-  const [following, setFollowing] = useState([]) // IDs que sigo
+  const [following, setFollowing] = useState([])
   const [chats, setChats] = useState([])
   const [loadingChats, setLoadingChats] = useState(false)
+  const [unreadByChat, setUnreadByChat] = useState({}) // { chatId: count }
+  const [totalUnread, setTotalUnread] = useState(0)
 
-  // Navegación
-  const [viewingProfile, setViewingProfile] = useState(null) // profileId
-  const [activeChat, setActiveChat] = useState(null) // { chat, otherUser }
+  const [viewingProfile, setViewingProfile] = useState(null)
+  const [activeChat, setActiveChat] = useState(null)
 
   const postImageRef = useRef(null)
   const storyImageRef = useRef(null)
@@ -414,8 +466,28 @@ export default function Social() {
   const commentsBottomRef = useRef(null)
   const searchTimeout = useRef(null)
 
-  useEffect(() => { fetchFeed(); fetchFollowing() }, [])
-  useEffect(() => { if (tab === 'chats') fetchChats() }, [tab])
+  useEffect(() => { fetchFeed(); fetchFollowing(); fetchUnreadCounts() }, [])
+  useEffect(() => { if (tab === 'chats') { fetchChats(); fetchUnreadCounts() } }, [tab])
+
+  // Realtime: escuchar nuevos mensajes privados para actualizar badges
+  useEffect(() => {
+    const channel = supabase.channel('private_messages_unread')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'private_messages' },
+        (payload) => {
+          if (payload.new.sender_id !== user.id) {
+            setUnreadByChat(prev => {
+              const chatId = payload.new.chat_id
+              const newCount = (prev[chatId] || 0) + 1
+              const updated = { ...prev, [chatId]: newCount }
+              setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
+              return updated
+            })
+          }
+        })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [user.id])
 
   useEffect(() => {
     if (showNewPost && textareaRef.current)
@@ -435,6 +507,29 @@ export default function Social() {
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [openComments])
+
+  const fetchUnreadCounts = async () => {
+    const { data: myChats } = await supabase.from('private_chats')
+      .select('id').or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+
+    if (!myChats || myChats.length === 0) return
+
+    const counts = {}
+    await Promise.all(myChats.map(async (chat) => {
+      const { data: readData } = await supabase.from('private_message_reads')
+        .select('last_read_at').eq('user_id', user.id).eq('chat_id', chat.id).maybeSingle()
+      const lastRead = readData?.last_read_at || '1970-01-01'
+      const { count } = await supabase.from('private_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('chat_id', chat.id)
+        .neq('sender_id', user.id)
+        .gt('created_at', lastRead)
+      counts[chat.id] = count || 0
+    }))
+
+    setUnreadByChat(counts)
+    setTotalUnread(Object.values(counts).reduce((s, c) => s + c, 0))
+  }
 
   const fetchFeed = async () => {
     setLoading(true)
@@ -461,10 +556,9 @@ export default function Social() {
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
       .order('created_at', { ascending: false })
 
-    // Para cada chat traer el último mensaje
     const chatsWithLastMsg = await Promise.all((data || []).map(async (chat) => {
       const { data: lastMsg } = await supabase.from('private_messages')
-        .select('content, created_at').eq('chat_id', chat.id)
+        .select('content, image_url, created_at').eq('chat_id', chat.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
       const otherUser = chat.user_a === user.id ? chat.user_b_profile : chat.user_a_profile
       return { ...chat, otherUser, lastMsg }
@@ -488,8 +582,8 @@ export default function Social() {
   }
 
   const toggleFollow = async (profileId) => {
-    const isFollowing = following.includes(profileId)
-    if (isFollowing) {
+    const isFollowingUser = following.includes(profileId)
+    if (isFollowingUser) {
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId)
       setFollowing(prev => prev.filter(id => id !== profileId))
     } else {
@@ -563,6 +657,16 @@ export default function Social() {
   const handleCommentKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }
   const closeNewPost = () => { setShowNewPost(false); setNewPostContent(''); setNewPostImage(null); setNewPostPreview(null) }
 
+  const handleOpenChat = (chat, otherUser) => {
+    // Limpiar badge del chat al abrirlo
+    setUnreadByChat(prev => {
+      const updated = { ...prev, [chat.id]: 0 }
+      setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
+      return updated
+    })
+    setActiveChat({ chat, otherUser })
+  }
+
   const formatTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
     const mins = Math.floor(diff / 60000), hours = Math.floor(mins / 60), days = Math.floor(hours / 24)
@@ -583,6 +687,13 @@ export default function Social() {
 
   const canPublish = (newPostContent.trim().length > 0 || newPostImage !== null) && !uploadingPost
 
+  const TABS = [
+    { id: 'feed',    label: '📰 Feed' },
+    { id: 'stories', label: '⭕ Historias' },
+    { id: 'people',  label: '🔍 Buscar' },
+    { id: 'chats',   label: '💬 Chats', unread: totalUnread },
+  ]
+
   return (
     <div className="min-h-screen pb-24 transition-colors duration-300"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
@@ -590,21 +701,23 @@ export default function Social() {
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
-          {[
-            { id: 'feed',    label: '📰 Feed' },
-            { id: 'stories', label: '⭕ Historias' },
-            { id: 'people',  label: '🔍 Buscar' },
-            { id: 'chats',   label: '💬 Chats' },
-          ].map(t => (
+          {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
+              className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
               style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
               {tab === t.id && (
                 <motion.div layoutId="social-tab" className="absolute inset-0 rounded-lg"
                   style={{ zIndex: -1, backgroundColor: t.id === 'chats' ? '#10b981' : '#f59e0b' }}
                   transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
-              {t.label}
+              <span>{t.label}</span>
+              {t.unread > 0 && (
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  className="min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-white font-black"
+                  style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
+                  {t.unread > 9 ? '9+' : t.unread}
+                </motion.span>
+              )}
             </button>
           ))}
         </div>
@@ -713,32 +826,27 @@ export default function Social() {
         </div>
       )}
 
-      {/* ── BUSCAR USUARIOS ── */}
+      {/* ── BUSCAR ── */}
       {tab === 'people' && (
         <div className="max-w-md mx-auto px-4 pt-4">
-          {/* Buscador */}
           <div className="relative mb-5">
             <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)}
               placeholder="Buscar usuarios..."
               className="w-full rounded-2xl px-5 py-3.5 text-sm outline-none focus:ring-2 focus:ring-amber-500 pr-10"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }} />
             {searching
-              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-lg">🔍</motion.div>
+              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="absolute right-4 top-1/2 -translate-y-1/2 text-lg">🔍</motion.div>
               : <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--text-hint)' }}>🔍</span>}
           </div>
-
-          {/* Resultados de búsqueda */}
-          {searchQuery && (
+          {searchQuery ? (
             searchResults.length === 0 && !searching ? (
               <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
-                <div className="text-4xl mb-2">😶</div>
-                <p className="text-sm">No se encontró ningún usuario</p>
+                <div className="text-4xl mb-2">😶</div><p className="text-sm">No se encontró ningún usuario</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {searchResults.map(profile => {
-                  const isFollowing = following.includes(profile.id)
+                  const isFollowingUser = following.includes(profile.id)
                   return (
                     <motion.div key={profile.id} variants={staggerItem} initial="initial" animate="animate"
                       className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -753,21 +861,15 @@ export default function Social() {
                       </motion.button>
                       <motion.button whileTap={{ scale: 0.9 }} onClick={() => toggleFollow(profile.id)}
                         className="px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0"
-                        style={{
-                          backgroundColor: isFollowing ? 'var(--bg-input)' : '#f59e0b',
-                          color: isFollowing ? 'var(--text-muted)' : '#fff',
-                        }}>
-                        {isFollowing ? 'Siguiendo' : '+ Seguir'}
+                        style={{ backgroundColor: isFollowingUser ? 'var(--bg-input)' : '#f59e0b', color: isFollowingUser ? 'var(--text-muted)' : '#fff' }}>
+                        {isFollowingUser ? 'Siguiendo' : '+ Seguir'}
                       </motion.button>
                     </motion.div>
                   )
                 })}
               </div>
             )
-          )}
-
-          {/* Estado vacío */}
-          {!searchQuery && (
+          ) : (
             <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
               <div className="text-5xl mb-3">🔍</div>
               <p className="font-medium">Busca usuarios por nombre</p>
@@ -777,7 +879,7 @@ export default function Social() {
         </div>
       )}
 
-      {/* ── CHATS PRIVADOS ── */}
+      {/* ── CHATS ── */}
       {tab === 'chats' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           {loadingChats ? (
@@ -791,41 +893,58 @@ export default function Social() {
               <p className="font-medium">No tienes chats activos</p>
               <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a alguien y si te sigue de vuelta podréis chatear</p>
               <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('people')}
-                className="mt-4 px-6 py-3 rounded-2xl text-sm font-bold text-white"
-                style={{ backgroundColor: '#f59e0b' }}>
+                className="mt-4 px-6 py-3 rounded-2xl text-sm font-bold text-white" style={{ backgroundColor: '#f59e0b' }}>
                 🔍 Buscar usuarios
               </motion.button>
             </div>
           ) : (
             <div className="space-y-2">
-              {chats.map(chat => (
-                <motion.button key={chat.id} variants={staggerItem} initial="initial" animate="animate"
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setActiveChat({ chat, otherUser: chat.otherUser })}
-                  className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
-                  style={{ backgroundColor: 'var(--bg-card)' }}>
-                  {chat.otherUser?.avatar_url
-                    ? <img src={chat.otherUser.avatar_url} alt={chat.otherUser.username} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
-                    : <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-2xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{chat.otherUser?.username}</p>
-                    <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                      {chat.lastMsg?.content || 'Inicia la conversación...'}
-                    </p>
-                  </div>
-                  {chat.lastMsg && (
-                    <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
-                      {formatTime(chat.lastMsg.created_at)}
-                    </p>
-                  )}
-                </motion.button>
-              ))}
+              {chats.map(chat => {
+                const unread = unreadByChat[chat.id] || 0
+                const lastMsgText = chat.lastMsg?.image_url && !chat.lastMsg?.content ? '📷 Imagen' : (chat.lastMsg?.content || 'Inicia la conversación...')
+                return (
+                  <motion.button key={chat.id} variants={staggerItem} initial="initial" animate="animate"
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => handleOpenChat(chat, chat.otherUser)}
+                    className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
+                    style={{
+                      backgroundColor: 'var(--bg-card)',
+                      border: unread > 0 ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent',
+                    }}>
+                    <div className="relative flex-shrink-0">
+                      {chat.otherUser?.avatar_url
+                        ? <img src={chat.otherUser.avatar_url} alt={chat.otherUser.username} className="w-12 h-12 rounded-full object-cover" />
+                        : <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                      {/* Badge de no leídos en el avatar */}
+                      {unread > 0 && (
+                        <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
+                          className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-white font-black"
+                          style={{ backgroundColor: '#ef4444', fontSize: 10 }}>
+                          {unread > 9 ? '9+' : unread}
+                        </motion.span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm ${unread > 0 ? 'font-bold' : 'font-medium'}`}>{chat.otherUser?.username}</p>
+                      <p className={`text-xs truncate mt-0.5 ${unread > 0 ? 'font-semibold' : ''}`}
+                        style={{ color: unread > 0 ? 'var(--text-primary)' : 'var(--text-hint)' }}>
+                        {lastMsgText}
+                      </p>
+                    </div>
+                    {chat.lastMsg && (
+                      <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                        {formatTime(chat.lastMsg.created_at)}
+                      </p>
+                    )}
+                  </motion.button>
+                )
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* FAB nuevo post */}
+      {/* FAB */}
       {tab === 'feed' && (
         <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}
           onClick={() => setShowNewPost(true)}
@@ -834,7 +953,7 @@ export default function Social() {
         </motion.button>
       )}
 
-      {/* ── MODAL NUEVO POST ── */}
+      {/* Modal nuevo post */}
       <AnimatePresence>
         {showNewPost && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -964,22 +1083,16 @@ export default function Social() {
       {/* Perfil de usuario */}
       <AnimatePresence>
         {viewingProfile && (
-          <UserProfile
-            profileId={viewingProfile}
-            onClose={() => setViewingProfile(null)}
-            onOpenChat={(chat, otherUser) => { setViewingProfile(null); setActiveChat({ chat, otherUser }) }}
-          />
+          <UserProfile profileId={viewingProfile} onClose={() => setViewingProfile(null)}
+            onOpenChat={(chat, otherUser) => { setViewingProfile(null); handleOpenChat(chat, otherUser) }} />
         )}
       </AnimatePresence>
 
       {/* Chat privado */}
       <AnimatePresence>
         {activeChat && (
-          <PrivateChat
-            chat={activeChat.chat}
-            otherUser={activeChat.otherUser}
-            onClose={() => { setActiveChat(null); fetchChats() }}
-          />
+          <PrivateChat chat={activeChat.chat} otherUser={activeChat.otherUser}
+            onClose={() => { setActiveChat(null); fetchChats(); fetchUnreadCounts() }} />
         )}
       </AnimatePresence>
     </div>
