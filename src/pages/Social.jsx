@@ -1,781 +1,383 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerItem } from '../lib/animations'
-import { soundLike, soundMessage, soundSuccess, soundError } from '../lib/sounds'
+import { soundLike, soundMessage, soundSuccess } from '../lib/sounds'
 
-// ─── CONSTANTES RULETA ────────────────────────────────────────────────────────
-
-const REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36])
-
-const getNumberColor = (n) => {
-  if (n === 0) return 'green'
-  return REDS.has(n) ? 'red' : 'black'
-}
-
-const WHEEL_ORDER = [
-  0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,
-  5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26
+// Definición de logros (igual que en Profile.jsx)
+const ACHIEVEMENTS = [
+  { id: 'first_drink',    emoji: '🍺', name: 'Primera ronda' },
+  { id: 'drinks_10',      emoji: '🔟', name: 'Bebedor consistente' },
+  { id: 'drinks_50',      emoji: '🏅', name: 'Veterano' },
+  { id: 'drinks_100',     emoji: '👑', name: 'Leyenda' },
+  { id: 'martes_macarra', emoji: '🔥', name: 'Martes Macarra' },
+  { id: 'variety_5',      emoji: '🌈', name: 'Paladar exquisito' },
+  { id: 'roulette_win',   emoji: '🎰', name: 'Golpe de suerte' },
+  { id: 'roulette_3wins', emoji: '🎯', name: 'En racha' },
+  { id: 'millionaire',    emoji: '💰', name: 'Millonario' },
+  { id: 'market_5',       emoji: '📈', name: 'Tiburón del mercado' },
+  { id: 'big_bet',        emoji: '🎲', name: 'Todo o nada' },
+  { id: 'sabotage',       emoji: '💣', name: 'Saboteador' },
+  { id: 'shield',         emoji: '🛡️', name: 'Protegido' },
+  { id: 'generous',       emoji: '💸', name: 'Generoso' },
+  { id: 'popular',        emoji: '❤️', name: 'Popular' },
 ]
 
-const COLOR_STYLES = {
-  red:   { bg: '#dc2626', text: '#fff' },
-  black: { bg: '#111827', text: '#fff' },
-  green: { bg: '#16a34a', text: '#fff' },
-}
-
-const FREE_SEGMENTS = [
-  { label: '+2 pts',      emoji: '🍺', color: '#f59e0b', textColor: '#fff' },
-  { label: '+50 🪙',      emoji: '🪙', color: '#6366f1', textColor: '#fff' },
-  { label: 'Escudo',      emoji: '🛡️', color: '#10b981', textColor: '#fff' },
-  { label: '+5 pts',      emoji: '🍺', color: '#ef4444', textColor: '#fff' },
-  { label: '+150 🪙',     emoji: '🪙', color: '#8b5cf6', textColor: '#fff' },
-  { label: 'Freeze',      emoji: '🧊', color: '#3b82f6', textColor: '#fff' },
-  { label: '+2 pts',      emoji: '🍺', color: '#f59e0b', textColor: '#fff' },
-  { label: '+300 🪙',     emoji: '🪙', color: '#ec4899', textColor: '#fff' },
-  { label: 'Racha Doble', emoji: '🔥', color: '#f97316', textColor: '#fff' },
-  { label: '+5 pts',      emoji: '🍺', color: '#ef4444', textColor: '#fff' },
-  { label: 'Turbo',       emoji: '⚡', color: '#eab308', textColor: '#fff' },
-  { label: '💀 Nada',     emoji: '💀', color: '#374151', textColor: '#9ca3af' },
-]
-
-const FREE_LABEL_MAP = {
-  '+2 puntos':     0,
-  '+50 monedas':   1,
-  'Escudo':        2,
-  '+5 puntos':     3,
-  '+150 monedas':  4,
-  'Freeze':        5,
-  '+300 monedas':  7,
-  'Racha Doble':   8,
-  'Turbo':         10,
-  '¡Mala suerte!': 11,
-}
-
-const FREE_POWERUP_MAP = {
-  'shield':        2,
-  'freeze':        5,
-  'double_points': 8,
-  'turbo':         10,
-  'sabotage':      11,
-  'sniper':        9,
-}
-
-// ─── UTILIDAD: calcular rotación final para que el puntero (arriba) apunte al segmento ──
-// El puntero está fijo arriba. La rueda gira. Necesitamos que el CENTRO del segmento
-// target quede apuntando arriba (0° desde el top del SVG).
-// El segmento i ocupa [i*segAngle, (i+1)*segAngle] desde el origen del SVG (top).
-// Para que el centro del segmento quede arriba, la rueda debe rotar -segCenter grados
-// (más las vueltas completas).
-function calcFinalRotation(currentRotation, targetIndex, totalSegments, extraSpins = 6) {
-  const segAngle = 360 / totalSegments
-  // Centro del segmento en coordenadas del SVG (sin rotación)
-  const segCenter = targetIndex * segAngle + segAngle / 2
-  // Para que ese punto quede arriba (0°), necesitamos rotar -(segCenter) mod 360
-  // pero como la rueda siempre gira en positivo, buscamos el ángulo equivalente
-  const targetOffset = (360 - segCenter % 360) % 360
-  // Rotación actual normalizada
-  const currentNorm = ((currentRotation % 360) + 360) % 360
-  // Cuánto falta para llegar al target desde la posición actual
-  let delta = targetOffset - currentNorm
-  if (delta < 0) delta += 360
-  // Añadimos vueltas completas para el efecto visual
-  return currentRotation + extraSpins * 360 + delta
-}
-
-function FreeRouletteWheel({ spinning, targetIndex, onSpinEnd }) {
-  const [displayRotation, setDisplayRotation] = useState(0)
-  const rotationRef = useRef(0)
-  const animRef = useRef(null)
-
-  useEffect(() => {
-    if (!spinning) return
-    cancelAnimationFrame(animRef.current)
-
-    const finalRotation = calcFinalRotation(rotationRef.current, targetIndex, FREE_SEGMENTS.length, 5 + Math.floor(Math.random() * 3))
-    const duration = 4000 + Math.random() * 800
-    let startTime = null
-    const startRot = rotationRef.current
-
-    const animate = (ts) => {
-      if (!startTime) startTime = ts
-      const progress = Math.min((ts - startTime) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      const current = startRot + (finalRotation - startRot) * eased
-      setDisplayRotation(current)
-      if (progress < 1) {
-        animRef.current = requestAnimationFrame(animate)
-      } else {
-        rotationRef.current = finalRotation
-        setDisplayRotation(finalRotation)
-        onSpinEnd()
-      }
-    }
-    animRef.current = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(animRef.current)
-  }, [spinning, targetIndex])
-
-  const size = 260
-  const cx = size / 2, cy = size / 2, r = size / 2 - 8
-  const SEGMENT_ANGLE = 360 / FREE_SEGMENTS.length
-
-  const polarToCartesian = (angle, radius) => {
-    const rad = (angle - 90) * Math.PI / 180
-    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) }
-  }
-
-  const describeArc = (startAngle, endAngle) => {
-    const start = polarToCartesian(startAngle, r)
-    const end = polarToCartesian(endAngle, r)
-    const largeArc = endAngle - startAngle > 180 ? 1 : 0
-    return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`
-  }
-
-  return (
-    <div style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', zIndex: 10, fontSize: 24 }}>▼</div>
-      <div style={{
-        position: 'absolute', inset: 0, borderRadius: '50%',
-        background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', padding: 5,
-        boxShadow: '0 0 30px rgba(245,158,11,0.4)',
-      }}>
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden' }}>
-          <svg width={size - 10} height={size - 10} viewBox={`0 0 ${size} ${size}`}
-            style={{ transform: `rotate(${displayRotation}deg)`, transformOrigin: 'center' }}>
-            {FREE_SEGMENTS.map((seg, i) => {
-              const startAngle = i * SEGMENT_ANGLE
-              const endAngle = (i + 1) * SEGMENT_ANGLE
-              const midAngle = startAngle + SEGMENT_ANGLE / 2
-              const textPos = polarToCartesian(midAngle, r * 0.62)
-              const emojiPos = polarToCartesian(midAngle, r * 0.84)
-              return (
-                <g key={i}>
-                  <path d={describeArc(startAngle, endAngle)} fill={seg.color} stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
-                  <text x={emojiPos.x} y={emojiPos.y} textAnchor="middle" dominantBaseline="middle" fontSize="13">{seg.emoji}</text>
-                  <text x={textPos.x} y={textPos.y} textAnchor="middle" dominantBaseline="middle"
-                    fontSize="8.5" fontWeight="bold" fill={seg.textColor}
-                    transform={`rotate(${midAngle}, ${textPos.x}, ${textPos.y})`}>
-                    {seg.label}
-                  </text>
-                </g>
-              )
-            })}
-            <circle cx={cx} cy={cy} r={20} fill="#1f2937" stroke="#f59e0b" strokeWidth="3" />
-            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="16">🍺</text>
-          </svg>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── RULETA EUROPEA ───────────────────────────────────────────────────────────
-
-function EuropeanRouletteWheel({ spinning, targetNumber, onSpinEnd }) {
-  const [displayRotation, setDisplayRotation] = useState(0)
-  const rotationRef = useRef(0)
-  const animRef = useRef(null)
-
-  useEffect(() => {
-    if (!spinning || targetNumber === null) return
-    cancelAnimationFrame(animRef.current)
-
-    const targetIdx = WHEEL_ORDER.indexOf(targetNumber)
-    if (targetIdx === -1) return
-
-    // ✅ CORREGIDO: usar la misma función de cálculo fiable
-    const finalRotation = calcFinalRotation(rotationRef.current, targetIdx, 37, 6 + Math.floor(Math.random() * 4))
-    const duration = 5000 + Math.random() * 1500
-    let startTime = null
-    const startRot = rotationRef.current
-
-    const animate = (ts) => {
-      if (!startTime) startTime = ts
-      const progress = Math.min((ts - startTime) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 4)
-      const current = startRot + (finalRotation - startRot) * eased
-      setDisplayRotation(current)
-      if (progress < 1) {
-        animRef.current = requestAnimationFrame(animate)
-      } else {
-        rotationRef.current = finalRotation
-        setDisplayRotation(finalRotation)
-        onSpinEnd()
-      }
-    }
-    animRef.current = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(animRef.current)
-  }, [spinning, targetNumber])
-
-  const size = 280
-  const cx = size / 2, cy = size / 2, r = size / 2 - 8
-  const segAngle = 360 / 37
-
-  const polarToCartesian = (angle, radius) => {
-    const rad = (angle - 90) * Math.PI / 180
-    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) }
-  }
-
-  const describeArc = (startAngle, endAngle) => {
-    const start = polarToCartesian(startAngle, r)
-    const end = polarToCartesian(endAngle, r)
-    const largeArc = endAngle - startAngle > 180 ? 1 : 0
-    return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`
-  }
-
-  return (
-    <div style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
-      <div style={{
-        position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 10, width: 14, height: 14, borderRadius: '50%',
-        background: 'radial-gradient(circle at 35% 35%, #fff, #ccc)',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.6)',
-      }} />
-      <div style={{
-        position: 'absolute', inset: 0, borderRadius: '50%',
-        background: 'linear-gradient(135deg, #92400e, #d97706, #92400e)', padding: 6,
-        boxShadow: '0 0 40px rgba(217,119,6,0.5), inset 0 0 20px rgba(0,0,0,0.3)',
-      }}>
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden' }}>
-          <svg width={size - 12} height={size - 12} viewBox={`0 0 ${size} ${size}`}
-            style={{ transform: `rotate(${displayRotation}deg)`, transformOrigin: 'center' }}>
-            {WHEEL_ORDER.map((num, i) => {
-              const startAngle = i * segAngle
-              const endAngle = (i + 1) * segAngle
-              const midAngle = startAngle + segAngle / 2
-              const textPos = polarToCartesian(midAngle, r * 0.78)
-              const color = getNumberColor(num)
-              const style = COLOR_STYLES[color]
-              return (
-                <g key={i}>
-                  <path d={describeArc(startAngle, endAngle)} fill={style.bg}
-                    stroke="rgba(200,150,0,0.4)" strokeWidth="0.8" />
-                  <text x={textPos.x} y={textPos.y} textAnchor="middle" dominantBaseline="middle"
-                    fontSize="9" fontWeight="bold" fill={style.text}
-                    transform={`rotate(${midAngle}, ${textPos.x}, ${textPos.y})`}>
-                    {num}
-                  </text>
-                </g>
-              )
-            })}
-            <circle cx={cx} cy={cy} r={28} fill="#1a0a00" stroke="#d97706" strokeWidth="3" />
-            <circle cx={cx} cy={cy} r={20} fill="#2d1500" stroke="#92400e" strokeWidth="2" />
-            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="#d97706" fontWeight="bold">
-              BEER
-            </text>
-          </svg>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── CASINO ───────────────────────────────────────────────────────────────────
-
-function Casino() {
+// ─── CHAT PRIVADO ─────────────────────────────────────────────────────────────
+function PrivateChat({ chat, otherUser, onClose }) {
   const { user } = useAuth()
-  const [casinoTab, setCasinoTab] = useState('free')
-  const [balance, setBalance] = useState(0)
+  const [messages, setMessages] = useState([])
+  const [newMessage, setNewMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const bottomRef = useRef(null)
 
-  const [freeSpinning, setFreeSpinning] = useState(false)
-  const [freeTargetIdx, setFreeTargetIdx] = useState(0)
-  const [freePrize, setFreePrize] = useState(null)
-  const [showFreePrize, setShowFreePrize] = useState(false)
-  const [alreadySpun, setAlreadySpun] = useState(false)
-  const [spinHistory, setSpinHistory] = useState([])
-  const [loadingFree, setLoadingFree] = useState(true)
+  useEffect(() => {
+    fetchMessages()
+    const channel = supabase.channel(`private_chat:${chat.id}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chat.id}` },
+        async (payload) => {
+          const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.sender_id).single()
+          setMessages(prev => [...prev, { ...payload.new, profiles: profile }])
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+        })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [chat.id])
 
-  const [betAmount, setBetAmount] = useState(50)
-  const [betType, setBetType] = useState(null)
-  const [betValue, setBetValue] = useState(null)
-  const [betSpinning, setBetSpinning] = useState(false)
-  const [betTargetNumber, setBetTargetNumber] = useState(null)
-  const [betResult, setBetResult] = useState(null)
-  const [pendingBetResult, setPendingBetResult] = useState(null) // ✅ resultado pendiente hasta fin animación
-  const [showBetResult, setShowBetResult] = useState(false)
-  const [betHistory, setBetHistory] = useState([])
-  const [loadingBet, setLoadingBet] = useState(true)
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  useEffect(() => { fetchBalance() }, [])
-  useEffect(() => { if (casinoTab === 'free') fetchFreeData() }, [casinoTab])
-  useEffect(() => { if (casinoTab === 'bet') fetchBetData() }, [casinoTab])
-
-  const fetchBalance = async () => {
-    const { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).single()
-    setBalance(data?.balance || 0)
+  const fetchMessages = async () => {
+    const { data } = await supabase.from('private_messages')
+      .select('*, profiles(username, avatar_url)')
+      .eq('chat_id', chat.id)
+      .order('created_at', { ascending: true })
+      .limit(100)
+    setMessages(data || [])
   }
 
-  const fetchFreeData = async () => {
-    setLoadingFree(true)
-    const { data } = await supabase.from('roulette_spins').select('*')
-      .eq('user_id', user.id).order('spun_at', { ascending: false }).limit(10)
-    setSpinHistory(data || [])
-    if (data && data.length > 0) {
-      const lastSpin = new Date(data[0].spun_at)
-      const nowMadrid = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-      const lastMadrid = new Date(lastSpin.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-      setAlreadySpun(lastMadrid.toDateString() === nowMadrid.toDateString())
-    } else { setAlreadySpun(false) }
-    setLoadingFree(false)
+  const sendMessage = async () => {
+    if (!newMessage.trim() || sending) return
+    setSending(true); soundMessage()
+    await supabase.from('private_messages').insert({ chat_id: chat.id, sender_id: user.id, content: newMessage.trim() })
+    setNewMessage(''); setSending(false)
   }
 
-  const fetchBetData = async () => {
-    setLoadingBet(true)
-    const { data } = await supabase.from('roulette_bets').select('*')
-      .eq('user_id', user.id).order('created_at', { ascending: false }).limit(15)
-    setBetHistory(data || [])
-    setLoadingBet(false)
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
-  const resolveSegmentIndex = (data) => {
-    if (FREE_LABEL_MAP[data.prize_label] !== undefined) return FREE_LABEL_MAP[data.prize_label]
-    if (data.prize_powerup && FREE_POWERUP_MAP[data.prize_powerup] !== undefined) return FREE_POWERUP_MAP[data.prize_powerup]
-    if (data.prize_type === 'nothing') return 11
-    if (data.prize_type === 'coins') return 1
-    if (data.prize_type === 'points') return 0
-    return Math.floor(Math.random() * 12)
-  }
+  const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
 
-  const handleFreeSpin = async () => {
-    if (freeSpinning || alreadySpun) return
-    setFreeSpinning(true)
-    setFreePrize(null)
-    setShowFreePrize(false)
+  const grouped = messages.reduce((g, m) => {
+    const d = new Date(m.created_at).toDateString()
+    if (!g[d]) g[d] = []
+    g[d].push(m); return g
+  }, {})
 
-    const { data } = await supabase.rpc('spin_roulette')
-    if (!data?.success) {
-      soundError()
-      setFreeSpinning(false)
-      return
-    }
-    const idx = resolveSegmentIndex(data)
-    setFreeTargetIdx(idx)
-    setFreePrize(data)
-  }
-
-  const handleFreeSpinEnd = useCallback(() => {
-    setFreeSpinning(false)
-    setAlreadySpun(true)
-    soundSuccess()
-    setTimeout(() => { setShowFreePrize(true); fetchFreeData(); fetchBalance() }, 300)
-  }, [])
-
-  const handleBetSpin = async () => {
-    if (betSpinning || !betType || betAmount < 10 || betAmount > balance) return
-    if (betType === 'number' && betValue === null) return
-    setBetSpinning(true)
-    setBetResult(null)
-    setPendingBetResult(null)
-    setShowBetResult(false)
-
-    const { data } = await supabase.rpc('spin_bet_roulette', {
-      p_bet_amount: betAmount,
-      p_bet_type: betType,
-      p_bet_value: betType === 'number' ? String(betValue) : null,
-    })
-
-    if (!data?.success) {
-      soundError()
-      setBetSpinning(false)
-      alert(data?.error || 'Error al apostar')
-      return
-    }
-
-    // ✅ CORREGIDO: guardamos el resultado pero NO actualizamos el saldo todavía
-    // El saldo se actualiza en handleBetSpinEnd, cuando la animación termina
-    setBetTargetNumber(data.number)
-    setPendingBetResult(data)
-  }
-
-  // ✅ CORREGIDO: el saldo y el resultado se muestran SOLO al terminar la animación
-  const handleBetSpinEnd = useCallback(() => {
-    setBetSpinning(false)
-    if (pendingBetResult) {
-      setBetResult(pendingBetResult)
-      setBalance(pendingBetResult.new_balance) // ← ahora aquí, no antes
-      if (pendingBetResult.won) soundSuccess()
-      else soundError()
-      setTimeout(() => { setShowBetResult(true); fetchBetData() }, 400)
-    }
-  }, [pendingBetResult])
-
-  const formatTime = (ts) => {
-    const diff = Date.now() - new Date(ts).getTime()
-    const mins = Math.floor(diff / 60000)
-    const hours = Math.floor(mins / 60)
-    const days = Math.floor(hours / 24)
-    if (days > 0) return `hace ${days}d`
-    if (hours > 0) return `hace ${hours}h`
-    if (mins > 0) return `hace ${mins}m`
-    return 'ahora'
-  }
-
-  const BET_TYPES = [
-    { id: 'red',    label: 'Rojo',   emoji: '🔴', payout: 'x2' },
-    { id: 'black',  label: 'Negro',  emoji: '⚫', payout: 'x2' },
-    { id: 'even',   label: 'Par',    emoji: '2️⃣', payout: 'x2' },
-    { id: 'odd',    label: 'Impar',  emoji: '1️⃣', payout: 'x2' },
-    { id: 'low',    label: '1-18',   emoji: '⬇️', payout: 'x2' },
-    { id: 'high',   label: '19-36',  emoji: '⬆️', payout: 'x2' },
-    { id: 'dozen1', label: '1ª Doc', emoji: '🎲', payout: 'x3' },
-    { id: 'dozen2', label: '2ª Doc', emoji: '🎲', payout: 'x3' },
-    { id: 'dozen3', label: '3ª Doc', emoji: '🎲', payout: 'x3' },
-    { id: 'col1',   label: 'Col 1',  emoji: '📊', payout: 'x3' },
-    { id: 'col2',   label: 'Col 2',  emoji: '📊', payout: 'x3' },
-    { id: 'col3',   label: 'Col 3',  emoji: '📊', payout: 'x3' },
-    { id: 'number', label: 'Número', emoji: '🎯', payout: 'x36' },
-  ]
+  const Avatar = ({ url, username }) => url
+    ? <img src={url} alt={username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+    : <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
 
   return (
-    <div className="max-w-md mx-auto px-4 pt-4 pb-6">
-      <div className="text-center mb-5">
-        <h2 className="text-2xl font-bold mb-1">Casino 🎰</h2>
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl"
-          style={{ backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }}>
-          <span className="text-lg">🪙</span>
-          <span className="font-bold text-amber-400 text-lg">{balance.toLocaleString()}</span>
+    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+      className="fixed inset-0 z-50 flex flex-col"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
+        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
+          className="w-8 h-8 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>←</motion.button>
+        <Avatar url={otherUser?.avatar_url} username={otherUser?.username} />
+        <div className="flex-1">
+          <p className="font-bold text-sm">{otherUser?.username}</p>
+          <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Chat privado</p>
         </div>
       </div>
 
-      <div className="flex rounded-xl p-1 mb-6" style={{ backgroundColor: 'var(--bg-input)' }}>
-        <button onClick={() => setCasinoTab('free')}
-          className="relative flex-1 py-2 rounded-lg text-xs font-medium z-10"
-          style={{ color: casinoTab === 'free' ? '#fff' : 'var(--text-muted)' }}>
-          {casinoTab === 'free' && (
-            <motion.div layoutId="casino-tab" className="absolute inset-0 bg-purple-600 rounded-lg"
-              style={{ zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
-          )}
-          🎡 Ruleta Gratis
-        </button>
-        <button onClick={() => setCasinoTab('bet')}
-          className="relative flex-1 py-2 rounded-lg text-xs font-medium z-10"
-          style={{ color: casinoTab === 'bet' ? '#fff' : 'var(--text-muted)' }}>
-          {casinoTab === 'bet' && (
-            <motion.div layoutId="casino-tab" className="absolute inset-0 rounded-lg"
-              style={{ zIndex: -1, backgroundColor: '#b91c1c' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
-          )}
-          🎰 Ruleta Apuestas
-        </button>
+      {/* Mensajes */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {messages.length === 0 ? (
+          <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-5xl mb-3">💬</div>
+            <p>Empieza la conversación con {otherUser?.username}</p>
+          </div>
+        ) : (
+          Object.entries(grouped).map(([date, msgs]) => (
+            <div key={date}>
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+                <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatDate(msgs[0].created_at)}</span>
+                <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+              </div>
+              {msgs.map((msg, index) => {
+                const isMe = msg.sender_id === user.id
+                const isSameUser = msgs[index - 1]?.sender_id === msg.sender_id
+                return (
+                  <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    {!isMe && (
+                      <div className="flex-shrink-0 self-end">
+                        {!isSameUser ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} /> : <div className="w-8" />}
+                      </div>
+                    )}
+                    <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                      {msg.content && (
+                        <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
+                          style={{ backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)', color: isMe ? '#fff' : 'var(--text-primary)' }}>
+                          {msg.content}
+                        </div>
+                      )}
+                      <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>{formatTime(msg.created_at)}</span>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
       </div>
 
-      {/* ── RULETA GRATUITA ── */}
-      {casinoTab === 'free' && (
-        <>
-          <p className="text-center text-sm mb-5" style={{ color: 'var(--text-muted)' }}>
-            Una tirada gratis al día · Gana puntos, monedas o powerups
-          </p>
-          {loadingFree ? (
-            <div className="text-center py-10">
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-4xl mb-2">🎡</motion.div>
-            </div>
-          ) : (
-            <>
-              <div className="mb-6">
-                <FreeRouletteWheel spinning={freeSpinning} targetIndex={freeTargetIdx} onSpinEnd={handleFreeSpinEnd} />
-              </div>
-              {alreadySpun && !freeSpinning ? (
-                <div className="rounded-2xl p-4 mb-5 text-center"
-                  style={{ backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)' }}>
-                  <p className="text-sm font-bold text-purple-400">✅ Ya has girado hoy</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Vuelve mañana para otra tirada gratis</p>
-                </div>
-              ) : (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={handleFreeSpin}
-                  disabled={freeSpinning || alreadySpun}
-                  className="w-full py-4 rounded-2xl font-bold text-white text-base mb-5 relative overflow-hidden"
-                  style={{ backgroundColor: freeSpinning ? '#4c1d95' : '#7c3aed' }}>
-                  {freeSpinning ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <motion.span animate={{ rotate: 360 }} transition={{ duration: 0.5, repeat: Infinity, ease: 'linear' }}>🎡</motion.span>
-                      Girando...
-                    </div>
-                  ) : '🎡 ¡Girar gratis!'}
-                  {!freeSpinning && (
-                    <motion.div className="absolute inset-0"
-                      style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)' }}
-                      animate={{ x: ['-100%', '100%'] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
-                  )}
-                </motion.button>
-              )}
-              <AnimatePresence>
-                {showFreePrize && freePrize && (
-                  <motion.div initial={{ opacity: 0, scale: 0.5, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    className="rounded-2xl p-5 mb-5 text-center"
-                    style={{
-                      backgroundColor: freePrize.prize_type === 'nothing' ? 'rgba(55,65,81,0.5)' : 'rgba(124,58,237,0.15)',
-                      border: `2px solid ${freePrize.prize_type === 'nothing' ? '#374151' : '#7c3aed'}`,
-                    }}>
-                    <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.5 }} className="text-5xl mb-2">
-                      {freePrize.prize_emoji}
-                    </motion.div>
-                    <p className="text-lg font-bold" style={{ color: freePrize.prize_type === 'nothing' ? '#9ca3af' : '#c084fc' }}>
-                      {freePrize.prize_label}
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                      {freePrize.prize_type === 'points' ? 'Puntos añadidos en todas tus ligas' :
-                       freePrize.prize_type === 'coins' ? 'Monedas añadidas a tu monedero' :
-                       freePrize.prize_type === 'powerup' ? 'Powerup añadido a tu inventario' : 'Más suerte la próxima vez'}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
-                <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>Tabla de premios</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {[
-                    { emoji: '🍺', label: '+2 pts',   prob: '20%', color: '#f59e0b' },
-                    { emoji: '🍺', label: '+5 pts',   prob: '15%', color: '#f59e0b' },
-                    { emoji: '🪙', label: '+50🪙',    prob: '15%', color: '#6366f1' },
-                    { emoji: '🪙', label: '+150🪙',   prob: '10%', color: '#8b5cf6' },
-                    { emoji: '🪙', label: '+300🪙',   prob: '8%',  color: '#ec4899' },
-                    { emoji: '🔥', label: 'Racha x2', prob: '8%',  color: '#f97316' },
-                    { emoji: '🛡️', label: 'Escudo',   prob: '7%',  color: '#10b981' },
-                    { emoji: '🧊', label: 'Freeze',   prob: '7%',  color: '#3b82f6' },
-                    { emoji: '⚡', label: 'Turbo',    prob: '5%',  color: '#eab308' },
-                    { emoji: '💣', label: 'Sabotaje', prob: '3%',  color: '#ef4444' },
-                    { emoji: '🎯', label: 'Sniper',   prob: '1%',  color: '#a855f7' },
-                    { emoji: '💀', label: 'Nada',     prob: '1%',  color: '#6b7280' },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between py-1 px-2 rounded-lg"
-                      style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm">{item.emoji}</span>
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{item.label}</span>
-                      </div>
-                      <span className="text-xs font-bold" style={{ color: item.color }}>{item.prob}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {spinHistory.length > 0 && (
-                <div>
-                  <p className="text-sm font-bold mb-3">Últimas tiradas</p>
-                  <div className="space-y-2">
-                    {spinHistory.map(spin => (
-                      <motion.div key={spin.id} variants={staggerItem} initial="initial" animate="animate"
-                        className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                        <span className="text-2xl">{spin.prize_emoji}</span>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{spin.prize_label}</p>
-                          <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(spin.spun_at)}</p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {/* ── RULETA DE APUESTAS ── */}
-      {casinoTab === 'bet' && (
-        <>
-          <p className="text-center text-sm mb-5" style={{ color: 'var(--text-muted)' }}>
-            Ruleta europea clásica · Sin límite de tiradas
-          </p>
-          <div className="mb-5">
-            <EuropeanRouletteWheel spinning={betSpinning} targetNumber={betTargetNumber} onSpinEnd={handleBetSpinEnd} />
-          </div>
-
-          <AnimatePresence>
-            {showBetResult && betResult && (
-              <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="rounded-2xl p-5 mb-5 text-center"
-                style={{
-                  backgroundColor: betResult.won ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-                  border: `2px solid ${betResult.won ? '#10b981' : '#ef4444'}`,
-                }}>
-                <div className="flex justify-center mb-3">
-                  <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black"
-                    style={COLOR_STYLES[betResult.color]}>
-                    {betResult.number}
-                  </div>
-                </div>
-                <motion.p className="text-xl font-bold mb-1"
-                  animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 0.4 }}
-                  style={{ color: betResult.won ? '#10b981' : '#ef4444' }}>
-                  {betResult.won ? '¡GANASTE! 🎉' : '¡PERDISTE! 😬'}
-                </motion.p>
-                {betResult.won ? (
-                  <>
-                    <p className="text-2xl font-black text-emerald-400">+{betResult.payout}🪙</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                      Multiplicador x{betResult.multiplier} · Neto +{betResult.net}🪙
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-lg font-bold text-red-400">-{betResult.bet_amount || betAmount}🪙</p>
-                )}
-                <p className="text-xs mt-2" style={{ color: 'var(--text-hint)' }}>
-                  Saldo actual: {betResult.new_balance.toLocaleString()}🪙
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-bold">Apuesta</p>
-              <p className="font-bold text-amber-400">{betAmount}🪙</p>
-            </div>
-            <input type="range" min="10" max={Math.min(balance, 5000)} step="10"
-              value={betAmount} onChange={e => setBetAmount(Number(e.target.value))}
-              className="w-full accent-red-600 mb-2" />
-            <div className="flex gap-2">
-              {[50, 100, 250, 500, 1000].filter(v => v <= balance).map(v => (
-                <motion.button key={v} whileTap={{ scale: 0.9 }} onClick={() => setBetAmount(v)}
-                  className="flex-1 text-xs py-1.5 rounded-lg font-medium"
-                  style={{ backgroundColor: betAmount === v ? '#b91c1c' : 'var(--bg-input)', color: betAmount === v ? '#fff' : 'var(--text-muted)' }}>
-                  {v}
-                </motion.button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-sm font-bold mb-3">Tipo de apuesta</p>
-            <div className="grid grid-cols-3 gap-2">
-              {BET_TYPES.map(bt => (
-                <motion.button key={bt.id} whileTap={{ scale: 0.93 }}
-                  onClick={() => { setBetType(bt.id); if (bt.id !== 'number') setBetValue(null) }}
-                  className="rounded-xl p-2.5 text-center"
-                  style={{
-                    backgroundColor: betType === bt.id ? 'rgba(185,28,28,0.25)' : 'var(--bg-input)',
-                    border: betType === bt.id ? '2px solid #b91c1c' : '2px solid transparent',
-                  }}>
-                  <div className="text-xl mb-0.5">{bt.emoji}</div>
-                  <p className="text-xs font-bold" style={{ color: betType === bt.id ? '#fca5a5' : 'var(--text-primary)' }}>
-                    {bt.label}
-                  </p>
-                  <p className="text-xs font-black" style={{ color: '#fbbf24' }}>{bt.payout}</p>
-                </motion.button>
-              ))}
-            </div>
-            {betType === 'number' && (
-              <div className="mt-3">
-                <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
-                  Número elegido:{' '}
-                  {betValue !== null
-                    ? <span className="font-black text-sm" style={COLOR_STYLES[getNumberColor(betValue)]}>{betValue}</span>
-                    : <span style={{ color: 'var(--text-hint)' }}>ninguno</span>}
-                </p>
-                <div className="grid grid-cols-9 gap-1 max-h-44 overflow-y-auto">
-                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setBetValue(0)}
-                    className="col-span-9 rounded-lg flex items-center justify-center text-xs font-bold"
-                    style={{ backgroundColor: betValue === 0 ? '#16a34a' : '#166534', color: '#fff', height: 28 }}>
-                    0
-                  </motion.button>
-                  {Array.from({ length: 36 }, (_, i) => i + 1).map(n => {
-                    const color = getNumberColor(n)
-                    return (
-                      <motion.button key={n} whileTap={{ scale: 0.9 }} onClick={() => setBetValue(n)}
-                        className="aspect-square rounded-lg flex items-center justify-center text-xs font-bold"
-                        style={{
-                          backgroundColor: betValue === n ? '#fbbf24' : color === 'red' ? '#991b1b' : '#111827',
-                          color: betValue === n ? '#000' : '#fff',
-                          border: betValue === n ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
-                          minHeight: 28,
-                        }}>
-                        {n}
-                      </motion.button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {betType && (
-            <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'var(--bg-base)' }}>
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--text-muted)' }}>Apuesta</span>
-                <span className="font-bold">{betAmount}🪙</span>
-              </div>
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--text-muted)' }}>Tipo</span>
-                <span className="font-medium">
-                  {BET_TYPES.find(b => b.id === betType)?.label}
-                  {betType === 'number' && betValue !== null ? ` (${betValue})` : ''}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm border-t pt-1 mt-1" style={{ borderColor: 'var(--border)' }}>
-                <span className="font-bold">Si ganas recibes</span>
-                <span className="font-black text-emerald-400">
-                  {betAmount * parseInt(BET_TYPES.find(b => b.id === betType)?.payout?.replace('x', '') || 1)}🪙
-                </span>
-              </div>
-            </div>
-          )}
-
-          <motion.button whileTap={{ scale: 0.97 }} onClick={handleBetSpin}
-            disabled={betSpinning || !betType || betAmount > balance || betAmount < 10 || (betType === 'number' && betValue === null)}
-            className="w-full py-4 rounded-2xl font-bold text-white text-base mb-6 relative overflow-hidden"
-            style={{ backgroundColor: betSpinning ? '#7f1d1d' : '#b91c1c', opacity: (!betType || betAmount > balance) ? 0.5 : 1 }}>
-            {betSpinning ? (
-              <div className="flex items-center justify-center gap-2">
-                <motion.div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent"
-                  animate={{ rotate: 360 }} transition={{ duration: 0.6, repeat: Infinity, ease: 'linear' }} />
-                Girando...
-              </div>
-            ) : !betType ? '← Elige tipo de apuesta'
-              : betAmount > balance ? 'Saldo insuficiente'
-              : betType === 'number' && betValue === null ? '← Elige un número'
-              : `🎰 Apostar ${betAmount}🪙`}
-            {!betSpinning && betType && betAmount <= balance && (
-              <motion.div className="absolute inset-0"
-                style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)' }}
-                animate={{ x: ['-100%', '100%'] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
-            )}
+      {/* Input */}
+      <div className="px-4 py-3 pb-8 border-t flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex gap-2 items-end">
+          <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={handleKeyDown}
+            placeholder="Escribe un mensaje..." rows={1}
+            className="flex-1 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
+            style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '120px' }} />
+          <motion.button whileTap={{ scale: 0.9 }} onClick={sendMessage} disabled={!newMessage.trim() || sending}
+            className="bg-amber-500 disabled:opacity-40 text-white p-3 rounded-2xl flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+            </svg>
           </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
 
-          {betHistory.length > 0 && (
-            <div>
-              <p className="text-sm font-bold mb-3">Historial de apuestas</p>
-              <div className="space-y-2">
-                {betHistory.map(bet => (
-                  <motion.div key={bet.id} variants={staggerItem} initial="initial" animate="animate"
-                    className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
-                      style={COLOR_STYLES[bet.result_color]}>
-                      {bet.result_number}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {BET_TYPES.find(b => b.id === bet.bet_type)?.label}
-                        {bet.bet_type === 'number' && bet.bet_value ? ` · ${bet.bet_value}` : ''}
-                        {' · '}{bet.bet_amount}🪙
-                      </p>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(bet.created_at)}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-black ${bet.won ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {bet.won ? `+${bet.net}🪙` : `-${bet.bet_amount}🪙`}
-                      </p>
-                      {bet.won && <p className="text-xs text-amber-400">x{bet.payout / bet.bet_amount}</p>}
-                    </div>
-                  </motion.div>
-                ))}
+// ─── PERFIL DE USUARIO ────────────────────────────────────────────────────────
+function UserProfile({ profileId, onClose, onOpenChat }) {
+  const { user } = useAuth()
+  const [profile, setProfile] = useState(null)
+  const [stats, setStats] = useState(null)
+  const [achievements, setAchievements] = useState([])
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followersCount, setFollowersCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [toggling, setToggling] = useState(false)
+  const [canChat, setCanChat] = useState(false)
+
+  useEffect(() => { fetchProfile() }, [profileId])
+
+  const fetchProfile = async () => {
+    setLoading(true)
+    const [
+      { data: profileData },
+      { data: drinksData },
+      { data: achievementsData },
+      { data: followData },
+      { data: followersData },
+      { data: followingData },
+      { data: chatFollow }, // ¿el otro también me sigue?
+    ] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', profileId).single(),
+      supabase.from('drinks').select('drink_group_id, points').eq('user_id', profileId),
+      supabase.from('achievements').select('achievement_id').eq('user_id', profileId),
+      supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', profileId).maybeSingle(),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', profileId),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', profileId),
+      supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle(),
+    ])
+
+    setProfile(profileData)
+    setIsFollowing(!!followData)
+    setFollowersCount(followersData?.count || 0)
+    setFollowingCount(followingData?.count || 0)
+
+    // Puede chatear si me sigue y yo le sigo (mutuo)
+    setCanChat(!!followData && !!chatFollow)
+
+    if (drinksData) {
+      const seen = new Set()
+      const unique = drinksData.filter(d => { if (seen.has(d.drink_group_id)) return false; seen.add(d.drink_group_id); return true })
+      setStats({ count: unique.length, total: unique.reduce((s, d) => s + (d.points || 0), 0) })
+    }
+
+    setAchievements((achievementsData || []).map(a => a.achievement_id))
+    setLoading(false)
+  }
+
+  const toggleFollow = async () => {
+    setToggling(true)
+    if (isFollowing) {
+      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId)
+      setIsFollowing(false); setFollowersCount(prev => prev - 1)
+    } else {
+      await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
+      setIsFollowing(true); setFollowersCount(prev => prev + 1); soundSuccess()
+    }
+    // Recalcular si puede chatear
+    const { data: chatFollow } = await supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle()
+    setCanChat(!isFollowing && !!chatFollow)
+    setToggling(false)
+  }
+
+  const handleOpenChat = async () => {
+    // Buscar o crear chat privado
+    const userA = user.id < profileId ? user.id : profileId
+    const userB = user.id < profileId ? profileId : user.id
+
+    let { data: existing } = await supabase.from('private_chats').select('*')
+      .eq('user_a', userA).eq('user_b', userB).maybeSingle()
+
+    if (!existing) {
+      const { data: created } = await supabase.from('private_chats').insert({ user_a: userA, user_b: userB }).select().single()
+      existing = created
+    }
+
+    onOpenChat(existing, profile)
+  }
+
+  if (loading) return (
+    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: 'var(--bg-base)' }}>
+      <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>
+    </motion.div>
+  )
+
+  const unlockedAchievements = ACHIEVEMENTS.filter(a => achievements.includes(a.id))
+  const isMe = profileId === user.id
+
+  return (
+    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+      className="fixed inset-0 z-50 overflow-y-auto pb-24"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-4 border-b sticky top-0 z-10"
+        style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
+        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
+          className="w-8 h-8 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>←</motion.button>
+        <p className="font-bold flex-1">{profile?.username}</p>
+      </div>
+
+      <div className="px-4 pt-6 max-w-md mx-auto">
+        {/* Avatar y datos */}
+        <div className="flex items-center gap-4 mb-6">
+          {profile?.avatar_url
+            ? <img src={profile.avatar_url} alt={profile.username} className="w-20 h-20 rounded-full object-cover border-4 border-amber-500" />
+            : <div className="w-20 h-20 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
+          <div className="flex-1">
+            <p className="text-xl font-bold">{profile?.username}</p>
+            <div className="flex gap-4 mt-2">
+              <div className="text-center">
+                <p className="font-bold text-amber-400">{stats?.count || 0}</p>
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>consumiciones</p>
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-amber-400">{followersCount}</p>
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>seguidores</p>
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-amber-400">{followingCount}</p>
+                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>siguiendo</p>
               </div>
             </div>
-          )}
-        </>
-      )}
-    </div>
+          </div>
+        </div>
+
+        {/* Botones acción */}
+        {!isMe && (
+          <div className="flex gap-3 mb-6">
+            <motion.button whileTap={{ scale: 0.96 }} onClick={toggleFollow} disabled={toggling}
+              className="flex-1 py-3 rounded-2xl font-bold text-sm"
+              style={{
+                backgroundColor: isFollowing ? 'var(--bg-card)' : '#f59e0b',
+                color: isFollowing ? 'var(--text-primary)' : '#fff',
+                border: isFollowing ? '1px solid var(--border)' : 'none',
+              }}>
+              {toggling ? '...' : isFollowing ? 'Siguiendo ✓' : '+ Seguir'}
+            </motion.button>
+            {canChat && (
+              <motion.button whileTap={{ scale: 0.96 }} onClick={handleOpenChat}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm"
+                style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                💬 Mensaje
+              </motion.button>
+            )}
+            {isFollowing && !canChat && (
+              <div className="flex-1 py-3 rounded-2xl text-center text-xs flex items-center justify-center"
+                style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-hint)' }}>
+                Chat disponible si te sigue
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-2xl font-bold text-amber-400">{stats?.total || 0}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Puntos totales</p>
+          </div>
+          <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-2xl font-bold text-amber-400">{unlockedAchievements.length}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Logros</p>
+          </div>
+        </div>
+
+        {/* Logros desbloqueados */}
+        <p className="text-sm font-bold mb-3">🏅 Logros desbloqueados</p>
+        {unlockedAchievements.length === 0 ? (
+          <div className="rounded-2xl p-6 text-center mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Aún no tiene logros</p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {unlockedAchievements.map(a => (
+              <motion.div key={a.id} initial={{ scale: 0 }} animate={{ scale: 1 }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl"
+                style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                <span className="text-lg">{a.emoji}</span>
+                <span className="text-xs font-medium text-amber-400">{a.name}</span>
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        {/* Logros bloqueados (grises) */}
+        {ACHIEVEMENTS.filter(a => !achievements.includes(a.id)).length > 0 && (
+          <>
+            <p className="text-sm font-bold mb-3" style={{ color: 'var(--text-muted)' }}>🔒 Sin desbloquear</p>
+            <div className="flex flex-wrap gap-2">
+              {ACHIEVEMENTS.filter(a => !achievements.includes(a.id)).map(a => (
+                <div key={a.id} className="flex items-center gap-1.5 px-3 py-2 rounded-2xl opacity-40"
+                  style={{ backgroundColor: 'var(--bg-card)', filter: 'grayscale(100%)' }}>
+                  <span className="text-lg">{a.emoji}</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-hint)' }}>{a.name}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </motion.div>
   )
 }
 
 // ─── SOCIAL PRINCIPAL ─────────────────────────────────────────────────────────
-
 export default function Social() {
   const { user } = useAuth()
   const [tab, setTab] = useState('feed')
@@ -793,12 +395,27 @@ export default function Social() {
   const [commentText, setCommentText] = useState('')
   const [comments, setComments] = useState([])
   const [sendingComment, setSendingComment] = useState(false)
+
+  // Búsqueda y social
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [following, setFollowing] = useState([]) // IDs que sigo
+  const [chats, setChats] = useState([])
+  const [loadingChats, setLoadingChats] = useState(false)
+
+  // Navegación
+  const [viewingProfile, setViewingProfile] = useState(null) // profileId
+  const [activeChat, setActiveChat] = useState(null) // { chat, otherUser }
+
   const postImageRef = useRef(null)
   const storyImageRef = useRef(null)
   const textareaRef = useRef(null)
   const commentsBottomRef = useRef(null)
+  const searchTimeout = useRef(null)
 
-  useEffect(() => { fetchFeed() }, [])
+  useEffect(() => { fetchFeed(); fetchFollowing() }, [])
+  useEffect(() => { if (tab === 'chats') fetchChats() }, [tab])
 
   useEffect(() => {
     if (showNewPost && textareaRef.current)
@@ -832,11 +449,58 @@ export default function Social() {
     setLoading(false)
   }
 
+  const fetchFollowing = async () => {
+    const { data } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
+    setFollowing((data || []).map(f => f.following_id))
+  }
+
+  const fetchChats = async () => {
+    setLoadingChats(true)
+    const { data } = await supabase.from('private_chats')
+      .select(`*, user_a_profile:profiles!private_chats_user_a_fkey(id, username, avatar_url), user_b_profile:profiles!private_chats_user_b_fkey(id, username, avatar_url)`)
+      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+      .order('created_at', { ascending: false })
+
+    // Para cada chat traer el último mensaje
+    const chatsWithLastMsg = await Promise.all((data || []).map(async (chat) => {
+      const { data: lastMsg } = await supabase.from('private_messages')
+        .select('content, created_at').eq('chat_id', chat.id)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      const otherUser = chat.user_a === user.id ? chat.user_b_profile : chat.user_a_profile
+      return { ...chat, otherUser, lastMsg }
+    }))
+
+    setChats(chatsWithLastMsg)
+    setLoadingChats(false)
+  }
+
+  const handleSearch = (query) => {
+    setSearchQuery(query)
+    clearTimeout(searchTimeout.current)
+    if (!query.trim()) { setSearchResults([]); return }
+    searchTimeout.current = setTimeout(async () => {
+      setSearching(true)
+      const { data } = await supabase.from('profiles').select('id, username, avatar_url')
+        .ilike('username', `%${query.trim()}%`).neq('id', user.id).limit(15)
+      setSearchResults(data || [])
+      setSearching(false)
+    }, 400)
+  }
+
+  const toggleFollow = async (profileId) => {
+    const isFollowing = following.includes(profileId)
+    if (isFollowing) {
+      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId)
+      setFollowing(prev => prev.filter(id => id !== profileId))
+    } else {
+      await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
+      setFollowing(prev => [...prev, profileId]); soundSuccess()
+    }
+  }
+
   const handlePostImageSelect = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setNewPostImage(file)
-    setNewPostPreview(URL.createObjectURL(file))
+    const file = e.target.files[0]; if (!file) return
+    setNewPostImage(file); setNewPostPreview(URL.createObjectURL(file))
   }
 
   const submitPost = async () => {
@@ -853,14 +517,11 @@ export default function Social() {
       }
     }
     await supabase.from('posts').insert({ user_id: user.id, content: newPostContent.trim(), image_url: imageUrl })
-    closeNewPost()
-    setUploadingPost(false)
-    fetchFeed()
+    closeNewPost(); setUploadingPost(false); fetchFeed()
   }
 
   const submitStory = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+    const file = e.target.files[0]; if (!file) return
     setUploadingStory(true)
     const ext = file.name.split('.').pop()
     const path = `${user.id}/stories/${Date.now()}.${ext}`
@@ -870,8 +531,7 @@ export default function Social() {
       await supabase.from('stories').insert({ user_id: user.id, image_url: publicUrl })
       fetchFeed()
     }
-    setUploadingStory(false)
-    e.target.value = ''
+    setUploadingStory(false); e.target.value = ''
   }
 
   const toggleLike = async (post) => {
@@ -895,13 +555,9 @@ export default function Social() {
 
   const submitComment = async () => {
     if (!commentText.trim() || !openComments || sendingComment) return
-    setSendingComment(true)
-    soundMessage()
-    const { error } = await supabase.from('post_comments').insert({
-      post_id: openComments.id, user_id: user.id, content: commentText.trim()
-    })
-    if (!error) { setCommentText(''); fetchFeed() }
-    setSendingComment(false)
+    setSendingComment(true); soundMessage()
+    await supabase.from('post_comments').insert({ post_id: openComments.id, user_id: user.id, content: commentText.trim() })
+    setCommentText(''); fetchFeed(); setSendingComment(false)
   }
 
   const handleCommentKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }
@@ -909,27 +565,20 @@ export default function Social() {
 
   const formatTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
-    const mins = Math.floor(diff / 60000)
-    const hours = Math.floor(mins / 60)
-    const days = Math.floor(hours / 24)
-    if (days > 0) return `hace ${days}d`
-    if (hours > 0) return `hace ${hours}h`
-    if (mins > 0) return `hace ${mins}m`
-    return 'ahora'
+    const mins = Math.floor(diff / 60000), hours = Math.floor(mins / 60), days = Math.floor(hours / 24)
+    if (days > 0) return `hace ${days}d`; if (hours > 0) return `hace ${hours}h`; if (mins > 0) return `hace ${mins}m`; return 'ahora'
   }
 
   const Avatar = ({ url, username, size = 'sm' }) => {
     const dim = size === 'sm' ? 'w-9 h-9' : 'w-12 h-12'
     return url
       ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
-      : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`}
-          style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+      : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
   }
 
   const storiesByUser = stories.reduce((acc, s) => {
     if (!acc[s.user_id]) acc[s.user_id] = { profile: s.profiles, stories: [] }
-    acc[s.user_id].stories.push(s)
-    return acc
+    acc[s.user_id].stories.push(s); return acc
   }, {})
 
   const canPublish = (newPostContent.trim().length > 0 || newPostImage !== null) && !uploadingPost
@@ -944,14 +593,15 @@ export default function Social() {
           {[
             { id: 'feed',    label: '📰 Feed' },
             { id: 'stories', label: '⭕ Historias' },
-            { id: 'casino',  label: '🎰 Casino' },
+            { id: 'people',  label: '🔍 Buscar' },
+            { id: 'chats',   label: '💬 Chats' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10"
               style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
               {tab === t.id && (
                 <motion.div layoutId="social-tab" className="absolute inset-0 rounded-lg"
-                  style={{ zIndex: -1, backgroundColor: t.id === 'casino' ? '#7c3aed' : '#f59e0b' }}
+                  style={{ zIndex: -1, backgroundColor: t.id === 'chats' ? '#10b981' : '#f59e0b' }}
                   transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
               {t.label}
@@ -960,6 +610,7 @@ export default function Social() {
         </div>
       </div>
 
+      {/* ── FEED ── */}
       {tab === 'feed' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           {Object.keys(storiesByUser).length > 0 && (
@@ -998,9 +649,13 @@ export default function Social() {
                     <motion.div key={post.id} variants={staggerItem} initial="initial" animate="animate"
                       className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
                       <div className="flex items-center gap-3 p-4 pb-3">
-                        <Avatar url={post.profiles?.avatar_url} username={post.profiles?.username} />
+                        <motion.button whileTap={{ scale: 0.95 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
+                          <Avatar url={post.profiles?.avatar_url} username={post.profiles?.username} />
+                        </motion.button>
                         <div className="flex-1">
-                          <p className="font-bold text-sm">{post.profiles?.username}</p>
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
+                            <p className="font-bold text-sm text-left">{post.profiles?.username}</p>
+                          </motion.button>
                           <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(post.created_at)}</p>
                         </div>
                         {isMe && <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)} className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>}
@@ -1024,6 +679,7 @@ export default function Social() {
         </div>
       )}
 
+      {/* ── HISTORIAS ── */}
       {tab === 'stories' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           <motion.button whileTap={{ scale: 0.96 }} onClick={() => storyImageRef.current?.click()} disabled={uploadingStory}
@@ -1057,8 +713,119 @@ export default function Social() {
         </div>
       )}
 
-      {tab === 'casino' && <Casino />}
+      {/* ── BUSCAR USUARIOS ── */}
+      {tab === 'people' && (
+        <div className="max-w-md mx-auto px-4 pt-4">
+          {/* Buscador */}
+          <div className="relative mb-5">
+            <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)}
+              placeholder="Buscar usuarios..."
+              className="w-full rounded-2xl px-5 py-3.5 text-sm outline-none focus:ring-2 focus:ring-amber-500 pr-10"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }} />
+            {searching
+              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-lg">🔍</motion.div>
+              : <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--text-hint)' }}>🔍</span>}
+          </div>
 
+          {/* Resultados de búsqueda */}
+          {searchQuery && (
+            searchResults.length === 0 && !searching ? (
+              <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-4xl mb-2">😶</div>
+                <p className="text-sm">No se encontró ningún usuario</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {searchResults.map(profile => {
+                  const isFollowing = following.includes(profile.id)
+                  return (
+                    <motion.div key={profile.id} variants={staggerItem} initial="initial" animate="animate"
+                      className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => setViewingProfile(profile.id)}>
+                        {profile.avatar_url
+                          ? <img src={profile.avatar_url} alt={profile.username} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                          : <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                      </motion.button>
+                      <motion.button className="flex-1 text-left" whileTap={{ scale: 0.98 }} onClick={() => setViewingProfile(profile.id)}>
+                        <p className="font-bold text-sm">{profile.username}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Ver perfil →</p>
+                      </motion.button>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => toggleFollow(profile.id)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0"
+                        style={{
+                          backgroundColor: isFollowing ? 'var(--bg-input)' : '#f59e0b',
+                          color: isFollowing ? 'var(--text-muted)' : '#fff',
+                        }}>
+                        {isFollowing ? 'Siguiendo' : '+ Seguir'}
+                      </motion.button>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            )
+          )}
+
+          {/* Estado vacío */}
+          {!searchQuery && (
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <div className="text-5xl mb-3">🔍</div>
+              <p className="font-medium">Busca usuarios por nombre</p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a otros para poder chatear</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── CHATS PRIVADOS ── */}
+      {tab === 'chats' && (
+        <div className="max-w-md mx-auto px-4 pt-4">
+          {loadingChats ? (
+            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">💬</motion.div>
+              <p className="text-sm">Cargando chats...</p>
+            </div>
+          ) : chats.length === 0 ? (
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <div className="text-5xl mb-3">💬</div>
+              <p className="font-medium">No tienes chats activos</p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a alguien y si te sigue de vuelta podréis chatear</p>
+              <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('people')}
+                className="mt-4 px-6 py-3 rounded-2xl text-sm font-bold text-white"
+                style={{ backgroundColor: '#f59e0b' }}>
+                🔍 Buscar usuarios
+              </motion.button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {chats.map(chat => (
+                <motion.button key={chat.id} variants={staggerItem} initial="initial" animate="animate"
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setActiveChat({ chat, otherUser: chat.otherUser })}
+                  className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
+                  style={{ backgroundColor: 'var(--bg-card)' }}>
+                  {chat.otherUser?.avatar_url
+                    ? <img src={chat.otherUser.avatar_url} alt={chat.otherUser.username} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                    : <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-2xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{chat.otherUser?.username}</p>
+                    <p className="text-xs truncate mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                      {chat.lastMsg?.content || 'Inicia la conversación...'}
+                    </p>
+                  </div>
+                  {chat.lastMsg && (
+                    <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                      {formatTime(chat.lastMsg.created_at)}
+                    </p>
+                  )}
+                </motion.button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* FAB nuevo post */}
       {tab === 'feed' && (
         <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}
           onClick={() => setShowNewPost(true)}
@@ -1067,6 +834,7 @@ export default function Social() {
         </motion.button>
       )}
 
+      {/* ── MODAL NUEVO POST ── */}
       <AnimatePresence>
         {showNewPost && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1097,8 +865,7 @@ export default function Social() {
                 {newPostPreview && (
                   <div className="relative mb-4 ml-12">
                     <img src={newPostPreview} alt="Preview" className="w-full rounded-2xl max-h-52 object-cover" />
-                    <motion.button whileTap={{ scale: 0.9 }}
-                      onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
                       className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm">✕</motion.button>
                   </div>
                 )}
@@ -1117,6 +884,7 @@ export default function Social() {
         )}
       </AnimatePresence>
 
+      {/* Visor historia */}
       <AnimatePresence>
         {selectedStory && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1134,6 +902,7 @@ export default function Social() {
         )}
       </AnimatePresence>
 
+      {/* Panel comentarios */}
       <AnimatePresence>
         {openComments && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1144,9 +913,7 @@ export default function Social() {
               onClick={e => e.stopPropagation()}
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', height: '80vh' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-                <p style={{ fontWeight: 'bold', fontSize: 16 }}>
-                  Comentarios {comments.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 'normal', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 999 }}>{comments.length}</span>}
-                </p>
+                <p style={{ fontWeight: 'bold', fontSize: 16 }}>Comentarios {comments.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 'normal', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 999 }}>{comments.length}</span>}</p>
                 <button onClick={closeCommentsPanel} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✕</button>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px' }}>
@@ -1191,6 +958,28 @@ export default function Social() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Perfil de usuario */}
+      <AnimatePresence>
+        {viewingProfile && (
+          <UserProfile
+            profileId={viewingProfile}
+            onClose={() => setViewingProfile(null)}
+            onOpenChat={(chat, otherUser) => { setViewingProfile(null); setActiveChat({ chat, otherUser }) }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Chat privado */}
+      <AnimatePresence>
+        {activeChat && (
+          <PrivateChat
+            chat={activeChat.chat}
+            otherUser={activeChat.otherUser}
+            onClose={() => { setActiveChat(null); fetchChats() }}
+          />
         )}
       </AnimatePresence>
     </div>
