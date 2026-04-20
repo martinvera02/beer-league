@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { useNotifications } from '../context/useNotifications'
+import { useNotifications } from '../context/NotificationsContext'
 import { soundTab } from '../lib/sounds'
 
 export default function Navbar({ currentPage, setCurrentPage }) {

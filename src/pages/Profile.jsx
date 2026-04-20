@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
-import { useNotifications } from '../context/useNotifications'
+import { useNotifications } from '../context/NotificationsContext'
 import { fadeIn, staggerItem, scaleIn } from '../lib/animations'
 import { soundError, soundSuccess as soundOk } from '../lib/sounds'
 
