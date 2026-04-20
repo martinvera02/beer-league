@@ -7,6 +7,128 @@ import { useNotifications } from '../context/NotificationsContext'
 import { fadeIn, staggerItem, scaleIn } from '../lib/animations'
 import { soundError, soundSuccess as soundOk } from '../lib/sounds'
 
+// ─── DEFINICIÓN DE LOGROS ─────────────────────────────────────────────────────
+
+const ACHIEVEMENTS = [
+  // Consumiciones
+  { id: 'first_drink',     emoji: '🍺', name: 'Primera ronda',      desc: 'Anota tu primera consumición',             category: 'consumiciones' },
+  { id: 'drinks_10',       emoji: '🔟', name: 'Bebedor consistente', desc: 'Acumula 10 consumiciones',                 category: 'consumiciones' },
+  { id: 'drinks_50',       emoji: '🏅', name: 'Veterano',            desc: 'Acumula 50 consumiciones',                 category: 'consumiciones' },
+  { id: 'drinks_100',      emoji: '👑', name: 'Leyenda',             desc: 'Acumula 100 consumiciones',                category: 'consumiciones' },
+  { id: 'martes_macarra',  emoji: '🔥', name: 'Martes Macarra',      desc: 'Anota una consumición en Martes Macarra',  category: 'consumiciones' },
+  { id: 'variety_5',       emoji: '🌈', name: 'Paladar exquisito',   desc: 'Prueba 5 tipos de bebida distintos',       category: 'consumiciones' },
+  // Casino & Mercado
+  { id: 'roulette_win',    emoji: '🎰', name: 'Golpe de suerte',     desc: 'Gana en la ruleta de apuestas',            category: 'casino' },
+  { id: 'roulette_3wins',  emoji: '🎯', name: 'En racha',            desc: 'Gana 3 veces seguidas en ruleta',          category: 'casino' },
+  { id: 'millionaire',     emoji: '💰', name: 'Millonario',          desc: 'Acumula 1000 monedas',                     category: 'casino' },
+  { id: 'market_5',        emoji: '📈', name: 'Tiburón del mercado', desc: 'Abre 5 posiciones en el mercado',          category: 'casino' },
+  { id: 'big_bet',         emoji: '🎲', name: 'Todo o nada',         desc: 'Apuesta 500+ en una sola tirada',          category: 'casino' },
+  // Social & Powerups
+  { id: 'sabotage',        emoji: '💣', name: 'Saboteador',          desc: 'Aplica un Sabotaje a otro miembro',        category: 'social' },
+  { id: 'shield',          emoji: '🛡️', name: 'Protegido',           desc: 'Usa un Escudo',                            category: 'social' },
+  { id: 'generous',        emoji: '💸', name: 'Generoso',            desc: 'Envía monedas a otro miembro',             category: 'social' },
+  { id: 'popular',         emoji: '❤️', name: 'Popular',             desc: 'Recibe 10 likes en tus posts',             category: 'social' },
+]
+
+const CATEGORY_LABELS = {
+  consumiciones: '🍺 Consumiciones',
+  casino:        '🎰 Casino & Mercado',
+  social:        '⚡ Social & Powerups',
+}
+
+// ─── LÓGICA DE DETECCIÓN DE LOGROS ───────────────────────────────────────────
+
+async function detectAchievements(userId, stats, supabase) {
+  const toUnlock = []
+
+  // Datos adicionales necesarios
+  const [
+    { data: drinks },
+    { data: wallet },
+    { data: marketPositions },
+    { data: rouletteBets },
+    { data: activePoweups },
+    { data: transfers },
+    { data: postLikes },
+  ] = await Promise.all([
+    supabase.from('drinks').select('drink_type_id, consumed_at').eq('user_id', userId),
+    supabase.from('wallets').select('balance').eq('user_id', userId).single(),
+    supabase.from('market_positions').select('id').eq('user_id', userId),
+    supabase.from('roulette_bets').select('won, created_at').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabase.from('active_powerups').select('powerup_id, effect_type').eq('user_id', userId),
+    supabase.from('league_transfers').select('id').eq('sender_id', userId),
+    supabase.from('post_likes').select('posts(user_id)').eq('posts.user_id', userId),
+  ])
+
+  const uniqueDrinks = stats?.count || 0
+  const drinkTypes = new Set((drinks || []).map(d => d.drink_type_id))
+  const balance = wallet?.balance || 0
+  const marketCount = marketPositions?.length || 0
+  const transferCount = transfers?.length || 0
+
+  // Martes Macarra: consumición un martes
+  const hasMartesM = (drinks || []).some(d => {
+    const date = new Date(d.consumed_at)
+    const madridDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+    return madridDate.getDay() === 2
+  })
+
+  // Rachas ruleta
+  let rouletteStreak = 0
+  for (const bet of (rouletteBets || [])) {
+    if (bet.won) rouletteStreak++
+    else break
+  }
+
+  // Big bet
+  const { data: bigBets } = await supabase
+    .from('roulette_bets').select('bet_amount').eq('user_id', userId).gte('bet_amount', 500).limit(1)
+
+  // Sabotaje y escudo
+  const hasSabotage = (activePoweups || []).some(p => p.effect_type === 'sabotage')
+  const hasShield = (activePoweups || []).some(p => p.effect_type === 'shield')
+
+  // Likes en posts propios
+  const { data: myPosts } = await supabase.from('posts').select('id').eq('user_id', userId)
+  let totalLikes = 0
+  if (myPosts && myPosts.length > 0) {
+    const { count } = await supabase.from('post_likes')
+      .select('id', { count: 'exact', head: true })
+      .in('post_id', myPosts.map(p => p.id))
+    totalLikes = count || 0
+  }
+
+  // Ruleta ganada
+  const hasRouletteWin = (rouletteBets || []).some(b => b.won)
+
+  // Mapeo de condiciones
+  const conditions = {
+    first_drink:    uniqueDrinks >= 1,
+    drinks_10:      uniqueDrinks >= 10,
+    drinks_50:      uniqueDrinks >= 50,
+    drinks_100:     uniqueDrinks >= 100,
+    martes_macarra: hasMartesM,
+    variety_5:      drinkTypes.size >= 5,
+    roulette_win:   hasRouletteWin,
+    roulette_3wins: rouletteStreak >= 3,
+    millionaire:    balance >= 1000,
+    market_5:       marketCount >= 5,
+    big_bet:        (bigBets || []).length > 0,
+    sabotage:       hasSabotage,
+    shield:         hasShield,
+    generous:       transferCount >= 1,
+    popular:        totalLikes >= 10,
+  }
+
+  for (const [id, condition] of Object.entries(conditions)) {
+    if (condition) toUnlock.push(id)
+  }
+
+  return toUnlock
+}
+
+// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
+
 export default function Profile() {
   const { user, logout } = useAuth()
   const { theme, setTheme } = useTheme()
@@ -29,14 +151,21 @@ export default function Profile() {
   const [savingPassword, setSavingPassword] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const fileInputRef = useRef(null)
 
+  // Logros
+  const [unlockedIds, setUnlockedIds] = useState(new Set())
+  const [newlyUnlocked, setNewlyUnlocked] = useState([]) // para animación
+  const [loadingAchievements, setLoadingAchievements] = useState(false)
+
+  const fileInputRef = useRef(null)
   const PAGE_SIZE = 20
 
   useEffect(() => { fetchProfile() }, [])
+
   useEffect(() => {
     if (section === 'history' && history.length === 0) fetchHistory(0)
     if (section === 'notifications') markAllRead()
+    if (section === 'achievements') fetchAndCheckAchievements()
   }, [section])
 
   const fetchProfile = async () => {
@@ -80,13 +209,7 @@ export default function Profile() {
     data.forEach(d => {
       const key = d.drink_group_id
       if (!grouped[key]) {
-        grouped[key] = {
-          drink_group_id: key,
-          points: d.points,
-          consumed_at: d.consumed_at,
-          drink_type: d.drink_types,
-          leagues: [],
-        }
+        grouped[key] = { drink_group_id: key, points: d.points, consumed_at: d.consumed_at, drink_type: d.drink_types, leagues: [] }
       }
       if (d.leagues?.name) grouped[key].leagues.push(d.leagues.name)
     })
@@ -103,13 +226,41 @@ export default function Profile() {
     setLoadingHistory(false)
   }
 
+  const fetchAndCheckAchievements = async () => {
+    setLoadingAchievements(true)
+
+    // Cargar logros ya desbloqueados
+    const { data: existing } = await supabase
+      .from('achievements')
+      .select('achievement_id')
+      .eq('user_id', user.id)
+
+    const existingIds = new Set((existing || []).map(a => a.achievement_id))
+
+    // Detectar nuevos logros
+    const earned = await detectAchievements(user.id, stats, supabase)
+
+    // Filtrar los que aún no están desbloqueados
+    const toInsert = earned.filter(id => !existingIds.has(id))
+
+    if (toInsert.length > 0) {
+      await supabase.from('achievements').insert(
+        toInsert.map(achievement_id => ({ user_id: user.id, achievement_id }))
+      )
+      setNewlyUnlocked(toInsert)
+      setTimeout(() => setNewlyUnlocked([]), 5000)
+    }
+
+    setUnlockedIds(new Set([...existingIds, ...toInsert]))
+    setLoadingAchievements(false)
+  }
+
   const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000) }
 
   const handleAvatarChange = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    setUploadingAvatar(true)
-    setError('')
+    setUploadingAvatar(true); setError('')
     const ext = file.name.split('.').pop()
     const path = `${user.id}/avatar.${ext}`
     const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
@@ -146,16 +297,8 @@ export default function Profile() {
     await logout()
   }
 
-  const formatDate = (ts) => {
-    if (!ts) return ''
-    return new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
-  }
-
-  const formatTime = (ts) => {
-    if (!ts) return ''
-    return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-  }
-
+  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+  const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
   const formatNotifTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
     const mins = Math.floor(diff / 60000)
@@ -176,11 +319,21 @@ export default function Profile() {
 
   const getNotifStyle = (type) => {
     switch (type) {
-      case 'powerup':  return { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444',  icon: '⚡' }
-      case 'transfer': return { bg: 'rgba(16,185,129,0.1)',  color: '#10b981',  icon: '💸' }
-      default:         return { bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b',  icon: '🔔' }
+      case 'powerup':  return { bg: 'rgba(239,68,68,0.1)',  color: '#ef4444', icon: '⚡' }
+      case 'transfer': return { bg: 'rgba(16,185,129,0.1)', color: '#10b981', icon: '💸' }
+      default:         return { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b', icon: '🔔' }
     }
   }
+
+  const unlockedCount = unlockedIds.size
+  const totalCount = ACHIEVEMENTS.length
+
+  // Agrupar logros por categoría
+  const achievementsByCategory = ACHIEVEMENTS.reduce((acc, a) => {
+    if (!acc[a.category]) acc[a.category] = []
+    acc[a.category].push(a)
+    return acc
+  }, {})
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
@@ -191,6 +344,7 @@ export default function Profile() {
   const SECTIONS = [
     { id: 'profile',       label: '👤' },
     { id: 'history',       label: '🍺' },
+    { id: 'achievements',  label: '🏅' },
     { id: 'notifications', label: '🔔', badge: unreadCount },
     { id: 'settings',      label: '⚙️' },
   ]
@@ -203,7 +357,7 @@ export default function Profile() {
         {/* Header */}
         <motion.div {...fadeIn} className="mb-6">
           <h1 className="text-2xl font-bold mb-4">
-            {{ profile: 'Tu perfil 👤', history: 'Historial 🍺', notifications: 'Notificaciones 🔔', settings: 'Ajustes ⚙️' }[section]}
+            {{ profile: 'Tu perfil 👤', history: 'Historial 🍺', achievements: 'Logros 🏅', notifications: 'Notificaciones 🔔', settings: 'Ajustes ⚙️' }[section]}
           </h1>
           <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
             {SECTIONS.map(s => (
@@ -239,7 +393,8 @@ export default function Profile() {
               <div className="relative inline-block mb-3">
                 {profile?.avatar_url
                   ? <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-amber-500" />
-                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
+                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl"
+                      style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
                 <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingAvatar}
                   className="absolute bottom-0 right-0 bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
@@ -249,6 +404,15 @@ export default function Profile() {
               </div>
               <p className="text-xl font-bold">{profile?.username}</p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
+              {/* Mini progreso de logros */}
+              {unlockedCount > 0 && (
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <span className="text-sm">🏅</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                    {unlockedCount}/{totalCount} logros
+                  </span>
+                </div>
+              )}
             </div>
 
             {stats && (
@@ -291,18 +455,12 @@ export default function Profile() {
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('history')}
                     className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
                     style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                    🍺 Ver historial →
+                    🍺 Historial →
                   </motion.button>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('notifications')}
-                    className="relative flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('achievements')}
+                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
                     style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                    🔔 Notificaciones →
-                    {unreadCount > 0 && (
-                      <span className="absolute top-2 right-2 min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-white font-black"
-                        style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
+                    🏅 Logros →
                   </motion.button>
                 </div>
               </>
@@ -344,9 +502,7 @@ export default function Profile() {
                     <div className="flex items-center gap-3 mb-2">
                       <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
                       <span className="text-xs font-semibold px-3 py-1 rounded-full"
-                        style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                        {date}
-                      </span>
+                        style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>{date}</span>
                       <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
                     </div>
                     <div className="space-y-2">
@@ -365,9 +521,7 @@ export default function Profile() {
                                 <span key={l} className="text-xs px-2 py-0.5 rounded-full"
                                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>{l}</span>
                               ))}
-                              {item.leagues.length > 2 && (
-                                <span className="text-xs" style={{ color: 'var(--text-hint)' }}>+{item.leagues.length - 2}</span>
-                              )}
+                              {item.leagues.length > 2 && <span className="text-xs" style={{ color: 'var(--text-hint)' }}>+{item.leagues.length - 2}</span>}
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
@@ -381,7 +535,6 @@ export default function Profile() {
                     </div>
                   </div>
                 ))}
-
                 {historyHasMore && (
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => fetchHistory(historyPage + 1)}
                     disabled={loadingHistory}
@@ -392,6 +545,117 @@ export default function Profile() {
                 )}
               </>
             )}
+          </motion.div>
+        )}
+
+        {/* ── LOGROS ── */}
+        {section === 'achievements' && (
+          <motion.div {...fadeIn} key="achievements">
+
+            {/* Nuevos logros desbloqueados */}
+            <AnimatePresence>
+              {newlyUnlocked.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="rounded-2xl p-4 mb-5"
+                  style={{ backgroundColor: 'rgba(245,158,11,0.12)', border: '2px solid #f59e0b' }}>
+                  <p className="font-bold text-amber-400 text-sm mb-2">🎉 ¡Logros desbloqueados!</p>
+                  <div className="flex flex-wrap gap-2">
+                    {newlyUnlocked.map(id => {
+                      const a = ACHIEVEMENTS.find(a => a.id === id)
+                      return a ? (
+                        <motion.div key={id} initial={{ scale: 0 }} animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold"
+                          style={{ backgroundColor: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                          <span>{a.emoji}</span>
+                          <span>{a.name}</span>
+                        </motion.div>
+                      ) : null
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Progreso global */}
+            <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-bold text-sm">Progreso total</p>
+                <p className="font-bold text-amber-400">{unlockedCount}/{totalCount}</p>
+              </div>
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
+                <motion.div className="h-full rounded-full bg-amber-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(unlockedCount / totalCount) * 100}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }} />
+              </div>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                {totalCount - unlockedCount} logros restantes
+              </p>
+            </div>
+
+            {loadingAchievements ? (
+              <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                  className="text-3xl mb-2">🏅</motion.div>
+                <p className="text-sm">Comprobando logros...</p>
+              </div>
+            ) : (
+              Object.entries(achievementsByCategory).map(([category, items]) => (
+                <div key={category} className="mb-5">
+                  <p className="text-sm font-bold mb-3">{CATEGORY_LABELS[category]}</p>
+                  <div className="space-y-2">
+                    {items.map(achievement => {
+                      const unlocked = unlockedIds.has(achievement.id)
+                      const isNew = newlyUnlocked.includes(achievement.id)
+                      return (
+                        <motion.div key={achievement.id}
+                          variants={staggerItem} initial="initial" animate="animate"
+                          className="rounded-2xl p-4 flex items-center gap-3"
+                          style={{
+                            backgroundColor: unlocked ? 'var(--bg-card)' : 'var(--bg-card)',
+                            border: isNew ? '2px solid #f59e0b' : unlocked ? '2px solid rgba(245,158,11,0.3)' : '2px solid transparent',
+                            opacity: unlocked ? 1 : 0.5,
+                          }}>
+                          {/* Emoji con filtro gris si bloqueado */}
+                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
+                            style={{
+                              backgroundColor: unlocked ? 'rgba(245,158,11,0.12)' : 'var(--bg-input)',
+                              filter: unlocked ? 'none' : 'grayscale(100%)',
+                            }}>
+                            {achievement.emoji}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm">{achievement.name}</p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{achievement.desc}</p>
+                          </div>
+                          {unlocked && (
+                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                              className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ backgroundColor: 'rgba(245,158,11,0.2)' }}>
+                              <span className="text-xs text-amber-400">✓</span>
+                            </motion.div>
+                          )}
+                          {!unlocked && (
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ backgroundColor: 'var(--bg-input)' }}>
+                              <span className="text-xs" style={{ color: 'var(--text-hint)' }}>🔒</span>
+                            </div>
+                          )}
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+
+            <motion.button whileTap={{ scale: 0.97 }} onClick={fetchAndCheckAchievements}
+              disabled={loadingAchievements}
+              className="w-full py-3 rounded-2xl text-sm font-medium mt-2"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+              🔄 Comprobar nuevos logros
+            </motion.button>
           </motion.div>
         )}
 
@@ -426,9 +690,7 @@ export default function Profile() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-bold text-sm truncate">{notif.title}</p>
-                          {!notif.read && (
-                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: style.color }} />
-                          )}
+                          {!notif.read && <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: style.color }} />}
                         </div>
                         <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{notif.body}</p>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{formatNotifTime(notif.created_at)}</p>
@@ -499,9 +761,7 @@ export default function Profile() {
 
             <div className="rounded-2xl p-5 border border-red-900" style={{ backgroundColor: 'var(--bg-card)' }}>
               <h2 className="text-base font-bold text-red-400 mb-1">⚠️ Zona peligrosa</h2>
-              <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>
-                Esta acción es irreversible. Se borrarán todos tus datos.
-              </p>
+              <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>Esta acción es irreversible.</p>
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowDeleteConfirm(true)}
                 className="w-full bg-transparent text-red-500 font-semibold py-3 rounded-xl border border-red-900 text-sm">
                 Eliminar cuenta 🗑️
