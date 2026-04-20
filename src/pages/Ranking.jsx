@@ -155,23 +155,16 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     if (!selectedLeague) return
     setResetting(true)
     setShowResetConfirm(false)
-
-    // Obtenemos la temporada activa
-    const { data: season } = await supabase
-      .from('seasons').select('id').eq('active', true).single()
-
+    const { data: season } = await supabase.from('seasons').select('id').eq('active', true).single()
     if (!season) {
       setAdminMsg({ success: false, text: 'No hay temporada activa' })
       setResetting(false)
       return
     }
-
-    // Verificamos que el usuario es owner/admin antes de borrar
     const { error } = await supabase.from('drinks')
       .delete()
       .eq('league_id', selectedLeague.id)
       .eq('season_id', season.id)
-
     if (error) {
       soundError()
       setAdminMsg({ success: false, text: 'Error al resetear: ' + error.message })
@@ -181,7 +174,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       fetchRanking(selectedLeague.id)
       fetchAdminStats(selectedLeague.id)
     }
-
     setResetting(false)
     setTimeout(() => setAdminMsg(null), 4000)
   }
@@ -291,7 +283,11 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const kickMember = async () => {
     if (!kickTarget || !selectedLeague) return
     await supabase.from('league_members').delete().eq('league_id', selectedLeague.id).eq('user_id', kickTarget.id)
-    setKickTarget(null); fetchMembers(selectedLeague.id)
+    setKickTarget(null)
+    fetchMembers(selectedLeague.id)
+    soundSuccess()
+    setAdminMsg({ success: true, text: `✅ ${kickTarget.username} expulsado de la liga` })
+    setTimeout(() => setAdminMsg(null), 3000)
   }
 
   const handleSendTransfer = async () => {
@@ -345,7 +341,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
   }
 
-  // Pestañas visibles según rol
   const visibleTabs = [
     { id: 'ranking',   label: '🏆 Ranking' },
     { id: 'members',   label: '👥 Miembros' },
@@ -353,6 +348,14 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     { id: 'chat',      label: '💬 Chat' },
     ...(canManage ? [{ id: 'admin', label: '👑 Admin' }] : []),
   ]
+
+  // Miembros que el admin puede gestionar (excluye owner y al propio usuario)
+  const manageableMembers = members.filter(m => {
+    if (m.id === user.id) return false
+    if (m.role === 'owner') return false
+    if (myRole === 'admin' && m.role === 'admin') return false
+    return true
+  })
 
   return (
     <div className={`flex flex-col transition-colors duration-300 ${tab === 'chat' ? 'h-screen' : 'min-h-screen'}`}
@@ -506,16 +509,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         </div>
       )}
 
-      {/* ── MIEMBROS ── */}
+      {/* ── MIEMBROS ── solo vista, sin acciones de gestión */}
       {tab === 'members' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
           <div className="space-y-3 pt-4">
             {members.map(member => {
               const isMe = member.id === user.id
-              const isOwner = member.role === 'owner'
-              const isAdmin = member.role === 'admin'
-              const canKick = canManage && !isOwner && !isMe && !(myRole === 'admin' && isAdmin)
-              const canChangeRole = myRole === 'owner' && !isOwner && !isMe
               return (
                 <motion.div key={member.id} variants={staggerItem} initial="initial" animate="animate"
                   className="rounded-2xl p-4"
@@ -524,31 +523,31 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     <Avatar url={member.avatar_url} username={member.username} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>{member.username} {isMe && '(tú)'}</p>
+                        <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>
+                          {member.username} {isMe && '(tú)'}
+                        </p>
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0" style={roleBadgeStyle[member.role]}>
                           {roleLabel[member.role]}
                         </span>
                       </div>
                     </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      {canChangeRole && (
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)}
-                          className="text-xs font-semibold px-3 py-2 rounded-xl"
-                          style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>Rol</motion.button>
-                      )}
-                      {canKick && (
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)}
-                          className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">Expulsar</motion.button>
-                      )}
-                    </div>
                   </div>
                 </motion.div>
               )
             })}
+
             {myRole !== 'owner' && (
               <motion.button whileTap={{ scale: 0.97 }} onClick={leaveLeague}
                 className="w-full mt-2 bg-transparent text-red-500 font-semibold py-3 rounded-2xl border border-red-900">
                 Abandonar liga 🚪
+              </motion.button>
+            )}
+
+            {canManage && (
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setTab('admin')}
+                className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ backgroundColor: 'rgba(124,58,237,0.1)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
+                👑 Gestionar miembros en Admin →
               </motion.button>
             )}
           </div>
@@ -715,7 +714,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {tab === 'admin' && selectedLeague && canManage && (
         <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
 
-          {/* Header admin */}
           <div className="rounded-2xl p-4 mb-5 flex items-center gap-3"
             style={{ backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)' }}>
             <span className="text-3xl">👑</span>
@@ -727,7 +725,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </div>
           </div>
 
-          {/* Mensaje resultado */}
           <AnimatePresence>
             {adminMsg && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -746,7 +743,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           {loadingStats ? (
             <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">📊</motion.div>
-              <p className="text-sm">Cargando estadísticas...</p>
+              <p className="text-sm">Cargando...</p>
             </div>
           ) : adminStats ? (
             <>
@@ -764,8 +761,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   </div>
                 ))}
               </div>
-
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <p className="text-2xl mb-1">🏆</p>
                   <p className="font-bold text-amber-400 text-sm leading-tight">{adminStats.most_active_member || '—'}</p>
@@ -777,7 +773,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Bebida más popular</p>
                 </div>
               </div>
-
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => fetchAdminStats(selectedLeague.id)}
                 className="w-full py-2.5 rounded-xl text-sm font-medium mb-5"
                 style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
@@ -786,9 +781,45 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </>
           ) : null}
 
-          {/* Zona peligrosa */}
+          {/* Gestión de miembros */}
+          <p className="text-sm font-bold mb-3">👥 Gestión de miembros</p>
+          {manageableMembers.length === 0 ? (
+            <div className="rounded-2xl p-4 mb-5 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-hint)' }}>No hay miembros que puedas gestionar</p>
+            </div>
+          ) : (
+            <div className="space-y-2 mb-5">
+              {manageableMembers.map(member => (
+                <motion.div key={member.id} variants={staggerItem} initial="initial" animate="animate"
+                  className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <Avatar url={member.avatar_url} username={member.username} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm truncate">{member.username}</p>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={roleBadgeStyle[member.role]}>
+                      {roleLabel[member.role]}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    {myRole === 'owner' && (
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)}
+                        className="text-xs font-semibold px-3 py-2 rounded-xl"
+                        style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
+                        Rol
+                      </motion.button>
+                    )}
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)}
+                      className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">
+                      Expulsar
+                    </motion.button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* Reset temporada */}
           <p className="text-sm font-bold mb-3">⚠️ Gestión de temporada</p>
-          <div className="rounded-2xl p-4 mb-3" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.2)' }}>
+          <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.2)' }}>
             <div className="flex items-start gap-3 mb-4">
               <span className="text-2xl flex-shrink-0">🗑️</span>
               <div>
@@ -798,8 +829,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 </p>
               </div>
             </div>
-            <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowResetConfirm(true)}
-              disabled={resetting}
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowResetConfirm(true)} disabled={resetting}
               className="w-full py-3 rounded-xl font-bold text-red-400 text-sm border border-red-900 disabled:opacity-40"
               style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
               {resetting ? 'Reseteando...' : '🗑️ Resetear puntos'}
@@ -896,7 +926,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         )}
       </AnimatePresence>
 
-      {/* Modal reset confirmar */}
+      {/* Modal reset */}
       <AnimatePresence>
         {showResetConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -941,8 +971,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-4">
                 <div className="text-4xl mb-2">🚫</div>
-                <h2 className="text-xl font-bold">¿Expulsar a {kickTarget.username}?</h2>
-                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminará de la liga y perderá su historial en esta temporada.</p>
+                <h2 className="text-xl font-bold">¿Expulsar a {kickTarget?.username}?</h2>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
+                  Se eliminará de la liga y perderá su historial en esta temporada.
+                </p>
               </div>
               <div className="flex gap-3">
                 <motion.button whileTap={{ scale: 0.96 }} onClick={() => setKickTarget(null)}
@@ -970,7 +1002,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">⚡</div>
-                <h2 className="text-xl font-bold">Rol de {roleTarget.username}</h2>
+                <h2 className="text-xl font-bold">Rol de {roleTarget?.username}</h2>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Elige qué permisos tendrá en la liga</p>
               </div>
               <div className="space-y-3">
@@ -1043,7 +1075,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         )}
       </AnimatePresence>
 
-      {/* Modal crear liga */}
+      {/* Modal crear */}
       <AnimatePresence>
         {showCreateModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
