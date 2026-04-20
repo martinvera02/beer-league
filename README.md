@@ -6,7 +6,7 @@
 
 ## 📱 Demo
 
-Accede a la app en producción: **[beer-league.vercel.app](https://beer-league.vercel.app)**
+Accede a la app en producción: **[beer-league.vercel.app](https://beer-league-six.vercel.app)**
 
 Instalable como PWA directamente desde el navegador en Android y iOS.
 
