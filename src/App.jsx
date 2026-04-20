@@ -10,6 +10,7 @@ import Ranking from './pages/Ranking'
 import GlobalRanking from './pages/GlobalRanking'
 import Social from './pages/Social'
 import Profile from './pages/Profile'
+import ClanWar from './pages/ClanWar'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 
@@ -24,6 +25,7 @@ function Dashboard() {
       case 'leagues':       return <Ranking selectedLeague={selectedLeague} setSelectedLeague={setSelectedLeague} />
       case 'globalranking': return <GlobalRanking />
       case 'social':        return <Social />
+      case 'clanwar':       return <ClanWar />
       case 'profile':       return <Profile />
       default:              return null
     }
@@ -57,7 +59,6 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        {/* NotificationsProvider va dentro de AuthProvider porque necesita user */}
         <NotificationsProvider>
           <BrowserRouter>
             <AppRoutes />
