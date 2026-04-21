@@ -21,39 +21,6 @@ const isMartesEnMadrid = () => {
   return dow === 2 || (dow === 3 && hour < 4)
 }
 
-// Justo después de: const isMartes = isMartesEnMadrid()
-const [countdown, setCountdown] = useState('')
-
-useEffect(() => {
-  if (!isMartes) return
-  const tick = () => {
-    const now = new Date()
-    const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-    const dow = madrid.getDay()
-    const h = madrid.getHours()
-    const m = madrid.getMinutes()
-    const s = madrid.getSeconds()
-
-    // Calcular segundos hasta el miércoles a las 04:00h
-    let secsLeft
-    if (dow === 2) {
-      // Martes: faltan hasta medianoche + 4h = (24-h)*3600 - m*60 - s + 4*3600
-      secsLeft = (24 - h) * 3600 - m * 60 - s + 4 * 3600
-    } else {
-      // Miércoles antes de las 4h: faltan hasta las 04:00
-      secsLeft = (4 - h - 1) * 3600 + (60 - m - 1) * 60 + (60 - s)
-    }
-
-    const hh = Math.floor(secsLeft / 3600)
-    const mm = Math.floor((secsLeft % 3600) / 60)
-    const ss = secsLeft % 60
-    setCountdown(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`)
-  }
-  tick()
-  const interval = setInterval(tick, 1000)
-  return () => clearInterval(interval)
-}, [isMartes])
-
 export default function AddDrink() {
   const { user } = useAuth()
   const [drinkTypes, setDrinkTypes] = useState([])
