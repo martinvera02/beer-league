@@ -270,7 +270,7 @@ export default function Profile() {
       { count: fwingCount },
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id),
+      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id).eq('is_adjustment', false),
       // ✅ NUEVO: contar seguidores y seguidos
       supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
       supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
@@ -304,7 +304,7 @@ export default function Profile() {
     setLoadingHistory(true)
     const { data } = await supabase.from('drinks')
       .select('id, drink_group_id, points, consumed_at, drink_types(name, emoji), seasons(active), leagues(name)')
-      .eq('user_id', user.id).order('consumed_at', { ascending: false })
+      .eq('user_id', user.id).eq('is_adjustment', false).order('consumed_at', { ascending: false })
     if (!data) { setLoadingHistory(false); return }
     const grouped = {}
     data.forEach(d => {
