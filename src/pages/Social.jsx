@@ -261,23 +261,23 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       { data: drinksData },
       { data: achievementsData },
       { data: followData },
-      { data: followersData },
-      { data: followingData },
+      { count: followersCount2 },
+      { count: followingCount2 },
       { data: chatFollow },
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', profileId).single(),
       supabase.from('drinks').select('drink_group_id, points').eq('user_id', profileId),
       supabase.from('achievements').select('achievement_id').eq('user_id', profileId),
       supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', profileId).maybeSingle(),
-      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', profileId),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', profileId),
       supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', profileId),
       supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle(),
     ])
 
     setProfile(profileData)
     setIsFollowing(!!followData)
-    setFollowersCount(followersData?.count || 0)
-    setFollowingCount(followingData?.count || 0)
+    setFollowersCount(followersCount2 || 0)
+    setFollowingCount(followingCount2 || 0)
     setCanChat(!!followData && !!chatFollow)
 
     if (drinksData) {
