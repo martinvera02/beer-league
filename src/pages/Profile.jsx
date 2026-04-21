@@ -47,12 +47,6 @@ const ACHIEVEMENTS = [
   { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas',      desc: 'Sube 5 historias',                                   category: 'social' },
 ]
 
-const CATEGORY_LABELS = {
-  consumiciones: '🍺 Consumiciones',
-  casino:        '🎰 Casino & Dinero',
-  social:        '⚡ Social & Powerups',
-}
-
 // ─── LÓGICA DE DETECCIÓN ──────────────────────────────────────────────────────
 
 async function detectAchievements(userId, stats, supabaseClient) {
@@ -90,7 +84,6 @@ async function detectAchievements(userId, stats, supabaseClient) {
   const storiesCount = stories?.length || 0
   const messagesCount = messages?.length || 0
 
-  // Consumiciones por día
   const drinksByDay = (drinks || []).reduce((acc, d) => {
     const day = new Date(d.consumed_at).toDateString()
     acc[day] = (acc[day] || 0) + 1
@@ -98,40 +91,28 @@ async function detectAchievements(userId, stats, supabaseClient) {
   }, {})
   const maxDrinksInDay = Math.max(0, ...Object.values(drinksByDay))
 
-  // Martes Macarra
   const hasMartesM = (drinks || []).some(d => {
     const madridDate = new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
     return madridDate.getDay() === 2
   })
 
-  // Racha ruleta
   let rouletteStreak = 0
   for (const bet of (rouletteBets || [])) {
     if (bet.won) rouletteStreak++
     else break
   }
 
-  // Big bet
   const hasBigBet = (rouletteBets || []).some(b => b.bet_amount >= 500)
-
-  // Big win
   const hasBigWin = (rouletteBets || []).some(b => b.won && b.net >= 500)
-
-  // Apuestas totales
   const totalBets = (rouletteBets || []).length
-
-  // Ruleta ganada alguna vez
   const hasRouletteWin = (rouletteBets || []).some(b => b.won)
 
-  // Transfers
   const uniqueReceivers = new Set((transfers || []).map(t => t.receiver_id))
   const totalSent = (transfers || []).reduce((s, t) => s + (t.amount || 0), 0)
 
-  // Powerups
   const hasSabotage = (activePowerups || []).some(p => p.effect_type === 'sabotage')
   const hasShieldUsed = (activePowerups || []).some(p => p.effect_type === 'shield')
 
-  // Guerra total: sabotaje y sniper el mismo día
   const attackPowerupsByDay = (activePowerups || []).reduce((acc, p) => {
     if (['sabotage', 'sniper'].includes(p.effect_type)) {
       const day = new Date(p.created_at).toDateString()
@@ -142,7 +123,6 @@ async function detectAchievements(userId, stats, supabaseClient) {
   }, {})
   const hasWarMode = Object.values(attackPowerupsByDay).some(s => s.has('sabotage') && s.has('sniper'))
 
-  // Venganza: alguien me usó sabotaje y yo se lo devolví
   let hasRevenge = false
   if (hasSabotage) {
     const { data: receivedSabotage } = await supabaseClient
@@ -155,24 +135,20 @@ async function detectAchievements(userId, stats, supabaseClient) {
     }
   }
 
-  // Pacifista: sin powerups de ataque en 7 días
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const recentAttacks = (activePowerups || []).filter(p =>
     ['sabotage', 'sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo
   )
   const isPacifist = uniqueDrinks > 0 && recentAttacks.length === 0
 
-  // Come back: última consumición hace más de 7 días y ahora hay una nueva
   const sortedDrinks = [...(drinks || [])].sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
   let hasComeBack = false
   if (sortedDrinks.length >= 2) {
     const latest = new Date(sortedDrinks[0].consumed_at)
     const previous = new Date(sortedDrinks[1].consumed_at)
-    const daysBetween = (latest - previous) / (1000 * 60 * 60 * 24)
-    hasComeBack = daysBetween >= 7
+    hasComeBack = (latest - previous) / (1000 * 60 * 60 * 24) >= 7
   }
 
-  // Top 1 en alguna liga
   let isTop1 = false
   for (const lm of (leagueMembers || [])) {
     const { data: ranking } = await supabaseClient
@@ -183,7 +159,6 @@ async function detectAchievements(userId, stats, supabaseClient) {
     if (ranking?.user_id === userId) { isTop1 = true; break }
   }
 
-  // Miembro más activo en alguna liga
   let isMostActive = false
   for (const lm of (leagueMembers || [])) {
     const { data: rankingAll } = await supabaseClient
@@ -194,7 +169,6 @@ async function detectAchievements(userId, stats, supabaseClient) {
     if (rankingAll?.user_id === userId) { isMostActive = true; break }
   }
 
-  // Likes en posts propios
   const { data: myPosts } = await supabaseClient.from('posts').select('id').eq('user_id', userId)
   let totalLikes = 0
   if (myPosts && myPosts.length > 0) {
@@ -204,7 +178,6 @@ async function detectAchievements(userId, stats, supabaseClient) {
     totalLikes = count || 0
   }
 
-  // Mapa de condiciones
   const conditions = {
     first_drink:      uniqueDrinks >= 1,
     drinks_10:        uniqueDrinks >= 10,
@@ -255,6 +228,9 @@ export default function Profile() {
   const { notifications, unreadCount, markAllRead, markRead } = useNotifications()
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
+  // ✅ NUEVO: seguidores y seguidos
+  const [followersCount, setFollowersCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
   const [history, setHistory] = useState([])
   const [historyPage, setHistoryPage] = useState(0)
   const [historyHasMore, setHistoryHasMore] = useState(true)
@@ -287,19 +263,32 @@ export default function Profile() {
   }, [section])
 
   const fetchProfile = async () => {
-    const [{ data: profileData }, { data: drinksData }] = await Promise.all([
+    const [
+      { data: profileData },
+      { data: drinksData },
+      { count: fwersCount },
+      { count: fwingCount },
+    ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id)
+      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id),
+      // ✅ NUEVO: contar seguidores y seguidos
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
     ])
+
     setProfile(profileData)
     setNewUsername(profileData?.username || '')
+    setFollowersCount(fwersCount || 0)
+    setFollowingCount(fwingCount || 0)
+
     if (drinksData) {
       const seen = new Set()
       const unique = drinksData.filter(d => {
         if (seen.has(d.drink_group_id)) return false
         seen.add(d.drink_group_id); return true
       })
-      const total = unique.reduce((sum, d) => sum + (d.points || 0), 0)
+      // ✅ FIX: redondear a 1 decimal para evitar floats sucios
+      const total = Math.round(unique.reduce((sum, d) => sum + (d.points || 0), 0) * 10) / 10
       const byType = unique.reduce((acc, d) => {
         const name = d.drink_types?.name || 'Desconocido'
         const emoji = d.drink_types?.emoji || '🍺'
@@ -395,6 +384,12 @@ export default function Profile() {
     if (days > 0) return `hace ${days}d`; if (hours > 0) return `hace ${hours}h`; if (mins > 0) return `hace ${mins}m`; return 'ahora'
   }
 
+  // ✅ FIX: formatear puntos sin decimales basura
+  const formatPts = (n) => {
+    const rounded = Math.round(n * 10) / 10
+    return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1)
+  }
+
   const groupedHistory = history.reduce((groups, item) => {
     const date = formatDate(item.consumed_at)
     if (!groups[date]) groups[date] = []
@@ -481,9 +476,24 @@ export default function Profile() {
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
               </div>
               <p className="text-xl font-bold">{profile?.username}</p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
+
+              {/* ✅ NUEVO: Seguidores y seguidos */}
+              <div className="flex justify-center gap-6 py-3 border-t border-b mb-3"
+                style={{ borderColor: 'var(--border)' }}>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-amber-400">{followersCount}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>seguidores</p>
+                </div>
+                <div className="w-px" style={{ backgroundColor: 'var(--border)' }} />
+                <div className="text-center">
+                  <p className="text-xl font-bold text-amber-400">{followingCount}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>siguiendo</p>
+                </div>
+              </div>
+
               {unlockedCount > 0 && (
-                <div className="mt-3 flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-2">
                   <span className="text-sm">🏅</span>
                   <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{unlockedCount}/{totalCount} logros</span>
                 </div>
@@ -493,7 +503,11 @@ export default function Profile() {
             {stats && (
               <>
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[{ label: 'Consumiciones', value: stats.count }, { label: 'Puntos totales', value: stats.total }].map(stat => (
+                  {[
+                    { label: 'Consumiciones', value: stats.count },
+                    // ✅ FIX: usar formatPts para evitar decimales sucios
+                    { label: 'Puntos totales', value: formatPts(stats.total) },
+                  ].map(stat => (
                     <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate"
                       className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
                       <p className="text-3xl font-bold text-amber-400">{stat.value}</p>
@@ -546,8 +560,8 @@ export default function Profile() {
               <div className="grid grid-cols-3 gap-2 mb-5">
                 {[
                   { label: 'Total', value: stats.count },
-                  { label: 'Puntos', value: stats.total },
-                  { label: 'Media pts', value: stats.count > 0 ? (stats.total / stats.count).toFixed(1) : '0' },
+                  { label: 'Puntos', value: formatPts(stats.total) },
+                  { label: 'Media pts', value: stats.count > 0 ? formatPts(stats.total / stats.count) : '0' },
                 ].map(s => (
                   <div key={s.label} className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
                     <p className="text-xl font-bold text-amber-400">{s.value}</p>
@@ -591,7 +605,7 @@ export default function Profile() {
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className={`font-bold text-sm ${item.points > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                              {item.points > 0 ? '+' : ''}{item.points} pts
+                              {item.points > 0 ? '+' : ''}{formatPts(item.points)} pts
                             </p>
                             <p className="text-xs" style={{ color: 'var(--text-hint)' }}>+{Math.floor(item.points * 10)}🪙</p>
                           </div>
