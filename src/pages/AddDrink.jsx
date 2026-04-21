@@ -227,13 +227,6 @@ export default function AddDrink() {
                   <p className="text-white/80 text-xs">
                     ¡Doble de puntos y monedas todo el día! 🍺🍺
                   </p>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-white/60 text-xs">Acaba en</span>
-                    <span className="font-black text-white text-sm tracking-widest"
-                      style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {countdown}
-                    </span>
-                  </div>
                 </div>
               </div>
             </motion.div>
