@@ -2,1115 +2,852 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { fadeIn, staggerItem } from '../lib/animations'
-import { soundLike, soundMessage, soundSuccess, soundMessageReceived } from '../lib/sounds'
+import { useTheme } from '../context/ThemeContext'
+import { useNotifications } from '../context/NotificationsContext'
+import { fadeIn, staggerItem, scaleIn } from '../lib/animations'
+import { soundError, soundSuccess as soundOk } from '../lib/sounds'
+
+// ─── DEFINICIÓN DE LOGROS ─────────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [
-  { id: 'first_drink',       emoji: '🍺', name: 'Primera ronda' },
-  { id: 'drinks_10',         emoji: '🔟', name: 'Bebedor consistente' },
-  { id: 'drinks_50',         emoji: '🏅', name: 'Veterano' },
-  { id: 'drinks_100',        emoji: '👑', name: 'Leyenda' },
-  { id: 'martes_macarra',    emoji: '🔥', name: 'Martes Macarra' },
-  { id: 'variety_5',         emoji: '🌈', name: 'Paladar exquisito' },
-  { id: 'roulette_win',      emoji: '🎰', name: 'Golpe de suerte' },
-  { id: 'roulette_3wins',    emoji: '🎯', name: 'En racha' },
-  { id: 'millionaire',       emoji: '💰', name: 'Millonario' },
-  { id: 'market_5',          emoji: '📈', name: 'Tiburón del mercado' },
-  { id: 'big_bet',           emoji: '🎲', name: 'Todo o nada' },
-  { id: 'sabotage',          emoji: '💣', name: 'Saboteador' },
-  { id: 'shield',            emoji: '🛡️', name: 'Protegido' },
-  { id: 'generous',          emoji: '💸', name: 'Generoso' },
-  { id: 'popular',           emoji: '❤️', name: 'Popular' },
-  { id: 'drinks_day_3',      emoji: '🚀', name: 'Calentando motores' },
-  { id: 'drinks_day_10',     emoji: '🚨', name: 'Esto ya es un problema' },
-  { id: 'top1_league',       emoji: '🥇', name: 'El último en pie' },
-  { id: 'come_back',         emoji: '🧟', name: 'Abstemio rehabilitado' },
-  { id: 'most_active',       emoji: '🏃', name: 'El del bar' },
-  { id: 'broke',             emoji: '🪙', name: 'Pelado' },
-  { id: 'negative_balance',  emoji: '📉', name: 'En números rojos' },
-  { id: 'lender',            emoji: '🏦', name: 'Prestamista' },
-  { id: 'big_sender',        emoji: '💸', name: 'El que invita' },
-  { id: 'roulette_10bets',   emoji: '🎡', name: 'Tahúr' },
-  { id: 'big_win',           emoji: '🤑', name: 'Rompebancos' },
-  { id: 'pacifist',          emoji: '☮️', name: 'Pacifista' },
-  { id: 'war_mode',          emoji: '⚔️', name: 'Guerra total' },
-  { id: 'revenge',           emoji: '🗡️', name: 'Venganza servida fría' },
-  { id: 'influencer',        emoji: '🌟', name: 'Influencer' },
-  { id: 'chatterbox',        emoji: '💬', name: 'Tertuliano' },
-  { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas' },
+  // Consumiciones
+  { id: 'first_drink',       emoji: '🍺', name: 'Primera ronda',          desc: 'Anota tu primera consumición',                        category: 'consumiciones' },
+  { id: 'drinks_10',         emoji: '🔟', name: 'Bebedor consistente',     desc: 'Acumula 10 consumiciones',                            category: 'consumiciones' },
+  { id: 'drinks_50',         emoji: '🏅', name: 'Veterano',                desc: 'Acumula 50 consumiciones',                            category: 'consumiciones' },
+  { id: 'drinks_100',        emoji: '👑', name: 'Leyenda',                 desc: 'Acumula 100 consumiciones',                           category: 'consumiciones' },
+  { id: 'martes_macarra',    emoji: '🔥', name: 'Martes Macarra',          desc: 'Anota una consumición en Martes Macarra',             category: 'consumiciones' },
+  { id: 'variety_5',         emoji: '🌈', name: 'Paladar exquisito',       desc: 'Prueba 5 tipos de bebida distintos',                  category: 'consumiciones' },
+  { id: 'drinks_day_3',      emoji: '🚀', name: 'Calentando motores',      desc: 'Anota 3 consumiciones en un mismo día',               category: 'consumiciones' },
+  { id: 'drinks_day_10',     emoji: '🚨', name: 'Esto ya es un problema',  desc: 'Anota 10 consumiciones en un mismo día',              category: 'consumiciones' },
+  { id: 'top1_league',       emoji: '🥇', name: 'El último en pie',        desc: 'Llega al top 1 del ranking de tu liga',               category: 'consumiciones' },
+  { id: 'come_back',         emoji: '🧟', name: 'Abstemio rehabilitado',   desc: 'Vuelve a anotar tras 7 días sin nada',                category: 'consumiciones' },
+  { id: 'most_active',       emoji: '🏃', name: 'El del bar',              desc: 'Sé el miembro más activo de tu liga',                 category: 'consumiciones' },
+  // Casino & Dinero
+  { id: 'roulette_win',      emoji: '🎰', name: 'Golpe de suerte',         desc: 'Gana en la ruleta de apuestas',                       category: 'casino' },
+  { id: 'roulette_3wins',    emoji: '🎯', name: 'En racha',                desc: 'Gana 3 veces seguidas en ruleta',                     category: 'casino' },
+  { id: 'millionaire',       emoji: '💰', name: 'Millonario',              desc: 'Acumula 1000 monedas',                                category: 'casino' },
+  { id: 'market_5',          emoji: '📈', name: 'Tiburón del mercado',     desc: 'Abre 5 posiciones en el mercado',                     category: 'casino' },
+  { id: 'big_bet',           emoji: '🎲', name: 'Todo o nada',             desc: 'Apuesta 500+ en una sola tirada',                     category: 'casino' },
+  { id: 'broke',             emoji: '🪙', name: 'Pelado',                  desc: 'Llega a 0 monedas exactas',                           category: 'casino' },
+  { id: 'negative_balance',  emoji: '📉', name: 'En números rojos',        desc: 'Ten saldo negativo',                                  category: 'casino' },
+  { id: 'lender',            emoji: '🏦', name: 'Prestamista',             desc: 'Envía monedas a 3 personas distintas',                category: 'casino' },
+  { id: 'big_sender',        emoji: '💸', name: 'El que invita',           desc: 'Envía más de 1000 monedas en total',                  category: 'casino' },
+  { id: 'roulette_10bets',   emoji: '🎡', name: 'Tahúr',                   desc: 'Haz 10 apuestas en la ruleta',                        category: 'casino' },
+  { id: 'big_win',           emoji: '🤑', name: 'Rompebancos',             desc: 'Gana más de 500 monedas en una sola tirada',          category: 'casino' },
+  // Social & Powerups
+  { id: 'sabotage',          emoji: '💣', name: 'Saboteador',              desc: 'Aplica un Sabotaje a otro miembro',                   category: 'social' },
+  { id: 'shield',            emoji: '🛡️', name: 'Protegido',               desc: 'Usa un Escudo',                                       category: 'social' },
+  { id: 'generous',          emoji: '💸', name: 'Generoso',                desc: 'Envía monedas a otro miembro',                        category: 'social' },
+  { id: 'popular',           emoji: '❤️', name: 'Popular',                 desc: 'Recibe 10 likes en tus posts',                        category: 'social' },
+  { id: 'pacifist',          emoji: '☮️', name: 'Pacifista',               desc: 'Lleva 7 días sin usar ningún powerup de ataque',      category: 'social' },
+  { id: 'war_mode',          emoji: '⚔️', name: 'Guerra total',            desc: 'Usa Sabotaje y Sniper en el mismo día',               category: 'social' },
+  { id: 'revenge',           emoji: '🗡️', name: 'Venganza servida fría',   desc: 'Usa Sabotaje a alguien que te lo usó antes',          category: 'social' },
+  { id: 'influencer',        emoji: '🌟', name: 'Influencer',              desc: 'Ten 5 seguidores',                                    category: 'social' },
+  { id: 'chatterbox',        emoji: '💬', name: 'Tertuliano',              desc: 'Escribe 50 mensajes en chats de liga',                category: 'social' },
+  { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas',      desc: 'Sube 5 historias',                                   category: 'social' },
 ]
 
-// ─── CHAT PRIVADO ─────────────────────────────────────────────────────────────
-function PrivateChat({ chat, otherUser, onClose }) {
-  const { user } = useAuth()
-  const [messages, setMessages] = useState([])
-  const [newMessage, setNewMessage] = useState('')
-  const [sending, setSending] = useState(false)
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [lightboxUrl, setLightboxUrl] = useState(null)
-  const bottomRef = useRef(null)
-  const imageInputRef = useRef(null)
+// ─── LÓGICA DE DETECCIÓN ──────────────────────────────────────────────────────
 
-  useEffect(() => {
-    fetchMessages()
-    markRead()
+async function detectAchievements(userId, stats, supabaseClient) {
+  const toUnlock = []
 
-    const channel = supabase.channel(`private_chat:${chat.id}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chat.id}` },
-        async (payload) => {
-          const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.sender_id).single()
-          if (payload.new.sender_id !== user.id) soundMessageReceived()
-          setMessages(prev => [...prev, { ...payload.new, profiles: profile }])
-          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-          markRead()
-        })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [chat.id])
+  const [
+    { data: drinks },
+    { data: wallet },
+    { data: marketPositions },
+    { data: rouletteBets },
+    { data: activePowerups },
+    { data: transfers },
+    { data: followers },
+    { data: stories },
+    { data: messages },
+    { data: leagueMembers },
+  ] = await Promise.all([
+    supabaseClient.from('drinks').select('drink_type_id, consumed_at, league_id, user_id').eq('user_id', userId),
+    supabaseClient.from('wallets').select('balance').eq('user_id', userId).single(),
+    supabaseClient.from('market_positions').select('id').eq('user_id', userId),
+    supabaseClient.from('roulette_bets').select('won, net, created_at, bet_amount').eq('user_id', userId).order('created_at', { ascending: false }),
+    supabaseClient.from('active_powerups').select('powerup_id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
+    supabaseClient.from('league_transfers').select('receiver_id, amount, created_at').eq('sender_id', userId),
+    supabaseClient.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', userId),
+    supabaseClient.from('stories').select('id').eq('user_id', userId),
+    supabaseClient.from('messages').select('id').eq('user_id', userId),
+    supabaseClient.from('league_members').select('league_id').eq('user_id', userId),
+  ])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  const uniqueDrinks = stats?.count || 0
+  const drinkTypes = new Set((drinks || []).map(d => d.drink_type_id))
+  const balance = wallet?.balance || 0
+  const marketCount = marketPositions?.length || 0
+  const followersCount = followers?.count || 0
+  const storiesCount = stories?.length || 0
+  const messagesCount = messages?.length || 0
 
-  const fetchMessages = async () => {
-    const { data } = await supabase.from('private_messages')
-      .select('*, profiles(username, avatar_url)')
-      .eq('chat_id', chat.id)
-      .order('created_at', { ascending: true })
-      .limit(100)
-    setMessages(data || [])
-  }
-
-  const markRead = async () => {
-    await supabase.from('private_message_reads').upsert({
-      user_id: user.id,
-      chat_id: chat.id,
-      last_read_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,chat_id' })
-  }
-
-  const sendMessage = async () => {
-    if (!newMessage.trim() || sending) return
-    setSending(true); soundMessage()
-    await supabase.from('private_messages').insert({ chat_id: chat.id, sender_id: user.id, content: newMessage.trim() })
-    setNewMessage(''); setSending(false)
-  }
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setUploadingImage(true)
-    const ext = file.name.split('.').pop()
-    const path = `private/${user.id}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('chat-images').upload(path, file)
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
-      soundMessage()
-      await supabase.from('private_messages').insert({
-        chat_id: chat.id, sender_id: user.id, content: '', image_url: publicUrl
-      })
-    }
-    setUploadingImage(false)
-    e.target.value = ''
-  }
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
-  }
-
-  const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-
-  const grouped = messages.reduce((g, m) => {
-    const d = new Date(m.created_at).toDateString()
-    if (!g[d]) g[d] = []
-    g[d].push(m); return g
+  const drinksByDay = (drinks || []).reduce((acc, d) => {
+    const day = new Date(d.consumed_at).toDateString()
+    acc[day] = (acc[day] || 0) + 1
+    return acc
   }, {})
+  const maxDrinksInDay = Math.max(0, ...Object.values(drinksByDay))
 
-  const Avatar = ({ url, username }) => url
-    ? <img src={url} alt={username} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-    : <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+  const hasMartesM = (drinks || []).some(d => {
+    const madridDate = new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+    return madridDate.getDay() === 2
+  })
 
-  return (
-    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-      className="fixed inset-0 z-[60] flex flex-col"
-      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+  let rouletteStreak = 0
+  for (const bet of (rouletteBets || [])) {
+    if (bet.won) rouletteStreak++
+    else break
+  }
 
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b flex-shrink-0"
-        style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
-        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
-          className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>←</motion.button>
-        <Avatar url={otherUser?.avatar_url} username={otherUser?.username} />
-        <div className="flex-1">
-          <p className="font-bold text-sm">{otherUser?.username}</p>
-          <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Chat privado</p>
-        </div>
-      </div>
+  const hasBigBet = (rouletteBets || []).some(b => b.bet_amount >= 500)
+  const hasBigWin = (rouletteBets || []).some(b => b.won && b.net >= 500)
+  const totalBets = (rouletteBets || []).length
+  const hasRouletteWin = (rouletteBets || []).some(b => b.won)
 
-      {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        {messages.length === 0 ? (
-          <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-            <div className="text-5xl mb-3">💬</div>
-            <p>Empieza la conversación con {otherUser?.username}</p>
-          </div>
-        ) : (
-          Object.entries(grouped).map(([date, msgs]) => (
-            <div key={date}>
-              <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
-                <span className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatDate(msgs[0].created_at)}</span>
-                <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
-              </div>
-              {msgs.map((msg, index) => {
-                const isMe = msg.sender_id === user.id
-                const isSameUser = msgs[index - 1]?.sender_id === msg.sender_id
-                return (
-                  <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                    className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    {!isMe && (
-                      <div className="flex-shrink-0 self-end">
-                        {!isSameUser ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} /> : <div className="w-8" />}
-                      </div>
-                    )}
-                    <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                      {msg.image_url && (
-                        <img src={msg.image_url} alt="Imagen"
-                          onClick={() => setLightboxUrl(msg.image_url)}
-                          className={`max-w-52 rounded-2xl cursor-pointer object-cover ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} />
-                      )}
-                      {msg.content && (
-                        <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
-                          style={{ backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)', color: isMe ? '#fff' : 'var(--text-primary)' }}>
-                          {msg.content}
-                        </div>
-                      )}
-                      <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>{formatTime(msg.created_at)}</span>
-                    </div>
-                  </motion.div>
-                )
-              })}
-            </div>
-          ))
-        )}
-        <div ref={bottomRef} />
-      </div>
+  const uniqueReceivers = new Set((transfers || []).map(t => t.receiver_id))
+  const totalSent = (transfers || []).reduce((s, t) => s + (t.amount || 0), 0)
 
-      {/* Input */}
-      <div className="px-4 py-3 pb-10 border-t flex-shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-base)' }}>
-        <div className="flex gap-2 items-end">
-          {/* Botón foto */}
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()}
-            disabled={uploadingImage}
-            className="p-3 rounded-2xl flex-shrink-0"
-            style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-            {uploadingImage ? '⏳' : '📷'}
-          </motion.button>
-          <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+  const hasSabotage = (activePowerups || []).some(p => p.effect_type === 'sabotage')
+  const hasShieldUsed = (activePowerups || []).some(p => p.effect_type === 'shield')
 
-          <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={handleKeyDown}
-            placeholder="Escribe un mensaje..." rows={1}
-            className="flex-1 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
-            style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '120px' }} />
-          <motion.button whileTap={{ scale: 0.9 }} onClick={sendMessage} disabled={!newMessage.trim() || sending}
-            className="bg-amber-500 disabled:opacity-40 text-white p-3 rounded-2xl flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-            </svg>
-          </motion.button>
-        </div>
-      </div>
+  const attackPowerupsByDay = (activePowerups || []).reduce((acc, p) => {
+    if (['sabotage', 'sniper'].includes(p.effect_type)) {
+      const day = new Date(p.created_at).toDateString()
+      if (!acc[day]) acc[day] = new Set()
+      acc[day].add(p.effect_type)
+    }
+    return acc
+  }, {})
+  const hasWarMode = Object.values(attackPowerupsByDay).some(s => s.has('sabotage') && s.has('sniper'))
 
-      {/* Lightbox */}
-      <AnimatePresence>
-        {lightboxUrl && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[70] p-4"
-            onClick={() => setLightboxUrl(null)}>
-            <motion.img initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
-              src={lightboxUrl} alt="Imagen ampliada"
-              className="max-w-full max-h-full rounded-2xl object-contain" />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+  let hasRevenge = false
+  if (hasSabotage) {
+    const { data: receivedSabotage } = await supabaseClient
+      .from('active_powerups').select('user_id, created_at')
+      .eq('target_user_id', userId).eq('effect_type', 'sabotage')
+    if (receivedSabotage && receivedSabotage.length > 0) {
+      const attackerIds = new Set(receivedSabotage.map(s => s.user_id))
+      const myAttacks = (activePowerups || []).filter(p => p.effect_type === 'sabotage')
+      hasRevenge = myAttacks.some(a => attackerIds.has(a.target_user_id))
+    }
+  }
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const recentAttacks = (activePowerups || []).filter(p =>
+    ['sabotage', 'sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo
   )
+  const isPacifist = uniqueDrinks > 0 && recentAttacks.length === 0
+
+  const sortedDrinks = [...(drinks || [])].sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
+  let hasComeBack = false
+  if (sortedDrinks.length >= 2) {
+    const latest = new Date(sortedDrinks[0].consumed_at)
+    const previous = new Date(sortedDrinks[1].consumed_at)
+    hasComeBack = (latest - previous) / (1000 * 60 * 60 * 24) >= 7
+  }
+
+  let isTop1 = false
+  for (const lm of (leagueMembers || [])) {
+    const { data: ranking } = await supabaseClient
+      .from('league_rankings').select('user_id')
+      .eq('league_id', lm.league_id)
+      .order('total_points', { ascending: false })
+      .limit(1).maybeSingle()
+    if (ranking?.user_id === userId) { isTop1 = true; break }
+  }
+
+  let isMostActive = false
+  for (const lm of (leagueMembers || [])) {
+    const { data: rankingAll } = await supabaseClient
+      .from('league_rankings').select('user_id, total_drinks')
+      .eq('league_id', lm.league_id)
+      .order('total_drinks', { ascending: false })
+      .limit(1).maybeSingle()
+    if (rankingAll?.user_id === userId) { isMostActive = true; break }
+  }
+
+  const { data: myPosts } = await supabaseClient.from('posts').select('id').eq('user_id', userId)
+  let totalLikes = 0
+  if (myPosts && myPosts.length > 0) {
+    const { count } = await supabaseClient.from('post_likes')
+      .select('id', { count: 'exact', head: true })
+      .in('post_id', myPosts.map(p => p.id))
+    totalLikes = count || 0
+  }
+
+  const conditions = {
+    first_drink:      uniqueDrinks >= 1,
+    drinks_10:        uniqueDrinks >= 10,
+    drinks_50:        uniqueDrinks >= 50,
+    drinks_100:       uniqueDrinks >= 100,
+    martes_macarra:   hasMartesM,
+    variety_5:        drinkTypes.size >= 5,
+    drinks_day_3:     maxDrinksInDay >= 3,
+    drinks_day_10:    maxDrinksInDay >= 10,
+    top1_league:      isTop1,
+    come_back:        hasComeBack,
+    most_active:      isMostActive,
+    roulette_win:     hasRouletteWin,
+    roulette_3wins:   rouletteStreak >= 3,
+    millionaire:      balance >= 1000,
+    market_5:         marketCount >= 5,
+    big_bet:          hasBigBet,
+    broke:            balance === 0 && uniqueDrinks > 0,
+    negative_balance: balance < 0,
+    lender:           uniqueReceivers.size >= 3,
+    big_sender:       totalSent >= 1000,
+    roulette_10bets:  totalBets >= 10,
+    big_win:          hasBigWin,
+    sabotage:         hasSabotage,
+    shield:           hasShieldUsed,
+    generous:         (transfers || []).length >= 1,
+    popular:          totalLikes >= 10,
+    pacifist:         isPacifist,
+    war_mode:         hasWarMode,
+    revenge:          hasRevenge,
+    influencer:       followersCount >= 5,
+    chatterbox:       messagesCount >= 50,
+    photographer:     storiesCount >= 5,
+  }
+
+  for (const [id, condition] of Object.entries(conditions)) {
+    if (condition) toUnlock.push(id)
+  }
+
+  return toUnlock
 }
 
-// ─── PERFIL DE USUARIO ────────────────────────────────────────────────────────
-function UserProfile({ profileId, onClose, onOpenChat }) {
-  const { user } = useAuth()
+// ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
+
+export default function Profile() {
+  const { user, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const { notifications, unreadCount, markAllRead, markRead } = useNotifications()
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
-  const [achievements, setAchievements] = useState([])
-  const [isFollowing, setIsFollowing] = useState(false)
+  // ✅ NUEVO: seguidores y seguidos
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
+  const [history, setHistory] = useState([])
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historyHasMore, setHistoryHasMore] = useState(true)
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [toggling, setToggling] = useState(false)
-  const [canChat, setCanChat] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [section, setSection] = useState('profile')
+  const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [savingUsername, setSavingUsername] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => { fetchProfile() }, [profileId])
+  const [unlockedIds, setUnlockedIds] = useState(new Set())
+  const [newlyUnlocked, setNewlyUnlocked] = useState([])
+  const [loadingAchievements, setLoadingAchievements] = useState(false)
+
+  const fileInputRef = useRef(null)
+  const PAGE_SIZE = 20
+
+  useEffect(() => { fetchProfile() }, [])
+  useEffect(() => {
+    if (section === 'history' && history.length === 0) fetchHistory(0)
+    if (section === 'notifications') markAllRead()
+    if (section === 'achievements') fetchAndCheckAchievements()
+  }, [section])
 
   const fetchProfile = async () => {
-    setLoading(true)
     const [
       { data: profileData },
       { data: drinksData },
-      { data: achievementsData },
-      { data: followData },
-      { count: followersCount2 },
-      { count: followingCount2 },
-      { data: chatFollow },
+      { count: fwersCount },
+      { count: fwingCount },
     ] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', profileId).single(),
-      supabase.from('drinks').select('drink_group_id, points').eq('user_id', profileId),
-      supabase.from('achievements').select('achievement_id').eq('user_id', profileId),
-      supabase.from('follows').select('id').eq('follower_id', user.id).eq('following_id', profileId).maybeSingle(),
-      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', profileId),
-      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', profileId),
-      supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle(),
+      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id),
+      // ✅ NUEVO: contar seguidores y seguidos
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
     ])
 
     setProfile(profileData)
-    setIsFollowing(!!followData)
-    setFollowersCount(followersCount2 || 0)
-    setFollowingCount(followingCount2 || 0)
-    setCanChat(!!followData && !!chatFollow)
+    setNewUsername(profileData?.username || '')
+    setFollowersCount(fwersCount || 0)
+    setFollowingCount(fwingCount || 0)
 
     if (drinksData) {
       const seen = new Set()
-      const unique = drinksData.filter(d => { if (seen.has(d.drink_group_id)) return false; seen.add(d.drink_group_id); return true })
-      setStats({ count: unique.length, total: Math.round(unique.reduce((s, d) => s + (d.points || 0), 0) * 10) / 10 })
+      const unique = drinksData.filter(d => {
+        if (seen.has(d.drink_group_id)) return false
+        seen.add(d.drink_group_id); return true
+      })
+      // ✅ FIX: redondear a 1 decimal para evitar floats sucios
+      const total = Math.round(unique.reduce((sum, d) => sum + (d.points || 0), 0) * 10) / 10
+      const byType = unique.reduce((acc, d) => {
+        const name = d.drink_types?.name || 'Desconocido'
+        const emoji = d.drink_types?.emoji || '🍺'
+        if (!acc[name]) acc[name] = { count: 0, emoji }
+        acc[name].count++; return acc
+      }, {})
+      setStats({ total, count: unique.length, byType })
     }
-
-    setAchievements((achievementsData || []).map(a => a.achievement_id))
     setLoading(false)
   }
 
-  const toggleFollow = async () => {
-    setToggling(true)
-    if (isFollowing) {
-      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId)
-      setIsFollowing(false); setFollowersCount(prev => prev - 1)
-    } else {
-      await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
-      setIsFollowing(true); setFollowersCount(prev => prev + 1); soundSuccess()
-      // ✅ Notificación de nuevo seguidor
-      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
-      await supabase.from('notifications').insert({
-        user_id: profileId,
-        type: 'follow',
-        title: '¡Nuevo seguidor!',
-        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
-        read: false,
-      })
-    }
-    const { data: chatFollow } = await supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle()
-    setCanChat(!isFollowing && !!chatFollow)
-    setToggling(false)
-  }
-
-  const handleOpenChat = async () => {
-    const userA = user.id < profileId ? user.id : profileId
-    const userB = user.id < profileId ? profileId : user.id
-    let { data: existing } = await supabase.from('private_chats').select('*').eq('user_a', userA).eq('user_b', userB).maybeSingle()
-    if (!existing) {
-      const { data: created } = await supabase.from('private_chats').insert({ user_a: userA, user_b: userB }).select().single()
-      existing = created
-    }
-    onOpenChat(existing, profile)
-  }
-
-  if (loading) return (
-    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: 'var(--bg-base)' }}>
-      <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>
-    </motion.div>
-  )
-
-  const unlockedAchievements = ACHIEVEMENTS.filter(a => achievements.includes(a.id))
-  const isMe = profileId === user.id
-
-  return (
-    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-      className="fixed inset-0 z-50 overflow-y-auto pb-24"
-      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
-
-      <div className="flex items-center gap-3 px-4 py-4 border-b sticky top-0 z-10"
-        style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
-        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
-          className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>←</motion.button>
-        <p className="font-bold flex-1">{profile?.username}</p>
-      </div>
-
-      <div className="px-4 pt-6 max-w-md mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          {profile?.avatar_url
-            ? <img src={profile.avatar_url} alt={profile.username} className="w-20 h-20 rounded-full object-cover border-4 border-amber-500" />
-            : <div className="w-20 h-20 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
-          <div className="flex-1">
-            <p className="text-xl font-bold">{profile?.username}</p>
-            <div className="flex gap-4 mt-2">
-              {[{ v: stats?.count || 0, l: 'consumiciones' }, { v: followersCount, l: 'seguidores' }, { v: followingCount, l: 'siguiendo' }].map(s => (
-                <div key={s.l} className="text-center">
-                  <p className="font-bold text-amber-400">{s.v}</p>
-                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{s.l}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {!isMe && (
-          <div className="flex gap-3 mb-6">
-            <motion.button whileTap={{ scale: 0.96 }} onClick={toggleFollow} disabled={toggling}
-              className="flex-1 py-3 rounded-2xl font-bold text-sm"
-              style={{ backgroundColor: isFollowing ? 'var(--bg-card)' : '#f59e0b', color: isFollowing ? 'var(--text-primary)' : '#fff', border: isFollowing ? '1px solid var(--border)' : 'none' }}>
-              {toggling ? '...' : isFollowing ? 'Siguiendo ✓' : '+ Seguir'}
-            </motion.button>
-            {canChat ? (
-              <motion.button whileTap={{ scale: 0.96 }} onClick={handleOpenChat}
-                className="flex-1 py-3 rounded-2xl font-bold text-sm"
-                style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
-                💬 Mensaje
-              </motion.button>
-            ) : isFollowing ? (
-              <div className="flex-1 py-3 rounded-2xl text-center text-xs flex items-center justify-center"
-                style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-hint)' }}>
-                Chat disponible si te sigue
-              </div>
-            ) : null}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-2xl font-bold text-amber-400">{stats ? (Number.isInteger(stats.total) ? stats.total : stats.total.toFixed(1)) : 0}</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Puntos totales</p>
-          </div>
-          <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-2xl font-bold text-amber-400">{unlockedAchievements.length}</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Logros</p>
-          </div>
-        </div>
-
-        <p className="text-sm font-bold mb-3">🏅 Logros desbloqueados</p>
-        {unlockedAchievements.length === 0 ? (
-          <div className="rounded-2xl p-6 text-center mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Aún no tiene logros</p>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {unlockedAchievements.map(a => (
-              <motion.div key={a.id} initial={{ scale: 0 }} animate={{ scale: 1 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl"
-                style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                <span className="text-lg">{a.emoji}</span>
-                <span className="text-xs font-medium text-amber-400">{a.name}</span>
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {ACHIEVEMENTS.filter(a => !achievements.includes(a.id)).length > 0 && (
-          <>
-            <p className="text-sm font-bold mb-3" style={{ color: 'var(--text-muted)' }}>🔒 Sin desbloquear</p>
-            <div className="flex flex-wrap gap-2">
-              {ACHIEVEMENTS.filter(a => !achievements.includes(a.id)).map(a => (
-                <div key={a.id} className="flex items-center gap-1.5 px-3 py-2 rounded-2xl opacity-40"
-                  style={{ backgroundColor: 'var(--bg-card)', filter: 'grayscale(100%)' }}>
-                  <span className="text-lg">{a.emoji}</span>
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-hint)' }}>{a.name}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </motion.div>
-  )
-}
-
-// ─── SOCIAL PRINCIPAL ─────────────────────────────────────────────────────────
-export default function Social() {
-  const { user } = useAuth()
-  const [tab, setTab] = useState('feed')
-  const [posts, setPosts] = useState([])
-  const [stories, setStories] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showNewPost, setShowNewPost] = useState(false)
-  const [newPostContent, setNewPostContent] = useState('')
-  const [newPostImage, setNewPostImage] = useState(null)
-  const [newPostPreview, setNewPostPreview] = useState(null)
-  const [uploadingPost, setUploadingPost] = useState(false)
-  const [uploadingStory, setUploadingStory] = useState(false)
-  const [selectedStory, setSelectedStory] = useState(null)
-  const [openComments, setOpenComments] = useState(null)
-  const [commentText, setCommentText] = useState('')
-  const [comments, setComments] = useState([])
-  const [sendingComment, setSendingComment] = useState(false)
-
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState([])
-  const [searching, setSearching] = useState(false)
-  const [following, setFollowing] = useState([])
-  const [chats, setChats] = useState([])
-  const [loadingChats, setLoadingChats] = useState(false)
-  const [unreadByChat, setUnreadByChat] = useState({}) // { chatId: count }
-  const [totalUnread, setTotalUnread] = useState(0)
-
-  const [viewingProfile, setViewingProfile] = useState(null)
-  const [activeChat, setActiveChat] = useState(null)
-
-  const postImageRef = useRef(null)
-  const storyImageRef = useRef(null)
-  const textareaRef = useRef(null)
-  const commentsBottomRef = useRef(null)
-  const searchTimeout = useRef(null)
-
-  useEffect(() => { fetchFeed(); fetchFollowing(); fetchUnreadCounts() }, [])
-  useEffect(() => { if (tab === 'chats') { fetchChats(); fetchUnreadCounts() } }, [tab])
-
-  // Realtime: escuchar nuevos mensajes privados para actualizar badges
-  useEffect(() => {
-    const channel = supabase.channel('private_messages_unread')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'private_messages' },
-        (payload) => {
-          if (payload.new.sender_id !== user.id) {
-            setUnreadByChat(prev => {
-              const chatId = payload.new.chat_id
-              const newCount = (prev[chatId] || 0) + 1
-              const updated = { ...prev, [chatId]: newCount }
-              setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
-              return updated
-            })
-          }
-        })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [user.id])
-
-  useEffect(() => {
-    if (showNewPost && textareaRef.current)
-      setTimeout(() => textareaRef.current?.focus(), 100)
-  }, [showNewPost])
-
-  useEffect(() => {
-    if (!openComments) return
-    const channel = supabase.channel(`comments:${openComments.id}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'post_comments', filter: `post_id=eq.${openComments.id}` },
-        async (payload) => {
-          const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
-          setComments(prev => [...prev, { ...payload.new, profiles: profile }])
-          setTimeout(() => commentsBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-        })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [openComments])
-
-  const fetchUnreadCounts = async () => {
-    const { data: myChats } = await supabase.from('private_chats')
-      .select('id').or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
-
-    if (!myChats || myChats.length === 0) return
-
-    const counts = {}
-    await Promise.all(myChats.map(async (chat) => {
-      const { data: readData } = await supabase.from('private_message_reads')
-        .select('last_read_at').eq('user_id', user.id).eq('chat_id', chat.id).maybeSingle()
-      const lastRead = readData?.last_read_at || '1970-01-01'
-      const { count } = await supabase.from('private_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('chat_id', chat.id)
-        .neq('sender_id', user.id)
-        .gt('created_at', lastRead)
-      counts[chat.id] = count || 0
-    }))
-
-    setUnreadByChat(counts)
-    setTotalUnread(Object.values(counts).reduce((s, c) => s + c, 0))
-  }
-
-  const fetchFeed = async () => {
-    setLoading(true)
-    const [{ data: postsData }, { data: storiesData }] = await Promise.all([
-      supabase.from('posts').select('*, profiles(username, avatar_url), post_likes(user_id), post_comments(id)')
-        .order('created_at', { ascending: false }).limit(50),
-      supabase.from('stories').select('*, profiles(username, avatar_url)')
-        .gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
-    ])
-    setPosts(postsData || [])
-    setStories(storiesData || [])
-    setLoading(false)
-  }
-
-  const fetchFollowing = async () => {
-    const { data } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
-    setFollowing((data || []).map(f => f.following_id))
-  }
-
-  const fetchChats = async () => {
-    setLoadingChats(true)
-    const { data } = await supabase.from('private_chats')
-      .select(`*, user_a_profile:profiles!private_chats_user_a_fkey(id, username, avatar_url), user_b_profile:profiles!private_chats_user_b_fkey(id, username, avatar_url)`)
-      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
-      .order('created_at', { ascending: false })
-
-    const chatsWithLastMsg = await Promise.all((data || []).map(async (chat) => {
-      const { data: lastMsg } = await supabase.from('private_messages')
-        .select('content, image_url, created_at').eq('chat_id', chat.id)
-        .order('created_at', { ascending: false }).limit(1).maybeSingle()
-      const otherUser = chat.user_a === user.id ? chat.user_b_profile : chat.user_a_profile
-      return { ...chat, otherUser, lastMsg }
-    }))
-
-    setChats(chatsWithLastMsg)
-    setLoadingChats(false)
-  }
-
-  const handleSearch = (query) => {
-    setSearchQuery(query)
-    clearTimeout(searchTimeout.current)
-    if (!query.trim()) { setSearchResults([]); return }
-    searchTimeout.current = setTimeout(async () => {
-      setSearching(true)
-      const { data } = await supabase.from('profiles').select('id, username, avatar_url')
-        .ilike('username', `%${query.trim()}%`).neq('id', user.id).limit(15)
-      setSearchResults(data || [])
-      setSearching(false)
-    }, 400)
-  }
-
-  const toggleFollow = async (profileId) => {
-    const isFollowingUser = following.includes(profileId)
-    if (isFollowingUser) {
-      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', profileId)
-      setFollowing(prev => prev.filter(id => id !== profileId))
-    } else {
-      await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
-      setFollowing(prev => [...prev, profileId]); soundSuccess()
-      // Notificacion de nuevo seguidor
-      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
-      await supabase.from('notifications').insert({
-        user_id: profileId,
-        type: 'follow',
-        title: '¡Nuevo seguidor!',
-        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
-        read: false,
-      })
-    }
-  }
-
-  const handlePostImageSelect = (e) => {
-    const file = e.target.files[0]; if (!file) return
-    setNewPostImage(file); setNewPostPreview(URL.createObjectURL(file))
-  }
-
-  const submitPost = async () => {
-    if (!newPostContent.trim() && !newPostImage) return
-    setUploadingPost(true)
-    let imageUrl = null
-    if (newPostImage) {
-      const ext = newPostImage.name.split('.').pop()
-      const path = `${user.id}/posts/${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('social').upload(path, newPostImage)
-      if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from('social').getPublicUrl(path)
-        imageUrl = publicUrl
-      }
-    }
-    await supabase.from('posts').insert({ user_id: user.id, content: newPostContent.trim(), image_url: imageUrl })
-    closeNewPost(); setUploadingPost(false); fetchFeed()
-  }
-
-  const submitStory = async (e) => {
-    const file = e.target.files[0]; if (!file) return
-    setUploadingStory(true)
-    const ext = file.name.split('.').pop()
-    const path = `${user.id}/stories/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('social').upload(path, file)
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('social').getPublicUrl(path)
-      await supabase.from('stories').insert({ user_id: user.id, image_url: publicUrl })
-      fetchFeed()
-    }
-    setUploadingStory(false); e.target.value = ''
-  }
-
-  const toggleLike = async (post) => {
-    const alreadyLiked = post.post_likes?.some(l => l.user_id === user.id)
-    if (!alreadyLiked) soundLike()
-    if (alreadyLiked) await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', user.id)
-    else await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id })
-    fetchFeed()
-  }
-
-  const deletePost = async (postId) => { await supabase.from('posts').delete().eq('id', postId); fetchFeed() }
-
-  const openCommentsPanel = async (post) => {
-    setOpenComments(post); setCommentText('')
-    const { data } = await supabase.from('post_comments').select('*, profiles(username, avatar_url)')
-      .eq('post_id', post.id).order('created_at', { ascending: true })
-    setComments(data || [])
-  }
-
-  const closeCommentsPanel = () => { setOpenComments(null); setComments([]); setCommentText('') }
-
-  const submitComment = async () => {
-    if (!commentText.trim() || !openComments || sendingComment) return
-    setSendingComment(true); soundMessage()
-    await supabase.from('post_comments').insert({ post_id: openComments.id, user_id: user.id, content: commentText.trim() })
-    setCommentText(''); fetchFeed(); setSendingComment(false)
-  }
-
-  const handleCommentKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }
-  const closeNewPost = () => { setShowNewPost(false); setNewPostContent(''); setNewPostImage(null); setNewPostPreview(null) }
-
-  const handleOpenChat = (chat, otherUser) => {
-    // Limpiar badge del chat al abrirlo
-    setUnreadByChat(prev => {
-      const updated = { ...prev, [chat.id]: 0 }
-      setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
-      return updated
+  const fetchHistory = async (page) => {
+    setLoadingHistory(true)
+    const { data } = await supabase.from('drinks')
+      .select('id, drink_group_id, points, consumed_at, drink_types(name, emoji), seasons(active), leagues(name)')
+      .eq('user_id', user.id).order('consumed_at', { ascending: false })
+    if (!data) { setLoadingHistory(false); return }
+    const grouped = {}
+    data.forEach(d => {
+      const key = d.drink_group_id
+      if (!grouped[key]) grouped[key] = { drink_group_id: key, points: d.points, consumed_at: d.consumed_at, drink_type: d.drink_types, leagues: [] }
+      if (d.leagues?.name) grouped[key].leagues.push(d.leagues.name)
     })
-    setActiveChat({ chat, otherUser })
+    const allUnique = Object.values(grouped).sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
+    const from = page * PAGE_SIZE
+    const paginated = allUnique.slice(from, from + PAGE_SIZE)
+    if (page === 0) setHistory(paginated); else setHistory(prev => [...prev, ...paginated])
+    setHistoryHasMore(allUnique.length > from + PAGE_SIZE)
+    setHistoryPage(page); setLoadingHistory(false)
   }
 
-  const formatTime = (ts) => {
+  const fetchAndCheckAchievements = async () => {
+    setLoadingAchievements(true)
+    const { data: existing } = await supabase.from('achievements').select('achievement_id').eq('user_id', user.id)
+    const existingIds = new Set((existing || []).map(a => a.achievement_id))
+    const earned = await detectAchievements(user.id, stats, supabase)
+    const toInsert = earned.filter(id => !existingIds.has(id))
+    if (toInsert.length > 0) {
+      await supabase.from('achievements').insert(toInsert.map(achievement_id => ({ user_id: user.id, achievement_id })))
+      setNewlyUnlocked(toInsert)
+      setTimeout(() => setNewlyUnlocked([]), 5000)
+    }
+    setUnlockedIds(new Set([...existingIds, ...toInsert]))
+    setLoadingAchievements(false)
+  }
+
+  const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000) }
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0]; if (!file) return
+    setUploadingAvatar(true); setError('')
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/avatar.${ext}`
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+    if (uploadError) { soundError(); setError('Error al subir la imagen'); setUploadingAvatar(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+    await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
+    setProfile(prev => ({ ...prev, avatar_url: publicUrl }))
+    setUploadingAvatar(false); soundOk(); showSuccess('Foto actualizada')
+  }
+
+  const handleChangeUsername = async () => {
+    if (!newUsername.trim() || newUsername === profile?.username) return
+    setSavingUsername(true); setError('')
+    const { error } = await supabase.from('profiles').update({ username: newUsername.trim() }).eq('id', user.id)
+    if (error) { soundError(); setError(error.message.includes('unique') ? 'Ese nombre ya está en uso' : error.message) }
+    else { setProfile(prev => ({ ...prev, username: newUsername.trim() })); soundOk(); showSuccess('Nombre actualizado') }
+    setSavingUsername(false)
+  }
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword !== confirmPassword) { soundError(); setError('Las contraseñas no coinciden'); return }
+    if (newPassword.length < 6) { soundError(); setError('Mínimo 6 caracteres'); return }
+    setSavingPassword(true); setError('')
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) { soundError(); setError(error.message) }
+    else { setNewPassword(''); setConfirmPassword(''); soundOk(); showSuccess('Contraseña actualizada') }
+    setSavingPassword(false)
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true); setError('')
+    const { error } = await supabase.rpc('delete_user')
+    if (error) { soundError(); setError('Error: ' + error.message); setDeleting(false); setShowDeleteConfirm(false); return }
+    await logout()
+  }
+
+  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+  const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  const formatNotifTime = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
     const mins = Math.floor(diff / 60000), hours = Math.floor(mins / 60), days = Math.floor(hours / 24)
     if (days > 0) return `hace ${days}d`; if (hours > 0) return `hace ${hours}h`; if (mins > 0) return `hace ${mins}m`; return 'ahora'
   }
 
-  const Avatar = ({ url, username, size = 'sm' }) => {
-    const dim = size === 'sm' ? 'w-9 h-9' : 'w-12 h-12'
-    return url
-      ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
-      : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-lg`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+  // ✅ FIX: formatear puntos sin decimales basura
+  const formatPts = (n) => {
+    const rounded = Math.round(n * 10) / 10
+    return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1)
   }
 
-  const storiesByUser = stories.reduce((acc, s) => {
-    if (!acc[s.user_id]) acc[s.user_id] = { profile: s.profiles, stories: [] }
-    acc[s.user_id].stories.push(s); return acc
+  const groupedHistory = history.reduce((groups, item) => {
+    const date = formatDate(item.consumed_at)
+    if (!groups[date]) groups[date] = []
+    groups[date].push(item); return groups
   }, {})
 
-  const canPublish = (newPostContent.trim().length > 0 || newPostImage !== null) && !uploadingPost
+  const getNotifStyle = (type) => {
+    switch (type) {
+      case 'powerup':  return { bg: 'rgba(239,68,68,0.1)',  color: '#ef4444', icon: '⚡' }
+      case 'transfer': return { bg: 'rgba(16,185,129,0.1)', color: '#10b981', icon: '💸' }
+      case 'follow':   return { bg: 'rgba(99,102,241,0.1)', color: '#818cf8', icon: '👤' }
+      default:         return { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b', icon: '🔔' }
+    }
+  }
 
-  const TABS = [
-    { id: 'feed',    label: '📰 Feed' },
-    { id: 'stories', label: '⭕ Historias' },
-    { id: 'people',  label: '🔍 Buscar' },
-    { id: 'chats',   label: '💬 Chats', unread: totalUnread },
+  const unlockedCount = unlockedIds.size
+  const totalCount = ACHIEVEMENTS.length
+  const achievementsByCategory = ACHIEVEMENTS.reduce((acc, a) => {
+    if (!acc[a.category]) acc[a.category] = []
+    acc[a.category].push(a); return acc
+  }, {})
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
+      <p style={{ color: 'var(--text-muted)' }}>Cargando...</p>
+    </div>
+  )
+
+  const SECTIONS = [
+    { id: 'profile',       label: '👤' },
+    { id: 'history',       label: '🍺' },
+    { id: 'achievements',  label: '🏅' },
+    { id: 'notifications', label: '🔔', badge: unreadCount },
+    { id: 'settings',      label: '⚙️' },
   ]
 
   return (
-    <div className="min-h-screen pb-24 transition-colors duration-300"
+    <div className="min-h-screen pb-24 px-4 pt-6 transition-colors duration-300"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+      <div className="max-w-md mx-auto">
 
-      <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-        <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
-        <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
-              style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-              {tab === t.id && (
-                <motion.div layoutId="social-tab" className="absolute inset-0 rounded-lg"
-                  style={{ zIndex: -1, backgroundColor: t.id === 'chats' ? '#10b981' : '#f59e0b' }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
-              )}
-              <span>{t.label}</span>
-              {t.unread > 0 && (
-                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  className="min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-white font-black"
-                  style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
-                  {t.unread > 9 ? '9+' : t.unread}
-                </motion.span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+        <motion.div {...fadeIn} className="mb-6">
+          <h1 className="text-2xl font-bold mb-4">
+            {{ profile: 'Tu perfil 👤', history: 'Historial 🍺', achievements: 'Logros 🏅', notifications: 'Notificaciones 🔔', settings: 'Ajustes ⚙️' }[section]}
+          </h1>
+          <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
+            {SECTIONS.map(s => (
+              <button key={s.id}
+                onClick={() => { setSection(s.id); setError(''); setSuccessMsg('') }}
+                className="relative flex-1 py-2 rounded-lg text-sm font-medium transition-colors z-10 flex items-center justify-center gap-1"
+                style={{ color: section === s.id ? '#fff' : 'var(--text-muted)' }}>
+                {section === s.id && (
+                  <motion.div layoutId="profile-tab" className="absolute inset-0 bg-amber-500 rounded-lg"
+                    style={{ zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
+                )}
+                <span>{s.label}</span>
+                {s.badge > 0 && (
+                  <span className="min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-white font-black"
+                    style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
+                    {s.badge > 9 ? '9+' : s.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </motion.div>
 
-      {/* ── FEED ── */}
-      {tab === 'feed' && (
-        <div className="max-w-md mx-auto px-4 pt-4">
-          {Object.keys(storiesByUser).length > 0 && (
-            <div className="flex gap-3 overflow-x-auto pb-3 mb-4">
-              {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
-                <motion.button key={userStories[0].user_id} whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedStory(userStories[0])}
-                  className="flex flex-col items-center gap-1 flex-shrink-0">
-                  <div className="p-0.5 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600">
-                    <div className="p-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-base)' }}>
-                      <Avatar url={profile?.avatar_url} username={profile?.username} size="sm" />
+        <AnimatePresence>
+          {error && <motion.p {...scaleIn} className="text-red-400 text-sm bg-red-950 rounded-xl px-4 py-3 mb-4">⚠️ {error}</motion.p>}
+          {successMsg && <motion.p {...scaleIn} className="text-green-400 text-sm bg-green-950 rounded-xl px-4 py-3 mb-4">✓ {successMsg}</motion.p>}
+        </AnimatePresence>
+
+        {/* ── PERFIL ── */}
+        {section === 'profile' && (
+          <motion.div {...fadeIn} key="profile">
+            <div className="rounded-2xl p-6 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <div className="relative inline-block mb-3">
+                {profile?.avatar_url
+                  ? <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-amber-500" />
+                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
+                  className="absolute bottom-0 right-0 bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
+                  {uploadingAvatar ? '⏳' : '📷'}
+                </motion.button>
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+              </div>
+              <p className="text-xl font-bold">{profile?.username}</p>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
+
+              {/* ✅ NUEVO: Seguidores y seguidos */}
+              <div className="flex justify-center gap-6 py-3 border-t border-b mb-3"
+                style={{ borderColor: 'var(--border)' }}>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-amber-400">{followersCount}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>seguidores</p>
+                </div>
+                <div className="w-px" style={{ backgroundColor: 'var(--border)' }} />
+                <div className="text-center">
+                  <p className="text-xl font-bold text-amber-400">{followingCount}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>siguiendo</p>
+                </div>
+              </div>
+
+              {unlockedCount > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-sm">🏅</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{unlockedCount}/{totalCount} logros</span>
+                </div>
+              )}
+            </div>
+
+            {stats && (
+              <>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {[
+                    { label: 'Consumiciones', value: stats.count },
+                    // ✅ FIX: usar formatPts para evitar decimales sucios
+                    { label: 'Puntos totales', value: formatPts(stats.total) },
+                  ].map(stat => (
+                    <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate"
+                      className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                      <p className="text-3xl font-bold text-amber-400">{stat.value}</p>
+                      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{stat.label}</p>
+                    </motion.div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--text-muted)' }}>Desglose por bebida</p>
+                  {Object.entries(stats.byType).length === 0
+                    ? <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Aún no has anotado nada</p>
+                    : <div className="space-y-2">
+                        {Object.entries(stats.byType).sort(([, a], [, b]) => b.count - a.count).map(([name, { count, emoji }]) => (
+                          <div key={name} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{emoji}</span>
+                              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 rounded-full bg-amber-500 opacity-60" style={{ width: `${Math.round((count / stats.count) * 80)}px` }} />
+                              <span className="text-amber-400 font-bold text-sm">{count}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>}
+                </div>
+
+                <div className="flex gap-2">
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('history')}
+                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                    🍺 Historial →
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('achievements')}
+                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                    🏅 Logros →
+                  </motion.button>
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+
+        {/* ── HISTORIAL ── */}
+        {section === 'history' && (
+          <motion.div {...fadeIn} key="history">
+            {stats && (
+              <div className="grid grid-cols-3 gap-2 mb-5">
+                {[
+                  { label: 'Total', value: stats.count },
+                  { label: 'Puntos', value: formatPts(stats.total) },
+                  { label: 'Media pts', value: stats.count > 0 ? formatPts(stats.total / stats.count) : '0' },
+                ].map(s => (
+                  <div key={s.label} className="rounded-2xl p-3 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <p className="text-xl font-bold text-amber-400">{s.value}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {history.length === 0 && !loadingHistory ? (
+              <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-5xl mb-3">🍺</div>
+                <p>Aún no has anotado ninguna consumición</p>
+              </div>
+            ) : (
+              <>
+                {Object.entries(groupedHistory).map(([date, items]) => (
+                  <div key={date} className="mb-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+                      <span className="text-xs font-semibold px-3 py-1 rounded-full"
+                        style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>{date}</span>
+                      <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+                    </div>
+                    <div className="space-y-2">
+                      {items.map(item => (
+                        <motion.div key={item.drink_group_id} variants={staggerItem} initial="initial" animate="animate"
+                          className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)' }}>
+                            {item.drink_type?.emoji || '🍺'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm">{item.drink_type?.name || 'Bebida'}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-xs" style={{ color: 'var(--text-hint)' }}>🕐 {formatTime(item.consumed_at)}</span>
+                              {item.leagues.slice(0, 2).map(l => (
+                                <span key={l} className="text-xs px-2 py-0.5 rounded-full"
+                                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>{l}</span>
+                              ))}
+                              {item.leagues.length > 2 && <span className="text-xs" style={{ color: 'var(--text-hint)' }}>+{item.leagues.length - 2}</span>}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className={`font-bold text-sm ${item.points > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                              {item.points > 0 ? '+' : ''}{formatPts(item.points)} pts
+                            </p>
+                            <p className="text-xs" style={{ color: 'var(--text-hint)' }}>+{Math.floor(item.points * 10)}🪙</p>
+                          </div>
+                        </motion.div>
+                      ))}
                     </div>
                   </div>
-                  <span className="text-xs truncate w-14 text-center" style={{ color: 'var(--text-muted)' }}>{profile?.username}</span>
-                </motion.button>
-              ))}
-            </div>
-          )}
-          <motion.div {...fadeIn} className="rounded-2xl p-3 mb-4 flex items-center gap-3 cursor-pointer"
-            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}
-            onClick={() => setShowNewPost(true)}>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
-            <div className="flex-1 rounded-xl px-4 py-2.5 text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>¿Qué estás bebiendo?</div>
+                ))}
+                {historyHasMore && (
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => fetchHistory(historyPage + 1)} disabled={loadingHistory}
+                    className="w-full py-3 rounded-2xl text-sm font-medium mt-2"
+                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+                    {loadingHistory ? 'Cargando...' : 'Cargar más →'}
+                  </motion.button>
+                )}
+              </>
+            )}
           </motion.div>
-          {loading ? <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando feed...</p>
-            : posts.length === 0 ? (
-              <motion.div {...fadeIn} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-                <div className="text-5xl mb-3">📰</div><p>Aún no hay posts</p>
-              </motion.div>
+        )}
+
+        {/* ── LOGROS ── */}
+        {section === 'achievements' && (
+          <motion.div {...fadeIn} key="achievements">
+            <AnimatePresence>
+              {newlyUnlocked.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="rounded-2xl p-4 mb-5"
+                  style={{ backgroundColor: 'rgba(245,158,11,0.12)', border: '2px solid #f59e0b' }}>
+                  <p className="font-bold text-amber-400 text-sm mb-2">🎉 ¡Logros desbloqueados!</p>
+                  <div className="flex flex-wrap gap-2">
+                    {newlyUnlocked.map(id => {
+                      const a = ACHIEVEMENTS.find(a => a.id === id)
+                      return a ? (
+                        <motion.div key={id} initial={{ scale: 0 }} animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold"
+                          style={{ backgroundColor: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                          <span>{a.emoji}</span><span>{a.name}</span>
+                        </motion.div>
+                      ) : null
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="rounded-2xl p-4 mb-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-bold text-sm">Progreso total</p>
+                <p className="font-bold text-amber-400">{unlockedCount}/{totalCount}</p>
+              </div>
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
+                <motion.div className="h-full rounded-full bg-amber-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(unlockedCount / totalCount) * 100}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }} />
+              </div>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{totalCount - unlockedCount} logros restantes</p>
+            </div>
+
+            {loadingAchievements ? (
+              <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">🏅</motion.div>
+                <p className="text-sm">Comprobando logros...</p>
+              </div>
             ) : (
-              <div className="space-y-4">
-                {posts.map(post => {
-                  const isMe = post.user_id === user.id
-                  const liked = post.post_likes?.some(l => l.user_id === user.id)
+              Object.entries(achievementsByCategory).map(([category, items]) => (
+                <div key={category} className="mb-5">
+                  <p className="text-sm font-bold mb-3">
+                    {category === 'consumiciones' ? '🍺 Consumiciones' : category === 'casino' ? '🎰 Casino & Dinero' : '⚡ Social & Powerups'}
+                    <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-hint)' }}>
+                      {items.filter(a => unlockedIds.has(a.id)).length}/{items.length}
+                    </span>
+                  </p>
+                  <div className="space-y-2">
+                    {items.map(achievement => {
+                      const unlocked = unlockedIds.has(achievement.id)
+                      const isNew = newlyUnlocked.includes(achievement.id)
+                      return (
+                        <motion.div key={achievement.id} variants={staggerItem} initial="initial" animate="animate"
+                          className="rounded-2xl p-4 flex items-center gap-3"
+                          style={{
+                            backgroundColor: 'var(--bg-card)',
+                            border: isNew ? '2px solid #f59e0b' : unlocked ? '2px solid rgba(245,158,11,0.3)' : '2px solid transparent',
+                            opacity: unlocked ? 1 : 0.5,
+                          }}>
+                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
+                            style={{ backgroundColor: unlocked ? 'rgba(245,158,11,0.12)' : 'var(--bg-input)', filter: unlocked ? 'none' : 'grayscale(100%)' }}>
+                            {achievement.emoji}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm">{achievement.name}</p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{achievement.desc}</p>
+                          </div>
+                          <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: unlocked ? 'rgba(245,158,11,0.2)' : 'var(--bg-input)' }}>
+                            <span className="text-xs" style={{ color: unlocked ? '#f59e0b' : 'var(--text-hint)' }}>{unlocked ? '✓' : '🔒'}</span>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+
+            <motion.button whileTap={{ scale: 0.97 }} onClick={fetchAndCheckAchievements} disabled={loadingAchievements}
+              className="w-full py-3 rounded-2xl text-sm font-medium mt-2"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+              🔄 Comprobar nuevos logros
+            </motion.button>
+          </motion.div>
+        )}
+
+        {/* ── NOTIFICACIONES ── */}
+        {section === 'notifications' && (
+          <motion.div {...fadeIn} key="notifications">
+            {notifications.length === 0 ? (
+              <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-5xl mb-3">🔔</div>
+                <p>Sin notificaciones todavía</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {notifications.map(notif => {
+                  const style = getNotifStyle(notif.type)
                   return (
-                    <motion.div key={post.id} variants={staggerItem} initial="initial" animate="animate"
-                      className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
-                      <div className="flex items-center gap-3 p-4 pb-3">
-                        <motion.button whileTap={{ scale: 0.95 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
-                          <Avatar url={post.profiles?.avatar_url} username={post.profiles?.username} />
-                        </motion.button>
-                        <div className="flex-1">
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
-                            <p className="font-bold text-sm text-left">{post.profiles?.username}</p>
-                          </motion.button>
-                          <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(post.created_at)}</p>
-                        </div>
-                        {isMe && <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)} className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>}
+                    <motion.div key={notif.id} variants={staggerItem} initial="initial" animate="animate"
+                      onClick={() => !notif.read && markRead(notif.id)}
+                      className="rounded-2xl p-4 flex items-start gap-3 cursor-pointer"
+                      style={{
+                        backgroundColor: notif.read ? 'var(--bg-card)' : style.bg,
+                        border: notif.read ? '1px solid transparent' : `1px solid ${style.color}30`,
+                        opacity: notif.read ? 0.7 : 1,
+                      }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: style.bg }}>
+                        {style.icon}
                       </div>
-                      {post.content && <p className="px-4 pb-3 text-sm leading-relaxed">{post.content}</p>}
-                      {post.image_url && <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />}
-                      <div className="flex items-center gap-4 px-4 py-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                        <motion.button whileTap={{ scale: 0.8 }} onClick={() => toggleLike(post)} className="flex items-center gap-1.5 text-sm">
-                          <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} transition={{ duration: 0.3 }} className="text-xl">{liked ? '🍺' : '🤍'}</motion.span>
-                          <span style={{ color: liked ? '#f59e0b' : 'var(--text-muted)' }}>{post.post_likes?.length || 0}</span>
-                        </motion.button>
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => openCommentsPanel(post)} className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-                          <span className="text-xl">💬</span><span>{post.post_comments?.length || 0}</span>
-                        </motion.button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-bold text-sm truncate">{notif.title}</p>
+                          {!notif.read && <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: style.color }} />}
+                        </div>
+                        <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{notif.body}</p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{formatNotifTime(notif.created_at)}</p>
                       </div>
                     </motion.div>
                   )
                 })}
               </div>
             )}
-        </div>
-      )}
+          </motion.div>
+        )}
 
-      {/* ── HISTORIAS ── */}
-      {tab === 'stories' && (
-        <div className="max-w-md mx-auto px-4 pt-4">
-          <motion.button whileTap={{ scale: 0.96 }} onClick={() => storyImageRef.current?.click()} disabled={uploadingStory}
-            className="w-full border-2 border-dashed rounded-2xl py-6 flex flex-col items-center gap-2 mb-6"
-            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-            <span className="text-3xl">{uploadingStory ? '⏳' : '⭕'}</span>
-            <span className="text-sm">{uploadingStory ? 'Subiendo...' : 'Añadir historia'}</span>
-            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Desaparece en 24 horas</span>
-          </motion.button>
-          <input ref={storyImageRef} type="file" accept="image/*" onChange={submitStory} className="hidden" />
-          {Object.keys(storiesByUser).length === 0 ? (
-            <motion.div {...fadeIn} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">⭕</div><p>No hay historias activas</p>
-            </motion.div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
-                <motion.button key={userStories[0].user_id} variants={staggerItem} initial="initial" animate="animate"
-                  whileTap={{ scale: 0.95 }} onClick={() => setSelectedStory(userStories[0])}
-                  className="relative rounded-2xl overflow-hidden aspect-[3/4]" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <img src={userStories[0].image_url} alt="Historia" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                  <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                    <Avatar url={profile?.avatar_url} username={profile?.username} size="sm" />
-                    <span className="text-xs font-semibold text-white truncate">{profile?.username}</span>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── BUSCAR ── */}
-      {tab === 'people' && (
-        <div className="max-w-md mx-auto px-4 pt-4">
-          <div className="relative mb-5">
-            <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)}
-              placeholder="Buscar usuarios..."
-              className="w-full rounded-2xl px-5 py-3.5 text-sm outline-none focus:ring-2 focus:ring-amber-500 pr-10"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }} />
-            {searching
-              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="absolute right-4 top-1/2 -translate-y-1/2 text-lg">🔍</motion.div>
-              : <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--text-hint)' }}>🔍</span>}
-          </div>
-          {searchQuery ? (
-            searchResults.length === 0 && !searching ? (
-              <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
-                <div className="text-4xl mb-2">😶</div><p className="text-sm">No se encontró ningún usuario</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {searchResults.map(profile => {
-                  const isFollowingUser = following.includes(profile.id)
-                  return (
-                    <motion.div key={profile.id} variants={staggerItem} initial="initial" animate="animate"
-                      className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => setViewingProfile(profile.id)}>
-                        {profile.avatar_url
-                          ? <img src={profile.avatar_url} alt={profile.username} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                          : <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
-                      </motion.button>
-                      <motion.button className="flex-1 text-left" whileTap={{ scale: 0.98 }} onClick={() => setViewingProfile(profile.id)}>
-                        <p className="font-bold text-sm">{profile.username}</p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Ver perfil →</p>
-                      </motion.button>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => toggleFollow(profile.id)}
-                        className="px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0"
-                        style={{ backgroundColor: isFollowingUser ? 'var(--bg-input)' : '#f59e0b', color: isFollowingUser ? 'var(--text-muted)' : '#fff' }}>
-                        {isFollowingUser ? 'Siguiendo' : '+ Seguir'}
-                      </motion.button>
-                    </motion.div>
-                  )
-                })}
-              </div>
-            )
-          ) : (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">🔍</div>
-              <p className="font-medium">Busca usuarios por nombre</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a otros para poder chatear</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── CHATS ── */}
-      {tab === 'chats' && (
-        <div className="max-w-md mx-auto px-4 pt-4">
-          {loadingChats ? (
-            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">💬</motion.div>
-              <p className="text-sm">Cargando chats...</p>
-            </div>
-          ) : chats.length === 0 ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">💬</div>
-              <p className="font-medium">No tienes chats activos</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a alguien y si te sigue de vuelta podréis chatear</p>
-              <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('people')}
-                className="mt-4 px-6 py-3 rounded-2xl text-sm font-bold text-white" style={{ backgroundColor: '#f59e0b' }}>
-                🔍 Buscar usuarios
+        {/* ── AJUSTES ── */}
+        {section === 'settings' && (
+          <motion.div {...fadeIn} key="settings" className="space-y-4">
+            <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <h2 className="text-base font-bold mb-4">✏️ Cambiar nombre de usuario</h2>
+              <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)}
+                placeholder="Nuevo nombre de usuario"
+                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <motion.button whileTap={{ scale: 0.97 }} onClick={handleChangeUsername}
+                disabled={savingUsername || !newUsername.trim() || newUsername === profile?.username}
+                className="w-full bg-amber-500 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm">
+                {savingUsername ? 'Guardando...' : 'Guardar nombre'}
               </motion.button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {chats.map(chat => {
-                const unread = unreadByChat[chat.id] || 0
-                const lastMsgText = chat.lastMsg?.image_url && !chat.lastMsg?.content ? '📷 Imagen' : (chat.lastMsg?.content || 'Inicia la conversación...')
-                return (
-                  <motion.button key={chat.id} variants={staggerItem} initial="initial" animate="animate"
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => handleOpenChat(chat, chat.otherUser)}
-                    className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
-                    style={{
-                      backgroundColor: 'var(--bg-card)',
-                      border: unread > 0 ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent',
-                    }}>
-                    <div className="relative flex-shrink-0">
-                      {chat.otherUser?.avatar_url
-                        ? <img src={chat.otherUser.avatar_url} alt={chat.otherUser.username} className="w-12 h-12 rounded-full object-cover" />
-                        : <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
-                      {/* Badge de no leídos en el avatar */}
-                      {unread > 0 && (
-                        <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
-                          className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-white font-black"
-                          style={{ backgroundColor: '#ef4444', fontSize: 10 }}>
-                          {unread > 9 ? '9+' : unread}
-                        </motion.span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${unread > 0 ? 'font-bold' : 'font-medium'}`}>{chat.otherUser?.username}</p>
-                      <p className={`text-xs truncate mt-0.5 ${unread > 0 ? 'font-semibold' : ''}`}
-                        style={{ color: unread > 0 ? 'var(--text-primary)' : 'var(--text-hint)' }}>
-                        {lastMsgText}
-                      </p>
-                    </div>
-                    {chat.lastMsg && (
-                      <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
-                        {formatTime(chat.lastMsg.created_at)}
-                      </p>
-                    )}
+
+            <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <h2 className="text-base font-bold mb-4">🔒 Cambiar contraseña</h2>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                placeholder="Nueva contraseña"
+                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repetir contraseña"
+                className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 text-sm mb-3"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <motion.button whileTap={{ scale: 0.97 }} onClick={handleChangePassword}
+                disabled={savingPassword || !newPassword || !confirmPassword}
+                className="w-full bg-amber-500 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm">
+                {savingPassword ? 'Guardando...' : 'Cambiar contraseña'}
+              </motion.button>
+            </div>
+
+            <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <h2 className="text-base font-bold mb-4">🎨 Apariencia</h2>
+              <div className="grid grid-cols-3 gap-2">
+                {[{ id: 'dark', label: 'Oscuro', emoji: '🌙' }, { id: 'light', label: 'Claro', emoji: '☀️' }, { id: 'system', label: 'Sistema', emoji: '⚙️' }].map(t => (
+                  <motion.button key={t.id} whileTap={{ scale: 0.95 }} onClick={() => setTheme(t.id)}
+                    className="flex flex-col items-center gap-2 py-4 rounded-2xl text-sm font-medium border-2"
+                    style={{ borderColor: theme === t.id ? '#f59e0b' : 'var(--border)', backgroundColor: theme === t.id ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)', color: theme === t.id ? '#f59e0b' : 'var(--text-muted)' }}>
+                    <span className="text-2xl">{t.emoji}</span>
+                    <span>{t.label}</span>
+                    {theme === t.id && <motion.div layoutId="theme-check" className="w-2 h-2 rounded-full bg-amber-400" />}
                   </motion.button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* FAB */}
-      {tab === 'feed' && (
-        <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}
-          onClick={() => setShowNewPost(true)}
-          className="fixed bottom-24 right-5 w-14 h-14 bg-amber-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-40">
-          ✏️
-        </motion.button>
-      )}
-
-      {/* Modal nuevo post */}
-      <AnimatePresence>
-        {showNewPost && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col justify-end"
-            style={{ backgroundColor: 'rgba(0,0,0,0.75)' }} onClick={closeNewPost}>
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-              onClick={e => e.stopPropagation()}
-              className="flex flex-col rounded-t-3xl w-full max-w-lg mx-auto"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh' }}>
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0 border-b" style={{ borderColor: 'var(--border)' }}>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={closeNewPost} className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cancelar</motion.button>
-                <h2 className="text-base font-bold">Nuevo post</h2>
-                <motion.button whileTap={{ scale: 0.95 }} onClick={submitPost} disabled={!canPublish}
-                  className="px-4 py-2 rounded-full text-sm font-bold"
-                  style={{ backgroundColor: canPublish ? '#f59e0b' : 'var(--bg-input)', color: canPublish ? '#fff' : 'var(--text-hint)' }}>
-                  {uploadingPost ? '...' : 'Publicar'}
-                </motion.button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-5 pt-4">
-                <div className="flex gap-3 mb-4">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg mt-1" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
-                  <textarea ref={textareaRef} value={newPostContent} onChange={e => setNewPostContent(e.target.value)}
-                    placeholder="¿Qué estás bebiendo? 🍺" rows={5}
-                    className="flex-1 outline-none resize-none text-sm bg-transparent leading-relaxed"
-                    style={{ color: 'var(--text-primary)' }} />
-                </div>
-                {newPostPreview && (
-                  <div className="relative mb-4 ml-12">
-                    <img src={newPostPreview} alt="Preview" className="w-full rounded-2xl max-h-52 object-cover" />
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
-                      className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm">✕</motion.button>
-                  </div>
-                )}
-              </div>
-              <div className="flex-shrink-0 border-t px-5 py-3 flex items-center gap-3" style={{ borderColor: 'var(--border)' }}>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => postImageRef.current?.click()} style={{ color: '#f59e0b' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                    <path fillRule="evenodd" d="M1.5 6a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 6v12a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 18V6zM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0021 18v-1.94l-2.69-2.689a1.5 1.5 0 00-2.12 0l-.88.879.97.97a.75.75 0 11-1.06 1.06l-5.16-5.159a1.5 1.5 0 00-2.12 0L3 16.061zm10.125-7.81a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0z" clipRule="evenodd" />
-                  </svg>
-                </motion.button>
-                <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
-                <p className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>{newPostContent.length > 0 && `${newPostContent.length} caracteres`}</p>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Visor historia */}
-      <AnimatePresence>
-        {selectedStory && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black z-50 flex items-center justify-center" onClick={() => setSelectedStory(null)}>
-            <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }} src={selectedStory.image_url} alt="Historia" className="w-full h-full object-contain" />
-            <div className="absolute top-6 left-4 flex items-center gap-2">
-              <Avatar url={selectedStory.profiles?.avatar_url} username={selectedStory.profiles?.username} />
-              <div>
-                <p className="text-white font-bold text-sm">{selectedStory.profiles?.username}</p>
-                <p className="text-gray-300 text-xs">{formatTime(selectedStory.created_at)}</p>
+                ))}
               </div>
             </div>
-            <button onClick={() => setSelectedStory(null)} className="absolute top-6 right-4 text-white text-2xl">✕</button>
+
+            <div className="rounded-2xl p-5 border border-red-900" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <h2 className="text-base font-bold text-red-400 mb-1">⚠️ Zona peligrosa</h2>
+              <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>Esta acción es irreversible.</p>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowDeleteConfirm(true)}
+                className="w-full bg-transparent text-red-500 font-semibold py-3 rounded-xl border border-red-900 text-sm">
+                Eliminar cuenta 🗑️
+              </motion.button>
+            </div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </div>
 
-      {/* Panel comentarios */}
       <AnimatePresence>
-        {openComments && (
+        {showDeleteConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
-            onClick={closeCommentsPanel}>
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowDeleteConfirm(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onClick={e => e.stopPropagation()}
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', height: '80vh' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-                <p style={{ fontWeight: 'bold', fontSize: 16 }}>Comentarios {comments.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 'normal', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 999 }}>{comments.length}</span>}</p>
-                <button onClick={closeCommentsPanel} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✕</button>
+              className="rounded-2xl p-6 w-full max-w-sm"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-2">🗑️</div>
+                <h2 className="text-xl font-bold">¿Eliminar cuenta?</h2>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se borrarán todos tus datos de forma permanente.</p>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px' }}>
-                {comments.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                    <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
-                    <p style={{ fontSize: 14 }}>Sin comentarios todavía</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {comments.map(comment => {
-                      const isMe = comment.user_id === user.id
-                      return (
-                        <motion.div key={comment.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', gap: 10 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, backgroundColor: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                            {comment.profiles?.avatar_url ? <img src={comment.profiles.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontSize: 18 }}>🍺</span>}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ borderRadius: '4px 16px 16px 16px', padding: '10px 14px', backgroundColor: isMe ? 'rgba(245,158,11,0.15)' : 'var(--bg-input)' }}>
-                              <p style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 4, color: isMe ? '#f59e0b' : 'var(--text-primary)' }}>{comment.profiles?.username} {isMe && '(tú)'}</p>
-                              <p style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5 }}>{comment.content}</p>
-                            </div>
-                            <p style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 4, marginLeft: 4 }}>{formatTime(comment.created_at)}</p>
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                    <div ref={commentsBottomRef} />
-                  </div>
-                )}
-              </div>
-              <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)', padding: '12px 16px 80px 16px', display: 'flex', gap: 10, alignItems: 'flex-end', backgroundColor: 'var(--bg-card)' }}>
-                <textarea value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={handleCommentKeyDown}
-                  placeholder="Escribe un comentario..." rows={1}
-                  style={{ flex: 1, borderRadius: 20, padding: '10px 16px', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', border: 'none', outline: 'none', resize: 'none', fontSize: 14, maxHeight: 80, fontFamily: 'inherit', lineHeight: 1.5 }} />
-                <motion.button whileTap={{ scale: 0.9 }} onClick={submitComment} disabled={!commentText.trim() || sendingComment}
-                  style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: 'none', cursor: 'pointer', backgroundColor: commentText.trim() && !sendingComment ? '#f59e0b' : 'var(--bg-input)', color: commentText.trim() && !sendingComment ? '#fff' : 'var(--text-hint)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: !commentText.trim() || sendingComment ? 0.5 : 1 }}>
-                  {sendingComment
-                    ? <motion.div style={{ width: 18, height: 18, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%' }} animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
-                    : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>}
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowDeleteConfirm(false)} disabled={deleting}
+                  className="flex-1 font-semibold py-3 rounded-xl"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleDeleteAccount} disabled={deleting}
+                  className="flex-1 bg-red-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl">
+                  {deleting ? 'Eliminando...' : 'Eliminar'}
                 </motion.button>
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Perfil de usuario */}
-      <AnimatePresence>
-        {viewingProfile && (
-          <UserProfile profileId={viewingProfile} onClose={() => setViewingProfile(null)}
-            onOpenChat={(chat, otherUser) => { setViewingProfile(null); handleOpenChat(chat, otherUser) }} />
-        )}
-      </AnimatePresence>
-
-      {/* Chat privado */}
-      <AnimatePresence>
-        {activeChat && (
-          <PrivateChat chat={activeChat.chat} otherUser={activeChat.otherUser}
-            onClose={() => { setActiveChat(null); fetchChats(); fetchUnreadCounts() }} />
         )}
       </AnimatePresence>
     </div>
