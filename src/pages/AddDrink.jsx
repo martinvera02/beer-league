@@ -38,6 +38,40 @@ export default function AddDrink() {
 
   const isMartes = isMartesEnMadrid()
 
+  // ── CUENTA ATRÁS ──────────────────────────────────────────────────────────
+  const [countdown, setCountdown] = useState('')
+
+  useEffect(() => {
+    if (!isMartes) return
+    const tick = () => {
+      const now = new Date()
+      const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+      const dow = madrid.getDay()
+      const h = madrid.getHours()
+      const m = madrid.getMinutes()
+      const s = madrid.getSeconds()
+
+      let secsLeft
+      if (dow === 2) {
+        // Martes: hasta medianoche + 4h del miércoles
+        secsLeft = (24 - h) * 3600 - m * 60 - s + 4 * 3600
+      } else {
+        // Miércoles antes de las 04:00h
+        secsLeft = (4 - h - 1) * 3600 + (60 - m - 1) * 60 + (60 - s)
+      }
+
+      const hh = Math.floor(secsLeft / 3600)
+      const mm = Math.floor((secsLeft % 3600) / 60)
+      const ss = secsLeft % 60
+      setCountdown(
+        `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+      )
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [isMartes])
+
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
@@ -192,8 +226,18 @@ export default function AddDrink() {
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">x2</span>
                   </div>
                   <p className="text-white/80 text-xs">
-                    ¡Doble de puntos y monedas todo el día! 🍺🍺
+                    ¡Doble de puntos y monedas! 🍺🍺
                   </p>
+                  {/* ── CUENTA ATRÁS ── */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-white/60 text-xs">Acaba en</span>
+                    <motion.span
+                      key={countdown}
+                      className="font-black text-white text-sm tracking-widest"
+                      style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {countdown}
+                    </motion.span>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -281,7 +325,6 @@ export default function AddDrink() {
             const isSelected = selectedDrink === drink.id
             const trend = getMarketTrend(drink.id)
 
-            // Puntos base sin martes (para mostrar el original tachado)
             const price = drinkMarket[drink.id] || 100
             const mktMult = Math.max(0.5, Math.min(2.0, price / 100))
             const baseEffective = Math.round(basePoints * mktMult * 10) / 10
@@ -296,7 +339,6 @@ export default function AddDrink() {
                   ? { background: isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b', color: '#fff' }
                   : { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
 
-                {/* Badge Martes */}
                 {isMartes && (
                   <div className="absolute top-1.5 left-1.5 text-xs font-black px-1.5 py-0.5 rounded-full bg-white/20 text-white">
                     x2
@@ -353,9 +395,7 @@ export default function AddDrink() {
           whileHover={selectedDrink && !isFreezeActive ? { scale: 1.02 } : {}}
           className="w-full disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl text-lg transition-all"
           style={{
-            background: isMartes
-              ? 'linear-gradient(135deg, #7c3aed, #dc2626)'
-              : '#f59e0b',
+            background: isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b',
             boxShadow: isMartes ? '0 0 20px rgba(124,58,237,0.4)' : undefined,
           }}>
           {loading ? 'Guardando...' :
