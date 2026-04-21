@@ -16,7 +16,9 @@ const generateUUID = () => {
 const isMartesEnMadrid = () => {
   const now = new Date()
   const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-  return madrid.getDay() === 2 // 0=dom, 1=lun, 2=mar...
+  const dow = madrid.getDay()
+  const hour = madrid.getHours()
+  return dow === 2 || (dow === 3 && hour < 4)
 }
 
 export default function AddDrink() {
