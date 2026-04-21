@@ -5,6 +5,93 @@ import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerItem } from '../lib/animations'
 import { soundSuccess, soundError } from '../lib/sounds'
 
+// ─── TICKER ANIMADO (bolsa en movimiento horizontal) ─────────────────────────
+function TickerChart({ history, width = 120, height = 40, animated = true }) {
+  const canvasPoints = 80 // cuántos puntos mostrar en el ticker
+  const animOffsetRef = useRef(0)
+  const animFrameRef = useRef(null)
+  const [offset, setOffset] = useState(0)
+
+  useEffect(() => {
+    if (!animated) return
+    let last = 0
+    const tick = (ts) => {
+      if (ts - last > 30) { // ~30fps
+        setOffset(prev => prev + 0.4)
+        last = ts
+      }
+      animFrameRef.current = requestAnimationFrame(tick)
+    }
+    animFrameRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(animFrameRef.current)
+  }, [animated])
+
+  if (!history || history.length < 2) {
+    // Si no hay historial, generar línea plana con ruido pequeño
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'hidden' }}>
+        <line x1="0" y1={height / 2} x2={width} y2={height / 2}
+          stroke="#9ca3af" strokeWidth="1.5" strokeDasharray="3 2" />
+      </svg>
+    )
+  }
+
+  const prices = history.map(h => h.price)
+  const isUp = prices[prices.length - 1] >= prices[0]
+  const lineColor = isUp ? '#10b981' : '#ef4444'
+
+  // Extender historial con puntos interpolados para el efecto continuo
+  const allPrices = [...prices]
+  // Rellenar hasta canvasPoints
+  while (allPrices.length < canvasPoints) {
+    const last = allPrices[allPrices.length - 1]
+    const noise = (Math.random() - 0.5) * 3
+    allPrices.push(Math.max(50, Math.min(200, last + noise)))
+  }
+
+  const min = Math.min(...allPrices)
+  const max = Math.max(...allPrices)
+  const range = max - min || 1
+  const pad = 3
+
+  // Ventana deslizante: mostramos width/segW puntos a la vez
+  const segW = 4
+  const visibleCount = Math.floor(width / segW) + 2
+  const totalPoints = allPrices.length
+  const startIdx = Math.floor(offset % totalPoints)
+
+  // Construir puntos de la ventana visible con wrap-around
+  const visiblePrices = []
+  for (let i = 0; i < visibleCount; i++) {
+    visiblePrices.push(allPrices[(startIdx + i) % totalPoints])
+  }
+
+  const toY = (p) => pad + (height - pad * 2) - ((p - min) / range) * (height - pad * 2)
+  const pts = visiblePrices.map((p, i) => `${i * segW - (offset % segW)},${toY(p)}`).join(' ')
+  const areaPts = `${-segW},${height} ${pts} ${visibleCount * segW},${height}`
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
+      style={{ overflow: 'hidden', display: 'block' }}>
+      <defs>
+        <linearGradient id={`tg-${isUp ? 'up' : 'dn'}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+        <clipPath id={`clip-${width}`}>
+          <rect x="0" y="0" width={width} height={height} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#clip-${width})`}>
+        <polygon points={areaPts} fill={`url(#tg-${isUp ? 'up' : 'dn'})`} />
+        <polyline points={pts} fill="none" stroke={lineColor}
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  )
+}
+
+// ─── SPARK PEQUEÑO ESTÁTICO (para usar donde no queremos animación) ────────────
 function SparkChart({ history, width = 60, height = 28 }) {
   if (!history || history.length < 2) return null
   const prices = history.map(h => h.price)
@@ -25,6 +112,7 @@ function SparkChart({ history, width = 60, height = 28 }) {
   )
 }
 
+// ─── GRÁFICA DETALLE CON TOOLTIP ──────────────────────────────────────────────
 function DetailChart({ history, width = 320, height = 150 }) {
   const svgRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
@@ -137,6 +225,7 @@ function DetailChart({ history, width = 320, height = 150 }) {
   )
 }
 
+// ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function Market() {
   const { user } = useAuth()
   const [tab, setTab] = useState('market')
@@ -151,10 +240,6 @@ export default function Market() {
   const [loading, setLoading] = useState(true)
   const [opsToday, setOpsToday] = useState(0)
   const [lastPowerupTime, setLastPowerupTime] = useState(null)
-
-  const [stockCompanies, setStockCompanies] = useState([])
-  const [myStockPositions, setMyStockPositions] = useState([])
-  const [myDividends, setMyDividends] = useState([])
 
   const [selectedDrink, setSelectedDrink] = useState(null)
   const [drinkHistory, setDrinkHistory] = useState([])
@@ -185,7 +270,6 @@ export default function Market() {
   useEffect(() => { fetchAll() }, [])
   useEffect(() => { if (selectedLeague) fetchLeagueMembers(selectedLeague.id) }, [selectedLeague])
 
-  // ✅ CORREGIDO: horario 22:00-02:00h
   const isMarketOpen = () => {
     const now = new Date()
     const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
@@ -215,9 +299,6 @@ export default function Market() {
       { data: loanData },
       { data: loanHistoryData },
       { data: lastPowerupData },
-      { data: stockData },
-      { data: stockPosData },
-      { data: dividendsData },
     ] = await Promise.all([
       supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
       supabase.from('drink_market').select('*, drink_types(name, emoji, points)').order('drink_type_id'),
@@ -236,14 +317,6 @@ export default function Market() {
         .in('status', ['repaid', 'defaulted']).order('created_at', { ascending: false }).limit(5),
       supabase.from('active_powerups').select('created_at')
         .eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('stock_companies').select('*').eq('active', true).order('id'),
-      supabase.from('stock_positions')
-        .select('*, stock_companies(name, emoji, share_price, dividend_rate, base_price)')
-        .eq('user_id', user.id),
-      supabase.from('stock_dividends')
-        .select('*, stock_companies(name, emoji)')
-        .eq('user_id', user.id)
-        .order('paid_at', { ascending: false }).limit(5),
     ])
 
     setBalance(walletData?.balance || 0)
@@ -254,9 +327,6 @@ export default function Market() {
     setActiveLoan(loanData || null)
     setLoanHistory(loanHistoryData || [])
     setLastPowerupTime(lastPowerupData?.created_at || null)
-    setStockCompanies(stockData || [])
-    setMyStockPositions(stockPosData || [])
-    setMyDividends(dividendsData || [])
 
     const madridMidnight = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
     madridMidnight.setHours(0, 0, 0, 0)
@@ -312,23 +382,16 @@ export default function Market() {
 
   const executeTrade = async () => {
     if (!selectedDrink || tradeAmount < 10 || tradeAmount > balance) return
-    setTrading(true)
-    setTradeError('')
+    setTrading(true); setTradeError('')
     const { data } = await supabase.rpc('open_market_position', {
       p_drink_type_id: selectedDrink.drink_type_id,
       p_direction: tradeDirection,
       p_amount: tradeAmount,
     })
     if (data?.success) {
-      soundSuccess()
-      setBalance(prev => prev - tradeAmount)
-      setOpsToday(prev => prev + 1)
-      setSelectedDrink(null)
-      fetchAll()
-    } else {
-      soundError()
-      setTradeError(data?.error || 'Error al operar')
-    }
+      soundSuccess(); setBalance(prev => prev - tradeAmount)
+      setOpsToday(prev => prev + 1); setSelectedDrink(null); fetchAll()
+    } else { soundError(); setTradeError(data?.error || 'Error al operar') }
     setTrading(false)
   }
 
@@ -337,8 +400,7 @@ export default function Market() {
     const { data } = await supabase.rpc('close_market_position', { p_position_id: positionId })
     if (data?.success) {
       soundSuccess(); setCloseResult(data)
-      setTimeout(() => setCloseResult(null), 3000)
-      fetchAll()
+      setTimeout(() => setCloseResult(null), 3000); fetchAll()
     } else { soundError() }
     setClosingPosition(null)
   }
@@ -373,8 +435,7 @@ export default function Market() {
     const { data } = await supabase.rpc('request_bank_loan', { p_amount: loanAmount, p_days: loanDays })
     if (data?.success) { soundSuccess(); setLoanResult(data); fetchAll() }
     else { soundError(); setLoanResult(data) }
-    setTimeout(() => setLoanResult(null), 4000)
-    setRequesting(false)
+    setTimeout(() => setLoanResult(null), 4000); setRequesting(false)
   }
 
   const executeRepayLoan = async () => {
@@ -385,8 +446,7 @@ export default function Market() {
       soundSuccess(); setLoanResult({ ...data, repaid: true })
       setActiveLoan(null); setLoanDebt(null); fetchAll()
     } else { soundError(); setLoanResult(data) }
-    setTimeout(() => setLoanResult(null), 4000)
-    setRepaying(false)
+    setTimeout(() => setLoanResult(null), 4000); setRepaying(false)
   }
 
   const getInterestRate = (d) => d === 1 ? 5 : d === 3 ? 8 : 12
@@ -398,14 +458,11 @@ export default function Market() {
     if (!ts) return 'Permanente'
     const diff = new Date(ts) - Date.now()
     if (diff <= 0) return 'Expirado'
-    const h = Math.floor(diff / 3600000)
-    const m = Math.floor((diff % 3600000) / 60000)
+    const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000)
     return h > 0 ? `${h}h ${m}m` : `${m}m`
   }
 
-  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', {
-    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-  })
+  const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
   const getDueStatus = (dueDate) => {
     const diff = new Date(dueDate) - Date.now()
@@ -420,13 +477,6 @@ export default function Market() {
   const needsTurboDrink = selectedPowerup?.effect_type === 'turbo'
   const needsResetDrink = selectedPowerup?.effect_type === 'market_reset'
 
-  const totalStockValue = myStockPositions.reduce((sum, p) => {
-    const company = stockCompanies.find(c => c.id === p.company_id)
-    return sum + (company ? company.share_price * p.shares : 0)
-  }, 0)
-  const totalStockInvested = myStockPositions.reduce((sum, p) => sum + p.total_invested, 0)
-  const totalStockPnl = totalStockValue - totalStockInvested
-
   const totalDrinkValue = myPositions.reduce((sum, pos) => {
     const currentMarket = drinkMarket.find(d => d.drink_type_id === pos.drink_type_id)
     const currentPrice = currentMarket?.price || pos.entry_price
@@ -437,21 +487,11 @@ export default function Market() {
   }, 0)
   const totalDrinkInvested = myPositions.reduce((sum, p) => sum + p.amount, 0)
   const totalDrinkPnl = totalDrinkValue - totalDrinkInvested
-  const totalPortfolio = totalStockValue + totalDrinkValue
-  const totalInvested = totalStockInvested + totalDrinkInvested
-  const totalPnl = totalStockPnl + totalDrinkPnl
-
-  const estimatedDailyDividend = myStockPositions.reduce((sum, pos) => {
-    const company = stockCompanies.find(c => c.id === pos.company_id)
-    if (!company) return sum
-    return sum + Math.floor(pos.shares * company.share_price * company.dividend_rate)
-  }, 0)
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
       <div className="text-center">
-        <motion.div className="text-5xl mb-3" animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>🪙</motion.div>
+        <motion.div className="text-5xl mb-3" animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>🪙</motion.div>
         <p style={{ color: 'var(--text-muted)' }}>Cargando mercado...</p>
       </div>
     </div>
@@ -471,7 +511,6 @@ export default function Market() {
                 animate={marketOpen ? { opacity: [1, 0.3, 1] } : {}}
                 transition={{ repeat: Infinity, duration: 1.5 }}
                 style={{ backgroundColor: marketOpen ? '#10b981' : '#ef4444' }} />
-              {/* ✅ CORREGIDO: 22:00h */}
               <p className="text-xs" style={{ color: marketOpen ? '#10b981' : '#ef4444' }}>
                 {marketOpen ? 'Abierto · cierra a las 02:00h 🌙' : 'Cerrado · abre a las 22:00h'}
               </p>
@@ -479,17 +518,11 @@ export default function Market() {
           </div>
           <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 0.3 }} key={balance}
             className="flex items-center gap-2 px-4 py-2 rounded-2xl"
-            style={{
-              backgroundColor: inDebt ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
-              border: `1px solid ${inDebt ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.3)'}`,
-            }}>
+            style={{ backgroundColor: inDebt ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)', border: `1px solid ${inDebt ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.3)'}` }}>
             <span className="text-lg">🪙</span>
-            <span className="font-bold text-lg" style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>
-              {balance.toLocaleString()}
-            </span>
+            <span className="font-bold text-lg" style={{ color: inDebt ? '#ef4444' : '#f59e0b' }}>{balance.toLocaleString()}</span>
           </motion.div>
         </div>
-
         <div className="flex rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[
             { id: 'market',    label: '📈 Cotización' },
@@ -528,9 +561,7 @@ export default function Market() {
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Máximo</p>
             </div>
             <div className="text-center flex-1">
-              <p className={`text-xs font-bold ${opsRemaining > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                {opsRemaining}/3
-              </p>
+              <p className={`text-xs font-bold ${opsRemaining > 0 ? 'text-amber-400' : 'text-red-400'}`}>{opsRemaining}/3</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Ops hoy</p>
             </div>
           </div>
@@ -546,10 +577,13 @@ export default function Market() {
                 ? (((drink.price - drink.history[0].price) / drink.history[0].price) * 100).toFixed(1) : '0.0'
               const barPct = ((multiplier - 0.5) / 1.5) * 100
               const barColor = multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : '#9ca3af'
+
               return (
                 <motion.button key={drink.id} variants={staggerItem} initial="initial" animate="animate"
                   whileTap={{ scale: 0.98 }} onClick={() => openDrinkDetail(drink)}
                   className="w-full rounded-2xl p-4 text-left" style={{ backgroundColor: 'var(--bg-card)' }}>
+
+                  {/* Fila superior: emoji + nombre + ticker animado + % */}
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
                       style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -559,28 +593,32 @@ export default function Market() {
                       <p className="font-bold text-sm">{drink.drink_types?.name}</p>
                       <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Vol: {drink.volume?.toLocaleString()}🪙</p>
                     </div>
-                    <SparkChart history={drink.history} width={60} height={28} />
-                    <div className="text-right flex-shrink-0">
+                    {/* Ticker animado tipo bolsa */}
+                    <div className="flex-shrink-0 rounded-xl overflow-hidden"
+                      style={{ backgroundColor: isUp ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${isUp ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+                      <TickerChart history={drink.history} width={100} height={38} animated={true} />
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-1">
                       <p className={`text-xs font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isUp ? '▲' : '▼'} {Math.abs(pct)}%
                       </p>
-                    </div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>x0.5</span>
-                      <span className="text-sm font-bold"
+                      <p className="text-xs font-bold mt-0.5"
                         style={{ color: multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : 'var(--text-primary)' }}>
                         x{multiplier.toFixed(2)}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>x2.0</span>
-                    </div>
-                    <div className="w-full rounded-full h-2" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <motion.div initial={{ width: 0 }} animate={{ width: `${barPct}%` }}
-                        transition={{ duration: 0.5, ease: 'easeOut' }}
-                        className="h-2 rounded-full" style={{ backgroundColor: barColor }} />
+                      </p>
                     </div>
                   </div>
+
+                  {/* Barra de multiplicador */}
+                  <div className="mb-3">
+                    <div className="w-full rounded-full h-1.5" style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${barPct}%` }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                        className="h-1.5 rounded-full" style={{ backgroundColor: barColor }} />
+                    </div>
+                  </div>
+
+                  {/* Fila inferior: pts base → pts ahora + monedas */}
                   <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
                     <div className="flex items-center gap-3">
                       <div>
@@ -589,7 +627,7 @@ export default function Market() {
                       </div>
                       <span style={{ color: 'var(--text-hint)' }}>→</span>
                       <div>
-                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Pts ahora</p>
+                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Ahora</p>
                         <p className="text-sm font-bold"
                           style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : 'var(--text-primary)' }}>
                           {effectivePoints}pts
@@ -597,7 +635,7 @@ export default function Market() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Monedas ahora</p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Monedas</p>
                       <p className="text-sm font-bold"
                         style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>
                         +{effectiveCoins}🪙
@@ -685,124 +723,40 @@ export default function Market() {
         </div>
       )}
 
-      {/* ── CARTERA UNIFICADA ── */}
+      {/* ── CARTERA (solo bebidas, sin stocks) ── */}
       {tab === 'portfolio' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
           <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
             style={{
               background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(99,102,241,0.15))',
-              border: `1px solid ${totalPnl >= 0 ? 'rgba(124,58,237,0.4)' : 'rgba(239,68,68,0.3)'}`,
+              border: `1px solid ${totalDrinkPnl >= 0 ? 'rgba(124,58,237,0.4)' : 'rgba(239,68,68,0.3)'}`,
             }}>
-            <p className="text-xs font-bold text-purple-400 mb-3">💼 Cartera total</p>
-            <div className="grid grid-cols-3 gap-3 mb-3">
+            <p className="text-xs font-bold text-purple-400 mb-3">💼 Cartera de bebidas</p>
+            <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
                 <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Valor total</p>
-                <p className="font-bold text-sm text-purple-400">{totalPortfolio.toLocaleString()}🪙</p>
+                <p className="font-bold text-sm text-purple-400">{totalDrinkValue.toLocaleString()}🪙</p>
               </div>
               <div className="text-center border-x" style={{ borderColor: 'rgba(124,58,237,0.3)' }}>
                 <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>Invertido</p>
-                <p className="font-bold text-sm">{totalInvested.toLocaleString()}🪙</p>
+                <p className="font-bold text-sm">{totalDrinkInvested.toLocaleString()}🪙</p>
               </div>
               <div className="text-center">
-                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>P&L total</p>
-                <p className={`font-bold text-sm ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {totalPnl >= 0 ? '+' : ''}{totalPnl.toLocaleString()}🪙
+                <p className="text-xs mb-1" style={{ color: 'var(--text-hint)' }}>P&L</p>
+                <p className={`font-bold text-sm ${totalDrinkPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {totalDrinkPnl >= 0 ? '+' : ''}{totalDrinkPnl.toLocaleString()}🪙
                 </p>
               </div>
             </div>
-            {estimatedDailyDividend > 0 && (
-              <div className="pt-3 border-t flex items-center justify-between" style={{ borderColor: 'rgba(124,58,237,0.3)' }}>
-                <p className="text-xs" style={{ color: 'var(--text-hint)' }}>💰 Dividendo diario estimado</p>
-                <p className="text-sm font-bold text-amber-400">~{estimatedDailyDividend}🪙</p>
-              </div>
-            )}
             {inDebt && (
-              <div className="pt-2 border-t mt-2" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+              <div className="pt-2 border-t mt-3" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
                 <p className="text-xs text-red-400 text-center">🔴 Saldo en números rojos · {balance}🪙</p>
               </div>
             )}
           </motion.div>
 
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold">📊 S&PINTA 500</p>
-            {myStockPositions.length > 0 && (
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${totalStockPnl >= 0 ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
-                {totalStockPnl >= 0 ? '+' : ''}{totalStockPnl.toLocaleString()}🪙
-              </span>
-            )}
-          </div>
-
-          {myStockPositions.length === 0 ? (
-            <div className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <div className="text-3xl mb-2">📊</div>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin acciones todavía</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Ve al S&PINTA 500 para invertir</p>
-            </div>
-          ) : (
-            <div className="space-y-3 mb-6">
-              {myStockPositions.map(pos => {
-                const company = stockCompanies.find(c => c.id === pos.company_id)
-                if (!company) return null
-                const currentValue = company.share_price * pos.shares
-                const pnl = currentValue - pos.total_invested
-                const pnlPct = ((pnl / pos.total_invested) * 100).toFixed(1)
-                const dailyDiv = Math.floor(pos.shares * company.share_price * company.dividend_rate)
-                const myPct = ((pos.shares / company.total_shares) * 100).toFixed(1)
-                return (
-                  <motion.div key={pos.id} variants={staggerItem} initial="initial" animate="animate"
-                    className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ backgroundColor: 'var(--bg-input)' }}>{company.emoji}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-sm">{company.name}</p>
-                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-900 text-indigo-400">{myPct}%</span>
-                        </div>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                          {pos.shares} acc · precio medio {pos.avg_buy_price.toLocaleString()}🪙
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="font-bold text-sm">{currentValue.toLocaleString()}🪙</p>
-                        <p className={`text-xs font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {pnl >= 0 ? '+' : ''}{pnl.toLocaleString()}🪙 ({pnlPct}%)
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>💰 Dividendo diario estimado</span>
-                      <span className="text-xs font-bold text-amber-400">~{dailyDiv}🪙</span>
-                    </div>
-                  </motion.div>
-                )
-              })}
-            </div>
-          )}
-
-          {myDividends.length > 0 && (
-            <div className="mb-6">
-              <p className="text-sm font-bold mb-3">💰 Últimos dividendos</p>
-              <div className="space-y-2">
-                {myDividends.map(d => (
-                  <div key={d.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    <span className="text-xl">{d.stock_companies?.emoji}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{d.stock_companies?.name}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatDate(d.paid_at)} · {d.shares} acc</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-emerald-400">+{d.amount}🪙</p>
-                      {d.bonus_amount > 0 && <p className="text-xs text-amber-400">+{d.bonus_amount}🪙 bonus</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold">🍺 Posiciones en bebidas</p>
+            <p className="text-sm font-bold">🍺 Posiciones abiertas</p>
             {myPositions.length > 0 && (
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${totalDrinkPnl >= 0 ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
                 {totalDrinkPnl >= 0 ? '+' : ''}{totalDrinkPnl.toLocaleString()}🪙
@@ -823,7 +777,7 @@ export default function Market() {
           </AnimatePresence>
 
           {myPositions.length === 0 ? (
-            <div className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <div className="rounded-2xl p-6 text-center mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
               <div className="text-3xl mb-2">📈</div>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin posiciones abiertas</p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Ve a Cotización para invertir</p>
@@ -909,19 +863,17 @@ export default function Market() {
             <h2 className="text-lg font-bold">Banco de la Espuma</h2>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Pide monedas adelantadas · cuanto antes pagues, menos interés</p>
           </motion.div>
-
           <AnimatePresence>
             {loanResult && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="rounded-2xl p-4 mb-4 text-center"
                 style={{ backgroundColor: loanResult.success || loanResult.repaid ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${loanResult.success || loanResult.repaid ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                {loanResult.success && !loanResult.repaid && (<><p className="font-bold text-emerald-400 text-lg">🎉 +{loanResult.amount}🪙 recibidas</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Devuelve {loanResult.repay_amount}🪙 · Interés: {loanResult.interest_rate}%</p></>)}
-                {loanResult.repaid && (<><p className="font-bold text-emerald-400 text-lg">✅ Préstamo saldado</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Has pagado {loanResult.paid}🪙{loanResult.days_late > 0 ? ` (${loanResult.days_late}d de retraso)` : ' a tiempo 👏'}</p></>)}
-                {!loanResult.success && !loanResult.repaid && (<p className="font-bold text-red-400">⚠️ {loanResult.error}</p>)}
+                {loanResult.success && !loanResult.repaid && <><p className="font-bold text-emerald-400 text-lg">🎉 +{loanResult.amount}🪙 recibidas</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Devuelve {loanResult.repay_amount}🪙 · Interés: {loanResult.interest_rate}%</p></>}
+                {loanResult.repaid && <><p className="font-bold text-emerald-400 text-lg">✅ Préstamo saldado</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Has pagado {loanResult.paid}🪙{loanResult.days_late > 0 ? ` (${loanResult.days_late}d de retraso)` : ' a tiempo 👏'}</p></>}
+                {!loanResult.success && !loanResult.repaid && <p className="font-bold text-red-400">⚠️ {loanResult.error}</p>}
               </motion.div>
             )}
           </AnimatePresence>
-
           {activeLoan && loanDebt && (
             <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
               style={{ backgroundColor: 'var(--bg-card)', border: `2px solid ${loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : 'rgba(99,102,241,0.4)'}` }}>
@@ -929,11 +881,11 @@ export default function Market() {
                 <p className="font-bold">{loanDebt.is_defaulted ? '🔴 En números rojos' : 'Préstamo activo'}</p>
                 {(() => { const s = getDueStatus(activeLoan.due_date); return (<motion.span animate={s.urgent ? { opacity: [1, 0.5, 1] } : {}} transition={{ repeat: Infinity, duration: 1.5 }} className="text-xs font-bold px-2 py-1 rounded-full" style={{ backgroundColor: `${s.color}20`, color: s.color }}>⏰ {s.label}</motion.span>) })()}
               </div>
-              {loanDebt.is_defaulted && (<div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}><p className="text-xs text-red-400 text-center">⚠️ Tu saldo está en negativo. Cada moneda que ganes irá a reducir tu deuda.</p></div>)}
+              {loanDebt.is_defaulted && <div className="rounded-xl p-3 mb-4" style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}><p className="text-xs text-red-400 text-center">⚠️ Tu saldo está en negativo. Cada moneda que ganes irá a reducir tu deuda.</p></div>}
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm"><span style={{ color: 'var(--text-muted)' }}>Pedido</span><span className="font-bold">{activeLoan.amount}🪙</span></div>
                 <div className="flex justify-between text-sm"><span style={{ color: 'var(--text-muted)' }}>Interés base</span><span className="font-medium text-amber-400">{activeLoan.interest_rate}%</span></div>
-                {loanDebt.days_late > 0 && (<div className="flex justify-between text-sm"><span style={{ color: 'var(--text-muted)' }}>Penalización ({loanDebt.days_late}d)</span><span className="font-medium text-red-400">+{loanDebt.penalty_rate}%</span></div>)}
+                {loanDebt.days_late > 0 && <div className="flex justify-between text-sm"><span style={{ color: 'var(--text-muted)' }}>Penalización ({loanDebt.days_late}d)</span><span className="font-medium text-red-400">+{loanDebt.penalty_rate}%</span></div>}
                 <div className="border-t pt-2 flex justify-between text-sm" style={{ borderColor: 'var(--border)' }}><span className="font-bold">A pagar ahora</span><span className="font-bold text-lg" style={{ color: loanDebt.is_defaulted ? '#ef4444' : loanDebt.is_overdue ? '#f97316' : 'var(--text-primary)' }}>{loanDebt.current_debt}🪙</span></div>
               </div>
               <motion.button whileTap={{ scale: 0.97 }} onClick={executeRepayLoan}
@@ -944,7 +896,6 @@ export default function Market() {
               </motion.button>
             </motion.div>
           )}
-
           {!activeLoan && (() => {
             const maxLoan = Math.min(2000, Math.max(100, balance * 2))
             return (
@@ -994,7 +945,6 @@ export default function Market() {
               </motion.div>
             )
           })()}
-
           {loanHistory.length > 0 && (
             <div>
               <p className="text-sm font-bold mb-3">Historial</p>
@@ -1073,7 +1023,6 @@ export default function Market() {
                 {!marketOpen && (
                   <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)' }}>
                     <p className="text-sm font-bold text-indigo-400">🌙 Mercado cerrado</p>
-                    {/* ✅ CORREGIDO: 22:00h */}
                     <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Solo puedes operar de 22:00 a 02:00h</p>
                   </div>
                 )}
