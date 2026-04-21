@@ -283,7 +283,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
     if (drinksData) {
       const seen = new Set()
       const unique = drinksData.filter(d => { if (seen.has(d.drink_group_id)) return false; seen.add(d.drink_group_id); return true })
-      setStats({ count: unique.length, total: unique.reduce((s, d) => s + (d.points || 0), 0) })
+      setStats({ count: unique.length, total: Math.round(unique.reduce((s, d) => s + (d.points || 0), 0) * 10) / 10 })
     }
 
     setAchievements((achievementsData || []).map(a => a.achievement_id))
@@ -392,7 +392,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
 
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-2xl font-bold text-amber-400">{stats?.total || 0}</p>
+            <p className="text-2xl font-bold text-amber-400">{stats ? (Number.isInteger(stats.total) ? stats.total : stats.total.toFixed(1)) : 0}</p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Puntos totales</p>
           </div>
           <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
