@@ -298,6 +298,15 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setIsFollowing(true); setFollowersCount(prev => prev + 1); soundSuccess()
+      // ✅ Notificación de nuevo seguidor
+      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+      await supabase.from('notifications').insert({
+        user_id: profileId,
+        type: 'follow',
+        title: '¡Nuevo seguidor!',
+        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
+        read: false,
+      })
     }
     const { data: chatFollow } = await supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle()
     setCanChat(!isFollowing && !!chatFollow)
@@ -589,6 +598,15 @@ export default function Social() {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setFollowing(prev => [...prev, profileId]); soundSuccess()
+      // Notificacion de nuevo seguidor
+      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+      await supabase.from('notifications').insert({
+        user_id: profileId,
+        type: 'follow',
+        title: '¡Nuevo seguidor!',
+        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
+        read: false,
+      })
     }
   }
 

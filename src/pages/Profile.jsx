@@ -400,6 +400,7 @@ export default function Profile() {
     switch (type) {
       case 'powerup':  return { bg: 'rgba(239,68,68,0.1)',  color: '#ef4444', icon: '⚡' }
       case 'transfer': return { bg: 'rgba(16,185,129,0.1)', color: '#10b981', icon: '💸' }
+      case 'follow':   return { bg: 'rgba(99,102,241,0.1)', color: '#818cf8', icon: '👤' }
       default:         return { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b', icon: '🔔' }
     }
   }
