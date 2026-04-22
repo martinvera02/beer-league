@@ -16,16 +16,18 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
   const [joining, setJoining] = useState(false)
   const [creating, setCreating] = useState(false)
   const [joinSuccess, setJoinSuccess] = useState('')
+  const [userCount, setUserCount] = useState(null)
 
   useEffect(() => { fetchLeagues() }, [])
 
   const fetchLeagues = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('league_members')
-      .select('league_id, leagues(id, name, created_by, invite_code)')
-      .eq('user_id', user.id)
+    const [{ data }, { count }] = await Promise.all([
+      supabase.from('league_members').select('league_id, leagues(id, name, created_by, invite_code)').eq('user_id', user.id),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    ])
     setLeagues(data?.map(d => d.leagues) || [])
+    setUserCount(count || 0)
     setLoading(false)
   }
 
@@ -72,10 +74,42 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
 
         <motion.div {...fadeIn}>
           <h1 className="text-2xl font-bold mb-1">Tus ligas 🏆</h1>
-          <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
             Crea una liga o únete con el código de invitación
           </p>
         </motion.div>
+
+        {/* ── MARCADOR DE USUARIOS ── */}
+        {userCount !== null && (
+          <motion.div {...fadeIn} transition={{ delay: 0.05 }}
+            className="rounded-2xl p-3 mb-5 flex items-center gap-3"
+            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <div className="flex -space-x-1.5">
+              {['🍺', '🍻', '🥂'].map((e, i) => (
+                <motion.div key={i}
+                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  transition={{ delay: 0.1 + i * 0.05, type: 'spring', stiffness: 400, damping: 20 }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-base border-2"
+                  style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--bg-base)' }}>
+                  {e}
+                </motion.div>
+              ))}
+            </div>
+            <div>
+              <p className="text-sm font-bold">
+                <motion.span
+                  key={userCount}
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-amber-400">
+                  {userCount}
+                </motion.span>
+                {' '}jugadores en Beer League
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>¡Invita a más amigos! 🍻</p>
+            </div>
+          </motion.div>
+        )}
 
         <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="flex gap-3 mb-6">
           <motion.button whileTap={{ scale: 0.96 }}
