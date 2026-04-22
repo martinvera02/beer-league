@@ -97,10 +97,7 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
             </div>
             <div>
               <p className="text-sm font-bold">
-                <motion.span
-                  key={userCount}
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
+                <motion.span key={userCount} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                   className="text-amber-400">
                   {userCount}
                 </motion.span>
@@ -129,16 +126,10 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
           {showCreate && (
             <motion.div {...slideUp} className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
               <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Nombre de la liga</p>
-              <input
-                type="text"
-                value={newLeagueName}
-                onChange={e => setNewLeagueName(e.target.value)}
-                onKeyDown={handleCreateKeyDown}
-                placeholder="ej: Los Alcohólicos Anónimos"
-                autoFocus
+              <input type="text" value={newLeagueName} onChange={e => setNewLeagueName(e.target.value)}
+                onKeyDown={handleCreateKeyDown} placeholder="ej: Los Alcohólicos Anónimos" autoFocus
                 className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 mb-3 text-sm"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-              />
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
               <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>
                 Se generará un código de invitación automáticamente
               </p>
@@ -160,17 +151,11 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
           {showJoin && (
             <motion.div {...slideUp} className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
               <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Código de invitación</p>
-              <input
-                type="text"
-                value={joinCode}
+              <input type="text" value={joinCode}
                 onChange={e => { setJoinCode(e.target.value.toUpperCase()); setError(''); setJoinSuccess('') }}
-                onKeyDown={handleJoinKeyDown}
-                placeholder="BEER-XXXX-XXXX"
-                autoFocus
-                maxLength={14}
+                onKeyDown={handleJoinKeyDown} placeholder="BEER-XXXX-XXXX" autoFocus maxLength={14}
                 className="w-full rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 mb-3 text-sm font-bold tracking-widest text-center"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
-              />
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
               <AnimatePresence>
                 {joinSuccess && (
                   <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -232,6 +217,120 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
             ))}
           </motion.div>
         )}
+
+        {/* ── BANNER NUEVA TEMPORADA + GUERRAS DE CLANES ── */}
+        {!loading && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, type: 'spring', stiffness: 300, damping: 28 }}
+            className="mt-6 rounded-3xl overflow-hidden relative"
+            style={{ background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)', border: '1.5px solid rgba(255,255,255,0.08)' }}>
+
+            {/* Estrellas decorativas */}
+            {[
+              { top: '12%', left: '6%', size: 3, delay: 0 },
+              { top: '25%', left: '88%', size: 2, delay: 0.4 },
+              { top: '65%', left: '92%', size: 3, delay: 0.8 },
+              { top: '78%', left: '4%', size: 2, delay: 0.2 },
+              { top: '45%', left: '50%', size: 2, delay: 1.0 },
+            ].map((s, i) => (
+              <motion.div key={i}
+                className="absolute rounded-full bg-white"
+                style={{ top: s.top, left: s.left, width: s.size, height: s.size }}
+                animate={{ opacity: [0.2, 1, 0.2] }}
+                transition={{ duration: 2, repeat: Infinity, delay: s.delay, ease: 'easeInOut' }} />
+            ))}
+
+            {/* Contenido */}
+            <div className="relative p-5">
+
+              {/* Badge NUEVO */}
+              <div className="flex items-center gap-2 mb-3">
+                <motion.span
+                  animate={{ scale: [1, 1.08, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  className="text-xs font-black px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: '#f59e0b', color: '#000' }}>
+                  ✨ NUEVA TEMPORADA
+                </motion.span>
+                <motion.span
+                  animate={{ scale: [1, 1.08, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
+                  className="text-xs font-black px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: '#ef4444', color: '#fff' }}>
+                  ⚔️ NOVEDAD
+                </motion.span>
+              </div>
+
+              {/* Título principal */}
+              <motion.h2
+                animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+                className="text-2xl font-black mb-1 leading-tight"
+                style={{
+                  background: 'linear-gradient(90deg, #f59e0b, #ef4444, #a855f7, #f59e0b)',
+                  backgroundSize: '200% auto',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                ¡Temporada 3<br />ha comenzado!
+              </motion.h2>
+
+              <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                Vuelve a cero. Nueva oportunidad. ¿Quién dominará esta vez?
+              </p>
+
+              {/* Separador */}
+              <div className="w-full h-px mb-4" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
+
+              {/* Guerras de Clanes */}
+              <div className="flex items-start gap-4">
+                <motion.div
+                  animate={{ rotate: [-8, 8, -8] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  className="text-5xl flex-shrink-0">
+                  ⚔️
+                </motion.div>
+                <div className="flex-1">
+                  <p className="font-black text-white text-base mb-1">Guerras de Clanes</p>
+                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    Reta a otras ligas, roba sus jarras 🏺 y gana monedas para todo tu equipo. ¡La rivalidad acaba de empezar!
+                  </p>
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {['⚔️ Combates', '🏺 Jarras', '🪙 Premios'].map((tag, i) => (
+                      <motion.span key={i}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.5 + i * 0.1 }}
+                        className="text-xs px-2.5 py-1 rounded-full font-semibold"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)' }}>
+                        {tag}
+                      </motion.span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* CTA */}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                whileHover={{ scale: 1.02 }}
+                onClick={() => setCurrentPage('clanwar')}
+                className="w-full mt-4 py-3 rounded-2xl font-black text-sm text-white relative overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #ef4444, #7c3aed)' }}>
+                <motion.div
+                  className="absolute inset-0"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)' }}
+                  animate={{ x: ['-100%', '200%'] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear', repeatDelay: 1 }} />
+                <span className="relative">⚔️ Ir a Guerra de Clanes</span>
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+
       </div>
     </div>
   )
