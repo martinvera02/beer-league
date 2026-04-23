@@ -1,9 +1,240 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { fadeIn, slideUp, staggerContainer, staggerItem, scaleIn } from '../lib/animations'
+import { soundSuccess } from '../lib/sounds'
 
+// ─── Monedas por día de racha ─────────────────────────────────────────────────
+const STREAK_REWARDS = [
+  { day: 1, coins: 50,  emoji: '🪙',  label: '50🪙' },
+  { day: 2, coins: 75,  emoji: '🪙',  label: '75🪙' },
+  { day: 3, coins: 100, emoji: '💰',  label: '100🪙' },
+  { day: 4, coins: 150, emoji: '💰',  label: '150🪙' },
+  { day: 5, coins: 200, emoji: '💎',  label: '200🪙' },
+  { day: 6, coins: 300, emoji: '💎',  label: '300🪙' },
+  { day: 7, coins: 500, emoji: '👑',  label: '500🪙 + ⚡ Powerup' },
+]
+
+// ─── Banner recompensa diaria ─────────────────────────────────────────────────
+function DailyRewardBanner({ onClaimed }) {
+  const [status, setStatus] = useState(null)   // { streak, already_claimed, next_coins, is_special_day }
+  const [claiming, setClaiming] = useState(false)
+  const [result, setResult] = useState(null)
+  const [showResult, setShowResult] = useState(false)
+
+  useEffect(() => { fetchStatus() }, [])
+
+  const fetchStatus = async () => {
+    const { data } = await supabase.rpc('get_daily_reward_status')
+    setStatus(data)
+  }
+
+  const handleClaim = async () => {
+    if (claiming || status?.already_claimed) return
+    setClaiming(true)
+    const { data } = await supabase.rpc('claim_daily_reward')
+    if (data?.success) {
+      soundSuccess()
+      setResult(data)
+      setShowResult(true)
+      setStatus(prev => ({ ...prev, already_claimed: true, streak: data.streak }))
+      onClaimed && onClaimed(data.coins)
+      setTimeout(() => setShowResult(false), 4000)
+    }
+    setClaiming(false)
+  }
+
+  if (!status) return null
+
+  const { streak, already_claimed, next_coins, is_special_day } = status
+  const currentDay = already_claimed ? streak : streak
+  const displayStreak = already_claimed ? streak : streak - 1
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15, type: 'spring', stiffness: 300, damping: 28 }}
+      className="mb-5 rounded-3xl overflow-hidden relative"
+      style={{
+        background: already_claimed
+          ? 'linear-gradient(135deg, #1a1a2e, #16213e)'
+          : is_special_day
+            ? 'linear-gradient(135deg, #1a0533, #2d1b69, #1a0533)'
+            : 'linear-gradient(135deg, #0f2027, #203a43, #2c5364)',
+        border: already_claimed
+          ? '1.5px solid rgba(255,255,255,0.06)'
+          : is_special_day
+            ? '1.5px solid rgba(168,85,247,0.5)'
+            : '1.5px solid rgba(245,158,11,0.3)',
+      }}>
+
+      {/* Partículas decorativas */}
+      {!already_claimed && [
+        { top: '10%', left: '8%',  size: 2, delay: 0 },
+        { top: '20%', left: '90%', size: 3, delay: 0.5 },
+        { top: '70%', left: '85%', size: 2, delay: 1.0 },
+        { top: '80%', left: '5%',  size: 3, delay: 0.3 },
+        { top: '45%', left: '55%', size: 2, delay: 0.8 },
+      ].map((s, i) => (
+        <motion.div key={i} className="absolute rounded-full bg-amber-400"
+          style={{ top: s.top, left: s.left, width: s.size, height: s.size, opacity: 0.4 }}
+          animate={{ opacity: [0.2, 0.8, 0.2], scale: [1, 1.5, 1] }}
+          transition={{ duration: 2, repeat: Infinity, delay: s.delay }} />
+      ))}
+
+      <div className="relative p-5">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <motion.span
+              animate={already_claimed ? {} : { rotate: [-8, 8, -8] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="text-3xl">
+              {already_claimed ? '✅' : is_special_day ? '👑' : '🎁'}
+            </motion.span>
+            <div>
+              <p className="font-black text-white text-sm">Recompensa diaria</p>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {already_claimed
+                  ? 'Vuelve mañana para continuar la racha'
+                  : is_special_day
+                    ? '¡Día especial! Powerup gratis incluido'
+                    : `Racha actual: ${displayStreak > 0 ? displayStreak : 0} día${displayStreak !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+          </div>
+          {streak > 1 && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full"
+              style={{ backgroundColor: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <span className="text-xs">🔥</span>
+              <span className="text-xs font-black text-amber-400">{already_claimed ? streak : streak - 1}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Días de racha */}
+        <div className="flex gap-1.5 mb-4">
+          {STREAK_REWARDS.map((reward, i) => {
+            const dayNum = i + 1
+            const isPast = already_claimed ? dayNum < streak : dayNum < streak
+            const isCurrent = already_claimed ? dayNum === streak : dayNum === streak
+            const isFuture = already_claimed ? dayNum > streak : dayNum > streak
+            return (
+              <div key={dayNum} className="flex-1 flex flex-col items-center gap-1">
+                <motion.div
+                  animate={isCurrent && !already_claimed ? { scale: [1, 1.1, 1] } : {}}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  className="w-full aspect-square rounded-xl flex items-center justify-center text-sm relative"
+                  style={{
+                    background: isPast
+                      ? 'rgba(16,185,129,0.2)'
+                      : isCurrent && !already_claimed
+                        ? reward.day === 7 ? 'rgba(168,85,247,0.3)' : 'rgba(245,158,11,0.2)'
+                        : isCurrent && already_claimed
+                          ? 'rgba(16,185,129,0.2)'
+                          : 'rgba(255,255,255,0.05)',
+                    border: isPast
+                      ? '1px solid rgba(16,185,129,0.4)'
+                      : isCurrent && !already_claimed
+                        ? reward.day === 7 ? '1.5px solid #a855f7' : '1.5px solid #f59e0b'
+                        : isCurrent && already_claimed
+                          ? '1px solid rgba(16,185,129,0.4)'
+                          : '1px solid rgba(255,255,255,0.06)',
+                  }}>
+                  {isPast || (isCurrent && already_claimed)
+                    ? <span className="text-emerald-400 text-xs font-black">✓</span>
+                    : <span style={{ opacity: isFuture ? 0.35 : 1 }}>{reward.emoji}</span>}
+                  {reward.day === 7 && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-purple-500 flex items-center justify-center">
+                      <span style={{ fontSize: 7 }}>★</span>
+                    </div>
+                  )}
+                </motion.div>
+                <span className="text-xs font-bold" style={{
+                  color: isPast || (isCurrent && already_claimed)
+                    ? '#10b981'
+                    : isCurrent && !already_claimed
+                      ? reward.day === 7 ? '#c084fc' : '#f59e0b'
+                      : 'rgba(255,255,255,0.2)'
+                }}>D{dayNum}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Resultado al reclamar */}
+        <AnimatePresence>
+          {showResult && result && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: -10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="rounded-2xl p-3 mb-3 text-center"
+              style={{
+                background: result.is_special ? 'rgba(168,85,247,0.2)' : 'rgba(245,158,11,0.15)',
+                border: `1px solid ${result.is_special ? 'rgba(168,85,247,0.5)' : 'rgba(245,158,11,0.4)'}`,
+              }}>
+              <motion.p className="text-2xl mb-1"
+                animate={{ scale: [1, 1.3, 1], rotate: [0, -10, 10, 0] }}
+                transition={{ duration: 0.5 }}>
+                {result.is_special ? '👑' : '🎉'}
+              </motion.p>
+              <p className="font-black text-white text-sm">
+                {result.is_special ? '¡Recompensa especial!' : '¡Reclamado!'}
+              </p>
+              <p className="font-black text-lg mt-0.5" style={{ color: result.is_special ? '#c084fc' : '#f59e0b' }}>
+                +{result.coins}🪙
+              </p>
+              {result.is_special && result.powerup_emoji && (
+                <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  {result.powerup_emoji} {result.powerup_name} activado gratis
+                </p>
+              )}
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Racha: {result.streak} día{result.streak !== 1 ? 's' : ''} 🔥
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Botón */}
+        <motion.button
+          whileTap={already_claimed ? {} : { scale: 0.96 }}
+          whileHover={already_claimed ? {} : { scale: 1.02 }}
+          onClick={handleClaim}
+          disabled={already_claimed || claiming}
+          className="w-full py-3 rounded-2xl font-black text-sm relative overflow-hidden"
+          style={already_claimed
+            ? { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)', cursor: 'default' }
+            : is_special_day
+              ? { background: 'linear-gradient(135deg, #7c3aed, #a855f7)', color: '#fff', boxShadow: '0 4px 20px rgba(168,85,247,0.4)' }
+              : { background: 'linear-gradient(135deg, #d97706, #f59e0b)', color: '#000', boxShadow: '0 4px 20px rgba(245,158,11,0.3)' }}>
+          {!already_claimed && (
+            <motion.div className="absolute inset-0"
+              style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)' }}
+              animate={{ x: ['-100%', '200%'] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear', repeatDelay: 1 }} />
+          )}
+          <span className="relative">
+            {already_claimed
+              ? '✅ Reclamado · Vuelve mañana'
+              : claiming
+                ? 'Abriendo cofre...'
+                : is_special_day
+                  ? '👑 ¡Abrir cofre especial!'
+                  : `🎁 Abrir cofre · +${next_coins}🪙`}
+          </span>
+        </motion.button>
+
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function Home({ setCurrentPage, setSelectedLeague }) {
   const { user } = useAuth()
   const [leagues, setLeagues] = useState([])
@@ -78,6 +309,9 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
             Crea una liga o únete con el código de invitación
           </p>
         </motion.div>
+
+        {/* ── RECOMPENSA DIARIA ── */}
+        <DailyRewardBanner onClaimed={() => {}} />
 
         {/* ── MARCADOR DE USUARIOS ── */}
         {userCount !== null && (
@@ -227,43 +461,33 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
             className="mt-6 rounded-3xl overflow-hidden relative"
             style={{ background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)', border: '1.5px solid rgba(255,255,255,0.08)' }}>
 
-            {/* Estrellas decorativas */}
             {[
-              { top: '12%', left: '6%', size: 3, delay: 0 },
+              { top: '12%', left: '6%',  size: 3, delay: 0 },
               { top: '25%', left: '88%', size: 2, delay: 0.4 },
               { top: '65%', left: '92%', size: 3, delay: 0.8 },
-              { top: '78%', left: '4%', size: 2, delay: 0.2 },
+              { top: '78%', left: '4%',  size: 2, delay: 0.2 },
               { top: '45%', left: '50%', size: 2, delay: 1.0 },
             ].map((s, i) => (
-              <motion.div key={i}
-                className="absolute rounded-full bg-white"
+              <motion.div key={i} className="absolute rounded-full bg-white"
                 style={{ top: s.top, left: s.left, width: s.size, height: s.size }}
                 animate={{ opacity: [0.2, 1, 0.2] }}
                 transition={{ duration: 2, repeat: Infinity, delay: s.delay, ease: 'easeInOut' }} />
             ))}
 
-            {/* Contenido */}
             <div className="relative p-5">
-
-              {/* Badge NUEVO */}
               <div className="flex items-center gap-2 mb-3">
-                <motion.span
-                  animate={{ scale: [1, 1.08, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
+                <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
                   className="text-xs font-black px-2.5 py-1 rounded-full"
                   style={{ backgroundColor: '#f59e0b', color: '#000' }}>
                   ✨ NUEVA TEMPORADA
                 </motion.span>
-                <motion.span
-                  animate={{ scale: [1, 1.08, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
+                <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
                   className="text-xs font-black px-2.5 py-1 rounded-full"
                   style={{ backgroundColor: '#ef4444', color: '#fff' }}>
                   ⚔️ NOVEDAD
                 </motion.span>
               </div>
 
-              {/* Título principal */}
               <motion.h2
                 animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
@@ -282,17 +506,11 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
                 Vuelve a cero. Nueva oportunidad. ¿Quién dominará esta vez?
               </p>
 
-              {/* Separador */}
               <div className="w-full h-px mb-4" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
 
-              {/* Guerras de Clanes */}
               <div className="flex items-start gap-4">
-                <motion.div
-                  animate={{ rotate: [-8, 8, -8] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="text-5xl flex-shrink-0">
-                  ⚔️
-                </motion.div>
+                <motion.div animate={{ rotate: [-8, 8, -8] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  className="text-5xl flex-shrink-0">⚔️</motion.div>
                 <div className="flex-1">
                   <p className="font-black text-white text-base mb-1">Guerras de Clanes</p>
                   <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
@@ -300,9 +518,7 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
                   </p>
                   <div className="flex gap-2 mt-3 flex-wrap">
                     {['⚔️ Combates', '🏺 Jarras', '🪙 Premios'].map((tag, i) => (
-                      <motion.span key={i}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
+                      <motion.span key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.5 + i * 0.1 }}
                         className="text-xs px-2.5 py-1 rounded-full font-semibold"
                         style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)' }}>
@@ -313,15 +529,11 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
                 </div>
               </div>
 
-              {/* CTA */}
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                whileHover={{ scale: 1.02 }}
+              <motion.button whileTap={{ scale: 0.96 }} whileHover={{ scale: 1.02 }}
                 onClick={() => setCurrentPage('clanwar')}
                 className="w-full mt-4 py-3 rounded-2xl font-black text-sm text-white relative overflow-hidden"
                 style={{ background: 'linear-gradient(135deg, #ef4444, #7c3aed)' }}>
-                <motion.div
-                  className="absolute inset-0"
+                <motion.div className="absolute inset-0"
                   style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)' }}
                   animate={{ x: ['-100%', '200%'] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'linear', repeatDelay: 1 }} />
