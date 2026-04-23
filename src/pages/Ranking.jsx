@@ -26,10 +26,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [savingName, setSavingName] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
 
-  // Mensajes no leídos por liga
-  const [unreadByLeague, setUnreadByLeague] = useState({}) // { leagueId: count }
+  const [unreadByLeague, setUnreadByLeague] = useState({})
 
-  // Transferencias
   const [transfers, setTransfers] = useState([])
   const [myBalance, setMyBalance] = useState(0)
   const [selectedReceiver, setSelectedReceiver] = useState(null)
@@ -39,21 +37,18 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [transferResult, setTransferResult] = useState(null)
   const [loadingTransfers, setLoadingTransfers] = useState(false)
 
-  // Admin
   const [adminStats, setAdminStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [adminMsg, setAdminMsg] = useState(null)
 
-  // Unirse con código
   const [showJoinModal, setShowJoinModal] = useState(false)
   const [joinCode, setJoinCode] = useState('')
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [joinSuccess, setJoinSuccess] = useState('')
 
-  // Crear liga
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newLeagueCreateName, setNewLeagueCreateName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -75,17 +70,16 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `league_id=eq.${selectedLeague.id}` },
         async (payload) => {
+          // Solo procesar mensajes de otros usuarios (los propios ya se añaden optimistamente)
+          if (payload.new.user_id === user.id) return
           const { data: profile } = await supabase
             .from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
-          if (payload.new.user_id !== user.id) {
-            soundMessageReceived()
-            // Si no estamos en el chat, incrementar contador
-            if (tab !== 'chat') {
-              setUnreadByLeague(prev => ({
-                ...prev,
-                [selectedLeague.id]: (prev[selectedLeague.id] || 0) + 1
-              }))
-            }
+          soundMessageReceived()
+          if (tab !== 'chat') {
+            setUnreadByLeague(prev => ({
+              ...prev,
+              [selectedLeague.id]: (prev[selectedLeague.id] || 0) + 1
+            }))
           }
           setMessages(prev => [...prev, {
             ...payload.new,
@@ -100,7 +94,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   useEffect(() => {
     if (tab === 'chat') {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-      // Marcar como leído al abrir el chat
       if (selectedLeague) markChatRead(selectedLeague.id)
     }
     if (tab === 'transfers' && selectedLeague) fetchTransfers(selectedLeague.id)
@@ -126,17 +119,14 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       setNewLeagueName(first.name)
     }
 
-    // Calcular no leídos para todas las ligas
     if (userLeagues.length > 0) {
       fetchAllUnread(userLeagues.map(l => l.id))
     }
   }
 
   const fetchAllUnread = async (leagueIds) => {
-    // Para cada liga, contar mensajes más nuevos que last_read_at
     const counts = {}
     await Promise.all(leagueIds.map(async (leagueId) => {
-      // Obtener last_read_at del usuario para esta liga
       const { data: readData } = await supabase
         .from('message_reads')
         .select('last_read_at')
@@ -146,7 +136,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
 
       const lastRead = readData?.last_read_at || '1970-01-01'
 
-      // Contar mensajes de otros usuarios más nuevos que last_read_at
       const { count } = await supabase
         .from('messages')
         .select('id', { count: 'exact', head: true })
@@ -160,14 +149,11 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   }
 
   const markChatRead = async (leagueId) => {
-    // Upsert last_read_at a ahora
     await supabase.from('message_reads').upsert({
       user_id: user.id,
       league_id: leagueId,
       last_read_at: new Date().toISOString(),
     }, { onConflict: 'user_id,league_id' })
-
-    // Limpiar badge de esta liga
     setUnreadByLeague(prev => ({ ...prev, [leagueId]: 0 }))
   }
 
@@ -289,13 +275,31 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setRoleTarget(null); fetchMembers(selectedLeague.id)
   }
 
+  // ── SEND MESSAGE (optimista) ───────────────────────────────────────────────
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedLeague || sending) return
     setSending(true); soundMessage()
-    await supabase.from('messages').insert({ league_id: selectedLeague.id, user_id: user.id, content: newMessage.trim() })
-    setNewMessage(''); setSending(false)
+    const tempMsg = {
+      id: `temp-${Date.now()}`,
+      league_id: selectedLeague.id,
+      user_id: user.id,
+      content: newMessage.trim(),
+      image_url: null,
+      created_at: new Date().toISOString(),
+      profiles: { username: 'Tú', avatar_url: null },
+    }
+    setMessages(prev => [...prev, tempMsg])
+    setNewMessage('')
+    const { data } = await supabase.from('messages')
+      .insert({ league_id: selectedLeague.id, user_id: user.id, content: tempMsg.content })
+      .select('*, profiles(username, avatar_url)').single()
+    if (data) {
+      setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...data } : m))
+    }
+    setSending(false)
   }
 
+  // ── HANDLE IMAGE UPLOAD (optimista) ───────────────────────────────────────
   const handleImageUpload = async (e) => {
     const file = e.target.files[0]
     if (!file || !selectedLeague) return
@@ -306,7 +310,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     if (!error) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
       soundMessage()
-      await supabase.from('messages').insert({ league_id: selectedLeague.id, user_id: user.id, content: '', image_url: publicUrl })
+      const { data } = await supabase.from('messages')
+        .insert({ league_id: selectedLeague.id, user_id: user.id, content: '', image_url: publicUrl })
+        .select('*, profiles(username, avatar_url)').single()
+      if (data) setMessages(prev => [...prev, data])
     }
     setUploadingImage(false); e.target.value = ''
   }
@@ -415,7 +422,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* Header */}
       <div className="px-4 pt-6 pb-3 flex-shrink-0">
 
-        {/* Selector de ligas con badges */}
         <div className="flex gap-2 flex-wrap mb-4 items-center">
           {leagues.map(league => {
             const unread = unreadByLeague[league.id] || 0
@@ -426,7 +432,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 className={`relative px-4 py-2 rounded-xl text-sm font-medium transition-colors ${isSelected ? 'bg-amber-500 text-white' : ''}`}
                 style={!isSelected ? { backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' } : {}}>
                 {league.name}
-                {/* Badge de no leídos en el selector de liga */}
                 {unread > 0 && !isSelected && (
                   <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-white font-black"
                     style={{ backgroundColor: '#ef4444', fontSize: 9 }}>
@@ -448,7 +453,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </motion.button>
         </div>
 
-        {/* Nombre de liga */}
         {selectedLeague && (
           <div className="mb-4">
             {editingName ? (
@@ -476,7 +480,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Código invitación */}
         {selectedLeague && (
           <div className="rounded-2xl px-4 py-3 mb-4 flex items-center justify-between" style={{ backgroundColor: 'var(--bg-card)' }}>
             <div>
@@ -491,7 +494,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           </div>
         )}
 
-        {/* Pestañas con badge en Chat */}
         {selectedLeague && (
           <div className="flex rounded-xl p-1 gap-0.5" style={{ backgroundColor: 'var(--bg-input)' }}>
             {visibleTabs.map(t => (
