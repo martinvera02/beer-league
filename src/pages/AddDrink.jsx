@@ -21,6 +21,56 @@ const isMartesEnMadrid = () => {
   return dow === 2 || (dow === 3 && hour < 4)
 }
 
+// ─── Dígito animado individual ────────────────────────────────────────────────
+function CountdownDigit({ value }) {
+  return (
+    <motion.div
+      key={value}
+      initial={{ y: -12, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      className="inline-block w-7 text-center font-black text-white text-xl leading-none rounded-lg py-1"
+      style={{ background: 'rgba(255,255,255,0.12)', fontVariantNumeric: 'tabular-nums' }}>
+      {value}
+    </motion.div>
+  )
+}
+
+// ─── Cuenta atrás con dígitos separados ──────────────────────────────────────
+function CountdownDisplay({ countdown }) {
+  if (!countdown) return null
+  const [hh, mm, ss] = countdown.split(':')
+  return (
+    <div className="flex items-center gap-1 mt-2">
+      <span className="text-white/50 text-xs mr-1">Acaba en</span>
+      <CountdownDigit value={hh[0]} />
+      <CountdownDigit value={hh[1]} />
+      <span className="text-white/60 font-black text-lg leading-none mb-0.5">:</span>
+      <CountdownDigit value={mm[0]} />
+      <CountdownDigit value={mm[1]} />
+      <span className="text-white/60 font-black text-lg leading-none mb-0.5">:</span>
+      <motion.div
+        key={ss}
+        initial={{ scale: 1.3, opacity: 0.5 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.2 }}
+        className="inline-block w-7 text-center font-black text-white text-xl leading-none rounded-lg py-1"
+        style={{ background: 'rgba(255,255,255,0.18)', fontVariantNumeric: 'tabular-nums' }}>
+        {ss[0]}
+      </motion.div>
+      <motion.div
+        key={ss + 'b'}
+        initial={{ scale: 1.3, opacity: 0.5 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.2 }}
+        className="inline-block w-7 text-center font-black text-white text-xl leading-none rounded-lg py-1"
+        style={{ background: 'rgba(255,255,255,0.18)', fontVariantNumeric: 'tabular-nums' }}>
+        {ss[1]}
+      </motion.div>
+    </div>
+  )
+}
+
 export default function AddDrink() {
   const { user } = useAuth()
   const [drinkTypes, setDrinkTypes] = useState([])
@@ -53,10 +103,8 @@ export default function AddDrink() {
 
       let secsLeft
       if (dow === 2) {
-        // Martes: hasta medianoche + 4h del miércoles
         secsLeft = (24 - h) * 3600 - m * 60 - s + 4 * 3600
       } else {
-        // Miércoles antes de las 04:00h
         secsLeft = (4 - h - 1) * 3600 + (60 - m - 1) * 60 + (60 - s)
       }
 
@@ -213,31 +261,46 @@ export default function AddDrink() {
                 animate={{ x: ['-100%', '200%'] }}
                 transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 1 }}
               />
-              <div className="flex items-center gap-3 relative">
+
+              {/* Partículas */}
+              {[
+                { top: '15%', left: '70%', size: 2, delay: 0 },
+                { top: '60%', left: '80%', size: 3, delay: 0.6 },
+                { top: '75%', left: '60%', size: 2, delay: 1.1 },
+              ].map((s, i) => (
+                <motion.div key={i} className="absolute rounded-full bg-white pointer-events-none"
+                  style={{ top: s.top, left: s.left, width: s.size, height: s.size, opacity: 0.3 }}
+                  animate={{ opacity: [0.1, 0.6, 0.1], scale: [1, 1.8, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, delay: s.delay }} />
+              ))}
+
+              <div className="flex items-start gap-3 relative">
                 <motion.div
-                  className="text-4xl flex-shrink-0"
+                  className="text-4xl flex-shrink-0 mt-0.5"
                   animate={{ rotate: [-5, 5, -5], scale: [1, 1.1, 1] }}
                   transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}>
                   😈
                 </motion.div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-white font-black text-lg tracking-tight">MARTES MACARRA</p>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">x2</span>
-                  </div>
-                  <p className="text-white/80 text-xs">
-                    ¡Doble de puntos y monedas! 🍺🍺
-                  </p>
-                  {/* ── CUENTA ATRÁS ── */}
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className="text-white/60 text-xs">Acaba en</span>
+                    <motion.p
+                      className="text-white font-black text-lg tracking-tight"
+                      animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                      transition={{ duration: 3, repeat: Infinity }}>
+                      MARTES MACARRA
+                    </motion.p>
                     <motion.span
-                      key={countdown}
-                      className="font-black text-white text-sm tracking-widest"
-                      style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {countdown}
+                      animate={{ scale: [1, 1.15, 1] }}
+                      transition={{ duration: 1, repeat: Infinity }}
+                      className="text-xs font-black px-2 py-0.5 rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                      x2
                     </motion.span>
                   </div>
+                  <p className="text-white/70 text-xs mb-1">¡Doble de puntos y monedas! 🍺🍺</p>
+
+                  {/* ── CUENTA ATRÁS MODERNA ── */}
+                  <CountdownDisplay countdown={countdown} />
                 </div>
               </div>
             </motion.div>
@@ -432,9 +495,7 @@ export default function AddDrink() {
               </motion.div>
 
               {result.martes_macarra && (
-                <p className="font-black text-sm mb-1" style={{ color: '#a78bfa' }}>
-                  ¡MARTES MACARRA!
-                </p>
+                <p className="font-black text-sm mb-1" style={{ color: '#a78bfa' }}>¡MARTES MACARRA!</p>
               )}
 
               <p className="font-bold text-lg" style={{ color: result.martes_macarra ? '#fff' : '#10b981' }}>
@@ -499,7 +560,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Resultado apuesta */}
           {success && result && result.gamble_active && (
             <motion.div
               initial={{ opacity: 0, scale: 0.5 }}
@@ -516,8 +576,7 @@ export default function AddDrink() {
                 transition={{ duration: 0.6 }}>
                 {result.gamble_win ? '🎰' : '💀'}
               </motion.div>
-              <p className="font-bold text-xl mb-1"
-                style={{ color: result.gamble_win ? '#c084fc' : '#ef4444' }}>
+              <p className="font-bold text-xl mb-1" style={{ color: result.gamble_win ? '#c084fc' : '#ef4444' }}>
                 {result.gamble_win ? '¡JACKPOT! x4 🎉' : '¡MALA SUERTE! x0 😬'}
               </p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -528,7 +587,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Freeze */}
           {frozen && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
@@ -544,7 +602,6 @@ export default function AddDrink() {
             </motion.div>
           )}
 
-          {/* Escudo bloqueó */}
           {shieldBlocked && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.8 }}
