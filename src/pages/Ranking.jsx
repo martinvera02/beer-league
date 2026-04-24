@@ -47,14 +47,14 @@ function PollCard({ poll, userId }) {
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.2)' }}>
+    <div className="rounded-2xl overflow-hidden w-full" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid rgba(99,102,241,0.2)' }}>
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>📊 Encuesta</span>
           {poll.closes_at && <span className="text-xs" style={{ color: isClosed ? '#ef4444' : 'var(--text-hint)' }}>{formatCloses(poll.closes_at)}</span>}
         </div>
         <p className="font-bold text-sm">{poll.question}</p>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{poll.profiles?.username} · {totalVotes} voto{totalVotes !== 1 ? 's' : ''}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{totalVotes} voto{totalVotes !== 1 ? 's' : ''}</p>
       </div>
       <div className="px-4 pb-3 space-y-2">
         {options.map(opt => {
@@ -132,7 +132,8 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
     }).select().single()
     if (!error && poll) {
       await supabase.from('poll_options').insert(validOptions.map((text, i) => ({ poll_id: poll.id, text: text.trim(), position: i })))
-      onCreated(); onClose()
+      onCreated(poll.id)
+      onClose()
     }
     setCreating(false)
   }
@@ -266,6 +267,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
           soundMessageReceived()
           if (tab !== 'chat') setUnreadByLeague(prev => ({ ...prev, [selectedLeague.id]: (prev[selectedLeague.id] || 0) + 1 }))
+          // Si trae poll_id, refrescar encuestas
+          if (payload.new.poll_id) fetchPolls(selectedLeague.id)
           setMessages(prev => [...prev, { ...payload.new, profiles: { username: profile?.username || 'Desconocido', avatar_url: profile?.avatar_url } }])
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'polls', filter: `league_id=eq.${selectedLeague.id}` },
@@ -408,6 +411,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     const { error } = await supabase.from('messages').insert({ league_id: selectedLeague.id, user_id: user.id, content })
     if (error) { console.error('Error al enviar mensaje:', error); setMessages(prev => prev.filter(m => m.id !== tempMsg.id)) }
     setSending(false)
+  }
+
+  // Inserta un mensaje con poll_id en el chat
+  const sendPollMessage = async (pollId) => {
+    const { data } = await supabase.from('messages')
+      .insert({ league_id: selectedLeague.id, user_id: user.id, content: '', poll_id: pollId })
+      .select('*, profiles(username, avatar_url)').single()
+    if (data) {
+      await fetchPolls(selectedLeague.id)
+      setMessages(prev => [...prev, data])
+    }
   }
 
   const handleImageUpload = async (e) => {
@@ -705,7 +719,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         </div>
       )}
 
-      {/* ── ENCUESTAS ── */}
+      {/* ── ENCUESTAS (pestaña independiente) ── */}
       {tab === 'polls' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
           <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCreatePoll(true)}
@@ -794,7 +808,33 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
                   </div>
                   {msgs.map((msg, index) => {
-                    const isMe = msg.user_id === user.id, isSameUser = msgs[index - 1]?.user_id === msg.user_id
+                    const isMe = msg.user_id === user.id
+                    const isSameUser = msgs[index - 1]?.user_id === msg.user_id
+
+                    // ── Mensaje con encuesta integrada en el flujo del chat ──
+                    if (msg.poll_id) {
+                      const poll = polls.find(p => p.id === msg.poll_id)
+                      if (!poll) return null
+                      return (
+                        <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className={`flex gap-2 mb-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          {!isMe && (
+                            <div className="flex-shrink-0 self-end">
+                              {!isSameUser ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} size="sm" /> : <div className="w-8" />}
+                            </div>
+                          )}
+                          <div className={`flex flex-col w-64 ${isMe ? 'items-end' : 'items-start'}`}>
+                            {!isMe && !isSameUser && (
+                              <span className="text-xs text-amber-400 font-medium mb-1 ml-1">{msg.profiles?.username}</span>
+                            )}
+                            <PollCard poll={poll} userId={user.id} />
+                            <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>{formatTime(msg.created_at)}</span>
+                          </div>
+                        </motion.div>
+                      )
+                    }
+
                     return (
                       <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
                         className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -832,12 +872,22 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         {lightboxUrl && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4" onClick={() => setLightboxUrl(null)}><motion.img initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }} src={lightboxUrl} alt="Imagen ampliada" className="max-w-full max-h-full rounded-2xl object-contain" /></motion.div>}
       </AnimatePresence>
 
-      {/* Modal crear encuesta */}
+      {/* Modal crear encuesta — al crearse envía mensaje al chat */}
       <AnimatePresence>
-        {showCreatePoll && <CreatePollModal leagueId={selectedLeague?.id} userId={user.id} onClose={() => setShowCreatePoll(false)} onCreated={() => fetchPolls(selectedLeague?.id)} />}
+        {showCreatePoll && (
+          <CreatePollModal
+            leagueId={selectedLeague?.id}
+            userId={user.id}
+            onClose={() => setShowCreatePoll(false)}
+            onCreated={(pollId) => {
+              fetchPolls(selectedLeague?.id)
+              if (tab === 'chat') sendPollMessage(pollId)
+            }}
+          />
+        )}
       </AnimatePresence>
 
-      {/* Modales de admin/expulsar/rol/unirse/crear (idénticos a antes) */}
+      {/* Modales */}
       <AnimatePresence>
         {showResetConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowResetConfirm(false)}>
