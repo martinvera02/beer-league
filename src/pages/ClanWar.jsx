@@ -11,9 +11,9 @@ const REWARD_COINS = 1000
 
 export default function ClanWar() {
   const { user } = useAuth()
-  const [tab, setTab] = useState('war') // war | challenge
+  const [tab, setTab] = useState('war')
   const [myLeagues, setMyLeagues] = useState([])
-  const [myRole, setMyRole] = useState({}) // { leagueId: role }
+  const [myRole, setMyRole] = useState({})
   const [activeWar, setActiveWar] = useState(null)
   const [myParticipation, setMyParticipation] = useState(null)
   const [participants, setParticipants] = useState([])
@@ -21,20 +21,19 @@ export default function ClanWar() {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
 
-  // Challenge
   const [allLeagues, setAllLeagues] = useState([])
   const [selectedChallenger, setSelectedChallenger] = useState(null)
   const [selectedDefender, setSelectedDefender] = useState(null)
   const [challenging, setChallenging] = useState(false)
 
-  // Attack
   const [showAttackModal, setShowAttackModal] = useState(false)
   const [attackTarget, setAttackTarget] = useState(null)
   const [attacking, setAttacking] = useState(false)
   const [battleResult, setBattleResult] = useState(null)
 
-  // Accept war
   const [accepting, setAccepting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
   useEffect(() => { fetchData() }, [])
 
@@ -45,7 +44,6 @@ export default function ClanWar() {
 
   const fetchData = async () => {
     setLoading(true)
-    // Mis ligas y roles
     const { data: leagueData } = await supabase
       .from('league_members')
       .select('league_id, role, leagues(id, name, invite_code)')
@@ -59,7 +57,6 @@ export default function ClanWar() {
 
     const leagueIds = leagues.map(l => l.id)
 
-    // Guerra activa de mis ligas
     if (leagueIds.length > 0) {
       const { data: warData } = await supabase
         .from('clan_wars')
@@ -77,7 +74,6 @@ export default function ClanWar() {
       if (warData) {
         setActiveWar(warData)
 
-        // Mi participación
         const { data: part } = await supabase
           .from('clan_war_participants')
           .select('*')
@@ -86,14 +82,12 @@ export default function ClanWar() {
           .maybeSingle()
         setMyParticipation(part)
 
-        // Todos los participantes con perfil
         const { data: parts } = await supabase
           .from('clan_war_participants')
           .select('*, profiles(id, username, avatar_url)')
           .eq('war_id', warData.id)
         setParticipants(parts || [])
 
-        // Combates
         const { data: battleData } = await supabase
           .from('clan_war_battles')
           .select('*, attacker:profiles!clan_war_battles_attacker_id_fkey(username, avatar_url), defender:profiles!clan_war_battles_defender_id_fkey(username, avatar_url)')
@@ -108,7 +102,6 @@ export default function ClanWar() {
       }
     }
 
-    // Todas las ligas para retar
     const { data: allL } = await supabase.from('leagues').select('id, name').order('name')
     setAllLeagues(allL || [])
 
@@ -129,7 +122,6 @@ export default function ClanWar() {
       setChallenging(false); return
     }
 
-    // Insertar la guerra
     const { data: war, error } = await supabase.from('clan_wars')
       .insert({ challenger_league_id: selectedChallenger.id, defender_league_id: selectedDefender.id })
       .select().single()
@@ -156,14 +148,12 @@ export default function ClanWar() {
       setAccepting(false); return
     }
 
-    // Actualizar guerra a activa
     await supabase.from('clan_wars').update({
       status: 'active',
       started_at: new Date().toISOString(),
       ends_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     }).eq('id', activeWar.id)
 
-    // Inscribir participantes de ambas ligas
     const { data: challengerMembers } = await supabase
       .from('league_members').select('user_id')
       .eq('league_id', activeWar.challenger_league_id)
@@ -180,6 +170,28 @@ export default function ClanWar() {
 
     soundSuccess(); showMsg(true, '⚔️ ¡Guerra aceptada! Comienza la batalla.')
     setAccepting(false); fetchData()
+  }
+
+  // ── CANCELAR GUERRA PENDIENTE ─────────────────────────────────────────────
+  const handleCancelWar = async () => {
+    if (!activeWar) return
+    setCancelling(true)
+    const { error } = await supabase
+      .from('clan_wars')
+      .update({ status: 'cancelled' })
+      .eq('id', activeWar.id)
+      .eq('status', 'pending')
+
+    if (error) {
+      soundError(); showMsg(false, 'Error al cancelar la guerra')
+    } else {
+      soundSuccess()
+      showMsg(true, '✅ Declaración de guerra cancelada')
+      setActiveWar(null)
+      fetchData()
+    }
+    setCancelling(false)
+    setShowCancelConfirm(false)
   }
 
   const handleAttack = async () => {
@@ -202,7 +214,6 @@ export default function ClanWar() {
     const winnerId = attackerWon ? user.id : attackTarget.profiles.id
     const attackerLeagueId = validation.attacker_league_id
 
-    // Insertar batalla
     await supabase.from('clan_war_battles').insert({
       war_id: activeWar.id,
       attacker_id: user.id,
@@ -212,12 +223,10 @@ export default function ClanWar() {
       winner_id: winnerId,
     })
 
-    // Restar batalla al atacante
     await supabase.from('clan_war_participants')
       .update({ battles_left: myParticipation.battles_left - 1 })
       .eq('war_id', activeWar.id).eq('user_id', user.id)
 
-    // Sumar 10 puntos de guerra a la liga ganadora
     const isChallenger = attackerLeagueId === activeWar.challenger_league_id
     const winnerIsAttacker = attackerWon
 
@@ -229,7 +238,6 @@ export default function ClanWar() {
     else if (!winnerIsAttacker && isChallenger) newDefenderPts += 10
     else if (!winnerIsAttacker && !isChallenger) newChallengerPts += 10
 
-    // Calcular jarras: cada 50 puntos = 1 jarra robada
     let newChallengerJugs = activeWar.challenger_jugs
     let newDefenderJugs = activeWar.defender_jugs
 
@@ -250,7 +258,6 @@ export default function ClanWar() {
       newDefenderJugs = Math.min(10, newDefenderJugs + defenderStolenJugs)
     }
 
-    // Comprobar si la guerra termina (rival a 0 jarras o tiempo acabado)
     let newStatus = activeWar.status
     let winnerLeagueId = null
 
@@ -266,18 +273,11 @@ export default function ClanWar() {
       winner_league_id: winnerLeagueId,
     }).eq('id', activeWar.id)
 
-    // Si hay ganador, repartir monedas
     if (winnerLeagueId) {
       const { data: winners } = await supabase.from('league_members')
         .select('user_id').eq('league_id', winnerLeagueId)
       if (winners) {
         for (const w of winners) {
-          await supabase.from('wallets').upsert({ user_id: w.user_id, balance: REWARD_COINS },
-            { onConflict: 'user_id' })
-          await supabase.from('wallets')
-            .update({ balance: supabase.raw ? undefined : undefined })
-            .eq('user_id', w.user_id)
-          // Incrementar saldo
           await supabase.rpc('send_coins_to_member', {
             p_league_id: winnerLeagueId,
             p_receiver_id: w.user_id,
@@ -317,14 +317,9 @@ export default function ClanWar() {
     return `${hours}h`
   }
 
-  // Rivales disponibles para atacar (liga contraria, con participación activa)
   const myLeagueId = myParticipation?.league_id
-  const enemies = participants.filter(p =>
-    p.league_id !== myLeagueId && p.profiles
-  )
-  const allies = participants.filter(p =>
-    p.league_id === myLeagueId && p.profiles
-  )
+  const enemies = participants.filter(p => p.league_id !== myLeagueId && p.profiles)
+  const allies = participants.filter(p => p.league_id === myLeagueId && p.profiles)
 
   const isChallenger = myLeagueId === activeWar?.challenger_league_id
   const myWarPoints = isChallenger ? activeWar?.challenger_war_points : activeWar?.defender_war_points
@@ -390,7 +385,7 @@ export default function ClanWar() {
         )}
       </AnimatePresence>
 
-      {/* ── GUERRA ACTIVA ── */}
+      {/* ── GUERRA ── */}
       {tab === 'war' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
 
@@ -430,7 +425,6 @@ export default function ClanWar() {
 
                 {/* Enfrentamiento */}
                 <div className="flex items-center justify-between mt-3">
-                  {/* Mi liga */}
                   <div className="flex-1 text-center">
                     <p className="font-black text-sm truncate">{myLeagueName || activeWar.challenger?.name}</p>
                     <div className="flex justify-center gap-0.5 mt-2 flex-wrap">
@@ -446,7 +440,6 @@ export default function ClanWar() {
 
                   <div className="text-2xl font-black mx-3" style={{ color: 'var(--text-hint)' }}>VS</div>
 
-                  {/* Liga rival */}
                   <div className="flex-1 text-center">
                     <p className="font-black text-sm truncate">{enemyLeagueName || activeWar.defender?.name}</p>
                     <div className="flex justify-center gap-0.5 mt-2 flex-wrap">
@@ -461,7 +454,6 @@ export default function ClanWar() {
                   </div>
                 </div>
 
-                {/* Barra de progreso jarras */}
                 {activeWar.status === 'active' && myJugs !== undefined && (
                   <div className="mt-3">
                     <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-hint)' }}>
@@ -476,19 +468,27 @@ export default function ClanWar() {
                 )}
               </div>
 
-              {/* Aceptar guerra (solo defender owner/admin) */}
+              {/* Aceptar guerra */}
               {activeWar.status === 'pending' && isDefenderOwner && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={handleAcceptWar} disabled={accepting}
-                  className="w-full py-4 rounded-2xl font-bold text-white mb-4"
+                  className="w-full py-4 rounded-2xl font-bold text-white mb-3"
                   style={{ backgroundColor: '#dc2626' }}>
                   {accepting ? 'Aceptando...' : '⚔️ Aceptar la guerra'}
                 </motion.button>
               )}
 
+              {/* Esperando aceptación + botón cancelar */}
               {activeWar.status === 'pending' && isChallengerOwner && !isDefenderOwner && (
-                <div className="rounded-2xl p-4 mb-4 text-center"
-                  style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                  <p className="text-sm text-amber-400 font-medium">⏳ Esperando que {activeWar.defender?.name} acepte...</p>
+                <div className="mb-4 space-y-3">
+                  <div className="rounded-2xl p-4 text-center"
+                    style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    <p className="text-sm text-amber-400 font-medium">⏳ Esperando que {activeWar.defender?.name} acepte...</p>
+                  </div>
+                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCancelConfirm(true)}
+                    className="w-full py-3 rounded-2xl font-bold text-sm border"
+                    style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+                    🚫 Cancelar declaración de guerra
+                  </motion.button>
                 </div>
               )}
 
@@ -502,7 +502,7 @@ export default function ClanWar() {
                   </div>
                   <div className="flex gap-1">
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold`}
+                      <div key={i} className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
                         style={{
                           backgroundColor: i < myParticipation.battles_left ? '#dc2626' : 'var(--bg-input)',
                           color: i < myParticipation.battles_left ? '#fff' : 'var(--text-hint)',
@@ -514,7 +514,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* Lista de rivales para atacar */}
+              {/* Rivales */}
               {activeWar.status === 'active' && myParticipation && myParticipation.battles_left > 0 && (
                 <>
                   <p className="text-sm font-bold mb-3">👊 Rivales disponibles</p>
@@ -531,9 +531,7 @@ export default function ClanWar() {
                           <Avatar url={enemy.profiles?.avatar_url} username={enemy.profiles?.username} size="md" />
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-sm">{enemy.profiles?.username}</p>
-                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                              {enemyLeagueName}
-                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{enemyLeagueName}</p>
                           </div>
                           <motion.button whileTap={{ scale: 0.9 }}
                             onClick={() => { setAttackTarget(enemy); setBattleResult(null); setShowAttackModal(true) }}
@@ -634,7 +632,6 @@ export default function ClanWar() {
                 </p>
               </div>
 
-              {/* Elegir tu liga */}
               <p className="text-sm font-bold mb-2">⚔️ Tu liga (atacante)</p>
               <div className="space-y-2 mb-4">
                 {myLeagues.filter(l => myRole[l.id] === 'owner' || myRole[l.id] === 'admin').map(league => (
@@ -653,7 +650,6 @@ export default function ClanWar() {
                 ))}
               </div>
 
-              {/* Elegir liga rival */}
               <p className="text-sm font-bold mb-2">🏴 Liga rival (defensor)</p>
               <div className="space-y-2 mb-6">
                 {allLeagues.filter(l => !myLeagues.find(ml => ml.id === l.id)).map(league => (
@@ -698,7 +694,6 @@ export default function ClanWar() {
               onClick={e => e.stopPropagation()}
               className="rounded-2xl p-6 w-full max-w-sm"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
-
               {!battleResult ? (
                 <>
                   <div className="text-center mb-5">
@@ -771,6 +766,42 @@ export default function ClanWar() {
                   </motion.button>
                 </>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal confirmar cancelación ── */}
+      <AnimatePresence>
+        {showCancelConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowCancelConfirm(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              className="rounded-2xl p-6 w-full max-w-sm"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-2">🚫</div>
+                <h2 className="text-xl font-bold">¿Cancelar la guerra?</h2>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
+                  Se retirará la declaración de guerra a <strong>{activeWar?.defender?.name}</strong>. Podrás declarar una nueva guerra cuando quieras.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowCancelConfirm(false)}
+                  className="flex-1 font-semibold py-3 rounded-xl"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+                  Volver
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleCancelWar} disabled={cancelling}
+                  className="flex-1 font-bold py-3 rounded-xl text-white disabled:opacity-50"
+                  style={{ backgroundColor: '#ef4444' }}>
+                  {cancelling ? 'Cancelando...' : 'Sí, cancelar'}
+                </motion.button>
+              </div>
             </motion.div>
           </motion.div>
         )}
