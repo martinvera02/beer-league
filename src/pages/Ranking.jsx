@@ -279,22 +279,23 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedLeague || sending) return
     setSending(true); soundMessage()
+    const content = newMessage.trim()
     const tempMsg = {
       id: `temp-${Date.now()}`,
       league_id: selectedLeague.id,
       user_id: user.id,
-      content: newMessage.trim(),
+      content,
       image_url: null,
       created_at: new Date().toISOString(),
       profiles: { username: 'Tú', avatar_url: null },
     }
     setMessages(prev => [...prev, tempMsg])
     setNewMessage('')
-    const { data } = await supabase.from('messages')
-      .insert({ league_id: selectedLeague.id, user_id: user.id, content: tempMsg.content })
-      .select('*, profiles(username, avatar_url)').single()
-    if (data) {
-      setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...data } : m))
+    const { error } = await supabase.from('messages')
+      .insert({ league_id: selectedLeague.id, user_id: user.id, content })
+    if (error) {
+      console.error('Error al enviar mensaje:', error)
+      setMessages(prev => prev.filter(m => m.id !== tempMsg.id))
     }
     setSending(false)
   }
