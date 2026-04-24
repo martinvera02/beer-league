@@ -178,7 +178,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchMessages = async (leagueId) => {
     const { data } = await supabase.from('messages')
       .select('*, profiles(username, avatar_url)')
-      .eq('league_id', leagueId).order('created_at', { ascending: true }).limit(100)
+      .eq('league_id', leagueId).order('created_at', { ascending: true }).limit(300)
     setMessages(data || [])
   }
 
