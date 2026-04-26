@@ -207,10 +207,11 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
 function JuicioTab({ leagueId, currentUserId, members }) {
   const [recentDrinks, setRecentDrinks] = useState([])
   const [disputes, setDisputes] = useState([])
-  const [myDisputes, setMyDisputes] = useState([]) // impugnaciones contra mí
+  const [myDisputes, setMyDisputes] = useState([])
   const [loading, setLoading] = useState(true)
   const [disputing, setDisputing] = useState(null)
   const [uploadingProof, setUploadingProof] = useState(null)
+  const [aiResult, setAiResult] = useState(null)
   const proofInputRef = useRef(null)
   const [activeProofDrinkId, setActiveProofDrinkId] = useState(null)
 
@@ -264,15 +265,60 @@ function JuicioTab({ leagueId, currentUserId, members }) {
   const handleUploadProof = async (e, drinkId) => {
     const file = e.target.files[0]; if (!file) return
     setUploadingProof(drinkId)
+    setAiResult(null)
+
+    // 1. Subir foto
     const ext = file.name.split('.').pop()
-    const path = `disputes/${currentUserId}/${drinkId}.${ext}`
-    const { error } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
-      await supabase.from('drinks').update({ proof_image_url: publicUrl, dispute_status: 'proven' }).eq('id', drinkId)
-      await supabase.from('drink_disputes').update({ status: 'proven', resolved_at: new Date().toISOString() }).eq('drink_id', drinkId).eq('status', 'pending')
+    const path = `disputes/${currentUserId}/${drinkId}_${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
+    if (uploadError) { soundError(); setUploadingProof(null); e.target.value = ''; return }
+
+    const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
+
+    // Guardar URL siempre, independiente del resultado
+    await supabase.from('drinks').update({ proof_image_url: publicUrl }).eq('id', drinkId)
+
+    // 2. Validar con IA
+    let aiValid = false
+    let aiReason = 'No se pudo analizar la imagen'
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'url', url: publicUrl } },
+              { type: 'text', text: 'Analiza esta imagen y determina si muestra una bebida (alcohólica o no alcohólica) de forma clara y verosímil, como en un bar, restaurante, en mano, o sobre una mesa en un contexto real de consumo. No es válida si parece imagen de internet, catálogo, producto en tienda sin contexto de consumo, o no se ve ninguna bebida. Responde ÚNICAMENTE con JSON sin texto adicional: {"valid": true, "reason": "explicación breve en español de máximo 20 palabras"}' }
+            ]
+          }]
+        })
+      })
+      const data = await response.json()
+      const text = data.content?.[0]?.text || ''
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
+      aiValid = parsed.valid === true
+      aiReason = parsed.reason || aiReason
+    } catch {
+      aiReason = 'Error al analizar — intenta de nuevo'
+    }
+
+    // 3. Actualizar según resultado
+    if (aiValid) {
+      await supabase.from('drinks').update({ dispute_status: 'proven' }).eq('id', drinkId)
+      await supabase.from('drink_disputes')
+        .update({ status: 'proven', resolved_at: new Date().toISOString() })
+        .eq('drink_id', drinkId).eq('status', 'pending')
       soundSuccess()
-    } else soundError()
+    } else {
+      soundError()
+      // No marcamos como forfeited — puede reintentar mientras no expire
+    }
+
+    setAiResult({ drinkId, valid: aiValid, reason: aiReason })
     setUploadingProof(null)
     e.target.value = ''
     fetchAll()
@@ -306,12 +352,44 @@ function JuicioTab({ leagueId, currentUserId, members }) {
 
   return (
     <div className="space-y-4">
+
+      {/* Resultado validación IA */}
+      <AnimatePresence>
+        {aiResult && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="rounded-2xl p-4"
+            style={{
+              backgroundColor: aiResult.valid ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+              border: `1px solid ${aiResult.valid ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            }}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <p className={`font-bold text-sm ${aiResult.valid ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {aiResult.valid ? '✅ Foto verificada por IA' : '❌ Foto rechazada por IA'}
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{aiResult.reason}</p>
+                {!aiResult.valid && (
+                  <p className="text-xs mt-1.5 font-medium" style={{ color: '#f59e0b' }}>
+                    Puedes intentarlo con otra foto mientras no expire el tiempo
+                  </p>
+                )}
+              </div>
+              <motion.button whileTap={{ scale: 0.9 }} onClick={() => setAiResult(null)}
+                className="text-xs px-2 py-1 rounded-lg flex-shrink-0"
+                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>✕</motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mis impugnaciones pendientes */}
       {myDisputes.length > 0 && (
         <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.3)' }}>
           <div className="px-4 pt-4 pb-2">
             <p className="font-bold text-red-400 flex items-center gap-2">⚠️ Tienes consumiciones impugnadas</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sube una foto como prueba antes de que expire el tiempo o perderás los puntos</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+              Sube una foto como prueba. La IA la analizará automáticamente. Tienes 3 horas o perderás los puntos.
+            </p>
           </div>
           {myDisputes.map(dispute => {
             const drink = recentDrinks.find(d => d.id === dispute.drink_id)
@@ -331,7 +409,7 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                     disabled={uploadingProof === drink?.id}
                     className="px-3 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
                     style={{ backgroundColor: '#ef4444' }}>
-                    {uploadingProof === drink?.id ? '⏳' : '📷 Prueba'}
+                    {uploadingProof === drink?.id ? '🤖 Analizando...' : '📷 Subir prueba'}
                   </motion.button>
                 </div>
               </div>
@@ -373,20 +451,17 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                   opacity: isForfeited ? 0.7 : 1,
                 }}>
                 <div className="flex items-center gap-3">
-                  {/* Avatar */}
                   <div className="relative flex-shrink-0">
                     {drink.profiles?.avatar_url
                       ? <img src={drink.profiles.avatar_url} className="w-9 h-9 rounded-full object-cover" alt="" />
                       : <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
                     <span className="absolute -bottom-1 -right-1 text-sm">{drink.drink_types?.emoji || '🍺'}</span>
                   </div>
-
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="font-bold text-sm truncate">{isMe ? 'Tú' : drink.profiles?.username}</p>
                       {isForfeited && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>❌ Anulada</span>}
-                      {isProven && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✓ Verificada</span>}
+                      {isProven && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✅ Verificada por IA</span>}
                       {isDisputed && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>⚠️ En revisión</span>}
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
@@ -406,8 +481,6 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                       </a>
                     )}
                   </div>
-
-                  {/* Acción */}
                   {!isMe && !alreadyDisputed && !isDisputed && !isForfeited && !isProven && (
                     <motion.button whileTap={{ scale: 0.9 }}
                       onClick={() => handleDispute(drink)}
@@ -970,17 +1043,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           <div className="rounded-2xl p-4 mb-4 flex items-start gap-3" style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
             <span className="text-2xl flex-shrink-0">⚖️</span>
             <div>
-              <p className="font-bold text-sm text-red-400">Sistema de verificación</p>
+              <p className="font-bold text-sm text-red-400">Sistema de verificación con IA</p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                Cualquier miembro puede impugnar una consumición ajena. El acusado tiene 3 horas para subir una foto como prueba. Si no lo hace, pierde los puntos.
+                Cualquier miembro puede impugnar una consumición. El acusado tiene 3 horas para subir una foto. La IA la analiza automáticamente y decide si es válida. Puedes reintentar con otra foto si la primera es rechazada.
               </p>
             </div>
           </div>
-          <JuicioTab
-            leagueId={selectedLeague.id}
-            currentUserId={user.id}
-            members={members}
-          />
+          <JuicioTab leagueId={selectedLeague.id} currentUserId={user.id} members={members} />
         </div>
       )}
 
