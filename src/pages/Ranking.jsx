@@ -115,7 +115,6 @@ function PollCard({ poll, userId }) {
 function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
   const [question, setQuestion] = useState('')
   const [options, setOptions] = useState(['', ''])
-  const [closesAt, setClosesAt] = useState('')
   const [creating, setCreating] = useState(false)
 
   const addOption = () => { if (options.length < 4) setOptions([...options, '']) }
@@ -128,7 +127,8 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
     setCreating(true)
     const { data: poll, error } = await supabase.from('polls').insert({
       created_by: userId, question: question.trim(),
-      league_id: leagueId, closes_at: closesAt ? new Date(closesAt).toISOString() : null,
+      league_id: leagueId,
+      closes_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     }).select().single()
     if (!error && poll) {
       await supabase.from('poll_options').insert(validOptions.map((text, i) => ({ poll_id: poll.id, text: text.trim(), position: i })))
@@ -191,11 +191,11 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
               </motion.button>
             )}
           </div>
-          <div>
-            <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Fecha de cierre (opcional)</p>
-            <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
-              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', colorScheme: 'dark' }} />
+          {/* Duración fija 24h */}
+          <div className="rounded-xl px-4 py-3 flex items-center gap-2"
+            style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <span className="text-sm">⏱</span>
+            <p className="text-xs" style={{ color: '#818cf8' }}>La encuesta cierra automáticamente a las 24 horas</p>
           </div>
         </div>
       </motion.div>
@@ -629,7 +629,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   }
 
   const fetchPolls = async (leagueId) => {
-    const { data } = await supabase.from('polls').select('*, profiles(username, avatar_url)').eq('league_id', leagueId).order('created_at', { ascending: false })
+    const { data } = await supabase.from('polls').select('*, profiles(username, avatar_url), created_by').eq('league_id', leagueId).order('created_at', { ascending: false })
     setPolls(data || [])
   }
 
@@ -1031,7 +1031,22 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </div>
           ) : (
             <div className="space-y-4">
-              {polls.map(poll => <PollCard key={poll.id} poll={poll} userId={user.id} />)}
+              {polls.map(poll => (
+                <div key={poll.id} className="relative">
+                  <PollCard poll={poll} userId={user.id} />
+                  {poll.created_by === user.id && (
+                    <motion.button whileTap={{ scale: 0.9 }}
+                      onClick={async () => {
+                        await supabase.from('polls').delete().eq('id', poll.id)
+                        fetchPolls(selectedLeague.id)
+                      }}
+                      className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-xs z-10"
+                      style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+                      🗑️
+                    </motion.button>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

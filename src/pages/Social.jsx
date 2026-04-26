@@ -41,7 +41,7 @@ const ACHIEVEMENTS = [
 ]
 
 // ─── COMPONENTE ENCUESTA ──────────────────────────────────────────────────────
-function PollCard({ poll, currentUserId }) {
+function PollCard({ poll, currentUserId, onDelete }) {
   const [votes, setVotes] = useState([])
   const [myVote, setMyVote] = useState(null)
   const [voting, setVoting] = useState(false)
@@ -60,9 +60,7 @@ function PollCard({ poll, currentUserId }) {
   }
 
   const handleVote = async (optionId) => {
-    if (voting) return
-    const isClosed = poll.closes_at && new Date(poll.closes_at) < new Date()
-    if (isClosed) return
+    if (voting || isClosed) return
     setVoting(true)
     if (myVote) await supabase.from('poll_votes').delete().eq('poll_id', poll.id).eq('user_id', currentUserId)
     if (myVote !== optionId) {
@@ -75,6 +73,7 @@ function PollCard({ poll, currentUserId }) {
 
   const totalVotes = votes.length
   const isClosed = poll.closes_at && new Date(poll.closes_at) < new Date()
+  const isOwner = poll.created_by === currentUserId
 
   const formatCloses = (ts) => {
     if (!ts) return null
@@ -92,16 +91,23 @@ function PollCard({ poll, currentUserId }) {
     <div className="rounded-2xl p-4 w-full"
       style={{ backgroundColor: 'var(--bg-input)', border: '1px solid rgba(245,158,11,0.2)' }}>
       <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">📊</span>
-          <p className="font-bold text-sm">{poll.question}</p>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-lg flex-shrink-0">📊</span>
+          <p className="font-bold text-sm truncate">{poll.question}</p>
         </div>
-        {poll.closes_at && (
-          <span className="text-xs flex-shrink-0 px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: isClosed ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', color: isClosed ? '#ef4444' : '#f59e0b' }}>
-            {formatCloses(poll.closes_at)}
-          </span>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {poll.closes_at && (
+            <span className="text-xs px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: isClosed ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', color: isClosed ? '#ef4444' : '#f59e0b' }}>
+              {formatCloses(poll.closes_at)}
+            </span>
+          )}
+          {isOwner && onDelete && (
+            <motion.button whileTap={{ scale: 0.9 }} onClick={() => onDelete(poll.id)}
+              className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+              style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>🗑️</motion.button>
+          )}
+        </div>
       </div>
       <div className="space-y-2">
         {options.map(opt => {
@@ -170,8 +176,10 @@ function PollCard({ poll, currentUserId }) {
 function CreatePollModal({ onClose, onCreated, leagueId, currentUserId }) {
   const [question, setQuestion] = useState('')
   const [options, setOptions] = useState(['', ''])
-  const [closesAt, setClosesAt] = useState('')
   const [creating, setCreating] = useState(false)
+
+  // Cierre automático a 24h desde ahora
+  const closes24h = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
   const addOption = () => { if (options.length < 4) setOptions([...options, '']) }
   const removeOption = (i) => { if (options.length > 2) setOptions(options.filter((_, idx) => idx !== i)) }
@@ -182,8 +190,9 @@ function CreatePollModal({ onClose, onCreated, leagueId, currentUserId }) {
     if (!canCreate) return
     setCreating(true)
     const { data: poll, error } = await supabase.from('polls').insert({
-      created_by: currentUserId, question: question.trim(),
-      closes_at: closesAt ? new Date(closesAt).toISOString() : null,
+      created_by: currentUserId,
+      question: question.trim(),
+      closes_at: closes24h,
       league_id: leagueId || null,
     }).select().single()
     if (error || !poll) { setCreating(false); return }
@@ -246,11 +255,11 @@ function CreatePollModal({ onClose, onCreated, leagueId, currentUserId }) {
               </motion.button>
             )}
           </div>
-          <div>
-            <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-muted)' }}>Fecha de cierre (opcional)</p>
-            <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
-              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500"
-              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+          {/* Info duración fija */}
+          <div className="rounded-xl px-4 py-3 flex items-center gap-2"
+            style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <span className="text-sm">⏱</span>
+            <p className="text-xs" style={{ color: '#f59e0b' }}>La encuesta cierra automáticamente a las 24 horas</p>
           </div>
         </div>
       </motion.div>
@@ -389,8 +398,7 @@ function PrivateChat({ chat, otherUser, onClose }) {
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="px-4 py-3 pb-10 border-t flex-shrink-0"
-        style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-base)' }}>
+      <div className="px-4 py-3 pb-10 border-t flex-shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-base)' }}>
         <div className="flex gap-2 items-end">
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}
             className="p-3 rounded-2xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
@@ -630,8 +638,6 @@ export default function Social() {
   const [totalUnread, setTotalUnread] = useState(0)
   const [viewingProfile, setViewingProfile] = useState(null)
   const [activeChat, setActiveChat] = useState(null)
-
-  // Encuestas
   const [polls, setPolls] = useState({})
   const [showCreatePoll, setShowCreatePoll] = useState(false)
 
@@ -703,7 +709,6 @@ export default function Social() {
     setPosts(postsData || [])
     setStories(storiesData || [])
 
-    // Cargar encuestas referenciadas en posts
     const pollIds = [...new Set((postsData || []).filter(p => p.poll_id).map(p => p.poll_id))]
     if (pollIds.length > 0) {
       const { data: pollsData } = await supabase.from('polls').select('*, poll_options(*)').in('id', pollIds)
@@ -711,7 +716,6 @@ export default function Social() {
       pollsData?.forEach(p => { pollsMap[p.id] = p })
       setPolls(pollsMap)
     }
-
     setLoading(false)
   }
 
@@ -786,11 +790,17 @@ export default function Social() {
     closeNewPost(); setUploadingPost(false); fetchFeed()
   }
 
-  // Crear encuesta en el feed
   const handleFeedPollCreated = async (pollId) => {
     setShowCreatePoll(false); soundSuccess()
     await supabase.from('posts').insert({ user_id: user.id, content: '', poll_id: pollId })
     await fetchPoll(pollId)
+    fetchFeed()
+  }
+
+  // Eliminar encuesta propia del feed
+  const handleDeletePoll = async (pollId) => {
+    await supabase.from('polls').delete().eq('id', pollId)
+    setPolls(prev => { const next = { ...prev }; delete next[pollId]; return next })
     fetchFeed()
   }
 
@@ -872,8 +882,7 @@ export default function Social() {
   ]
 
   return (
-    <div className="min-h-screen pb-24 transition-colors duration-300"
-      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
@@ -956,10 +965,13 @@ export default function Social() {
                       {post.content && <p className="px-4 pb-3 text-sm leading-relaxed">{post.content}</p>}
                       {post.image_url && <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />}
 
-                      {/* Encuesta en el post */}
                       {post.poll_id && polls[post.poll_id] && (
                         <div className="px-4 pb-3">
-                          <PollCard poll={polls[post.poll_id]} currentUserId={user.id} />
+                          <PollCard
+                            poll={polls[post.poll_id]}
+                            currentUserId={user.id}
+                            onDelete={isMe ? handleDeletePoll : null}
+                          />
                         </div>
                       )}
 
@@ -1172,7 +1184,6 @@ export default function Social() {
                   </svg>
                 </motion.button>
                 <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
-                {/* Botón encuesta */}
                 <motion.button whileTap={{ scale: 0.9 }} onClick={() => { closeNewPost(); setShowCreatePoll(true) }} style={{ color: '#f59e0b' }}>
                   <span className="text-xl">📊</span>
                 </motion.button>
