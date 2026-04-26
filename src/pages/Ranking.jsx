@@ -203,6 +203,233 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
   )
 }
 
+// ─── PESTAÑA JUICIO ───────────────────────────────────────────────────────────
+function JuicioTab({ leagueId, currentUserId, members }) {
+  const [recentDrinks, setRecentDrinks] = useState([])
+  const [disputes, setDisputes] = useState([])
+  const [myDisputes, setMyDisputes] = useState([]) // impugnaciones contra mí
+  const [loading, setLoading] = useState(true)
+  const [disputing, setDisputing] = useState(null)
+  const [uploadingProof, setUploadingProof] = useState(null)
+  const proofInputRef = useRef(null)
+  const [activeProofDrinkId, setActiveProofDrinkId] = useState(null)
+
+  useEffect(() => { fetchAll() }, [leagueId])
+
+  const fetchAll = async () => {
+    setLoading(true)
+    await supabase.rpc('resolve_expired_disputes')
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    const [{ data: drinksData }, { data: disputesData }] = await Promise.all([
+      supabase.from('drinks')
+        .select('*, profiles(username, avatar_url), drink_types(name, emoji)')
+        .eq('league_id', leagueId)
+        .gte('consumed_at', since)
+        .eq('is_adjustment', false)
+        .order('consumed_at', { ascending: false })
+        .limit(50),
+      supabase.from('drink_disputes')
+        .select('*, disputed_by_profile:profiles!drink_disputes_disputed_by_fkey(username, avatar_url)')
+        .eq('league_id', leagueId)
+        .order('created_at', { ascending: false }),
+    ])
+
+    setRecentDrinks(drinksData || [])
+    setDisputes(disputesData || [])
+    setMyDisputes((disputesData || []).filter(d => {
+      const drink = (drinksData || []).find(dr => dr.id === d.drink_id)
+      return drink?.user_id === currentUserId && d.status === 'pending'
+    }))
+    setLoading(false)
+  }
+
+  const handleDispute = async (drink) => {
+    if (disputing) return
+    setDisputing(drink.id)
+    const { error } = await supabase.from('drink_disputes').insert({
+      drink_id: drink.id,
+      league_id: leagueId,
+      disputed_by: currentUserId,
+    })
+    if (!error) {
+      await supabase.from('drinks').update({ dispute_status: 'disputed' }).eq('id', drink.id)
+      soundSuccess()
+    } else soundError()
+    setDisputing(null)
+    fetchAll()
+  }
+
+  const handleUploadProof = async (e, drinkId) => {
+    const file = e.target.files[0]; if (!file) return
+    setUploadingProof(drinkId)
+    const ext = file.name.split('.').pop()
+    const path = `disputes/${currentUserId}/${drinkId}.${ext}`
+    const { error } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
+      await supabase.from('drinks').update({ proof_image_url: publicUrl, dispute_status: 'proven' }).eq('id', drinkId)
+      await supabase.from('drink_disputes').update({ status: 'proven', resolved_at: new Date().toISOString() }).eq('drink_id', drinkId).eq('status', 'pending')
+      soundSuccess()
+    } else soundError()
+    setUploadingProof(null)
+    e.target.value = ''
+    fetchAll()
+  }
+
+  const getDisputeForDrink = (drinkId) => disputes.find(d => d.drink_id === drinkId)
+  const hasDisputed = (drinkId) => disputes.some(d => d.drink_id === drinkId && d.disputed_by === currentUserId)
+
+  const formatTimeLeft = (expiresAt) => {
+    const diff = new Date(expiresAt) - new Date()
+    if (diff <= 0) return 'Expirado'
+    const h = Math.floor(diff / 3600000)
+    const m = Math.floor((diff % 3600000) / 60000)
+    return `${h}h ${m}m`
+  }
+
+  const formatAgo = (ts) => {
+    const diff = Date.now() - new Date(ts).getTime()
+    const m = Math.floor(diff / 60000), h = Math.floor(m / 60)
+    if (h > 0) return `hace ${h}h`
+    if (m > 0) return `hace ${m}m`
+    return 'ahora'
+  }
+
+  if (loading) return (
+    <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">⚖️</motion.div>
+      <p className="text-sm">Cargando...</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* Mis impugnaciones pendientes */}
+      {myDisputes.length > 0 && (
+        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.3)' }}>
+          <div className="px-4 pt-4 pb-2">
+            <p className="font-bold text-red-400 flex items-center gap-2">⚠️ Tienes consumiciones impugnadas</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sube una foto como prueba antes de que expire el tiempo o perderás los puntos</p>
+          </div>
+          {myDisputes.map(dispute => {
+            const drink = recentDrinks.find(d => d.id === dispute.drink_id)
+            return (
+              <div key={dispute.id} className="px-4 pb-4 pt-2">
+                <div className="rounded-xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <span className="text-2xl">{drink?.drink_types?.emoji || '🍺'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{drink?.drink_types?.name || 'Consumición'}</p>
+                    <p className="text-xs" style={{ color: '#ef4444' }}>⏱ {formatTimeLeft(dispute.expires_at)} para responder</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                      Impugnada por {dispute.disputed_by_profile?.username}
+                    </p>
+                  </div>
+                  <motion.button whileTap={{ scale: 0.95 }}
+                    onClick={() => { setActiveProofDrinkId(drink?.id); proofInputRef.current?.click() }}
+                    disabled={uploadingProof === drink?.id}
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
+                    style={{ backgroundColor: '#ef4444' }}>
+                    {uploadingProof === drink?.id ? '⏳' : '📷 Prueba'}
+                  </motion.button>
+                </div>
+              </div>
+            )
+          })}
+          <input ref={proofInputRef} type="file" accept="image/*"
+            onChange={e => activeProofDrinkId && handleUploadProof(e, activeProofDrinkId)}
+            className="hidden" />
+        </div>
+      )}
+
+      {/* Consumiciones recientes */}
+      <p className="text-sm font-bold" style={{ color: 'var(--text-muted)' }}>Últimas 24h · {recentDrinks.length} consumiciones</p>
+
+      {recentDrinks.length === 0 ? (
+        <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+          <div className="text-4xl mb-2">🍺</div>
+          <p className="text-sm">Sin consumiciones recientes</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {recentDrinks.map(drink => {
+            const isMe = drink.user_id === currentUserId
+            const dispute = getDisputeForDrink(drink.id)
+            const alreadyDisputed = hasDisputed(drink.id)
+            const isForfeited = drink.dispute_status === 'forfeited'
+            const isProven = drink.dispute_status === 'proven'
+            const isDisputed = drink.dispute_status === 'disputed'
+
+            return (
+              <motion.div key={drink.id} variants={staggerItem} initial="initial" animate="animate"
+                className="rounded-2xl p-3"
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: isForfeited ? '1px solid rgba(239,68,68,0.4)' :
+                    isProven ? '1px solid rgba(16,185,129,0.3)' :
+                    isDisputed ? '1px solid rgba(245,158,11,0.3)' :
+                    '1px solid transparent',
+                  opacity: isForfeited ? 0.7 : 1,
+                }}>
+                <div className="flex items-center gap-3">
+                  {/* Avatar */}
+                  <div className="relative flex-shrink-0">
+                    {drink.profiles?.avatar_url
+                      ? <img src={drink.profiles.avatar_url} className="w-9 h-9 rounded-full object-cover" alt="" />
+                      : <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                    <span className="absolute -bottom-1 -right-1 text-sm">{drink.drink_types?.emoji || '🍺'}</span>
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-bold text-sm truncate">{isMe ? 'Tú' : drink.profiles?.username}</p>
+                      {isForfeited && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>❌ Anulada</span>}
+                      {isProven && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✓ Verificada</span>}
+                      {isDisputed && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>⚠️ En revisión</span>}
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                      {drink.drink_types?.name} · {isForfeited ? <span style={{ color: '#ef4444' }}>0 pts</span> : `${drink.points} pts`} · {formatAgo(drink.consumed_at)}
+                    </p>
+                    {dispute && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                        Impugnada por {dispute.disputed_by_profile?.username}
+                        {dispute.status === 'pending' && ` · expira en ${formatTimeLeft(dispute.expires_at)}`}
+                      </p>
+                    )}
+                    {drink.proof_image_url && (
+                      <a href={drink.proof_image_url} target="_blank" rel="noreferrer"
+                        className="text-xs font-medium mt-1 inline-flex items-center gap-1"
+                        style={{ color: '#10b981' }}>
+                        📷 Ver prueba
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Acción */}
+                  {!isMe && !alreadyDisputed && !isDisputed && !isForfeited && !isProven && (
+                    <motion.button whileTap={{ scale: 0.9 }}
+                      onClick={() => handleDispute(drink)}
+                      disabled={disputing === drink.id}
+                      className="px-3 py-2 rounded-xl text-xs font-bold flex-shrink-0"
+                      style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      {disputing === drink.id ? '...' : '⚖️ Impugnar'}
+                    </motion.button>
+                  )}
+                  {alreadyDisputed && !isMe && (
+                    <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>Impugnada ✓</span>
+                  )}
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const { user } = useAuth()
   const [leagues, setLeagues] = useState([])
@@ -267,7 +494,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
           soundMessageReceived()
           if (tab !== 'chat') setUnreadByLeague(prev => ({ ...prev, [selectedLeague.id]: (prev[selectedLeague.id] || 0) + 1 }))
-          // Si trae poll_id, refrescar encuestas
           if (payload.new.poll_id) fetchPolls(selectedLeague.id)
           setMessages(prev => [...prev, { ...payload.new, profiles: { username: profile?.username || 'Desconocido', avatar_url: profile?.avatar_url } }])
         })
@@ -413,15 +639,11 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setSending(false)
   }
 
-  // Inserta un mensaje con poll_id en el chat
   const sendPollMessage = async (pollId) => {
     const { data } = await supabase.from('messages')
       .insert({ league_id: selectedLeague.id, user_id: user.id, content: '', poll_id: pollId })
       .select('*, profiles(username, avatar_url)').single()
-    if (data) {
-      await fetchPolls(selectedLeague.id)
-      setMessages(prev => [...prev, data])
-    }
+    if (data) { await fetchPolls(selectedLeague.id); setMessages(prev => [...prev, data]) }
   }
 
   const handleImageUpload = async (e) => {
@@ -503,6 +725,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     { id: 'transfers', label: '💸 Enviar' },
     { id: 'chat', label: '💬 Chat', unread: currentUnread },
     { id: 'polls', label: '📊 Encuestas' },
+    { id: 'juicio', label: '⚖️ Juicio' },
     ...(canManage ? [{ id: 'admin', label: '👑 Admin' }] : []),
   ]
 
@@ -561,7 +784,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <button key={t.id} onClick={() => setTab(t.id)}
                 className="relative flex-shrink-0 px-3 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
                 style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-                {tab === t.id && <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : t.id === 'polls' ? '#6366f1' : '#f59e0b' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
+                {tab === t.id && <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : t.id === 'polls' ? '#6366f1' : t.id === 'juicio' ? '#dc2626' : '#f59e0b' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
                 <span>{t.label}</span>
                 {t.unread > 0 && <UnreadBadge count={t.unread} />}
               </button>
@@ -719,7 +942,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         </div>
       )}
 
-      {/* ── ENCUESTAS (pestaña independiente) ── */}
+      {/* ── ENCUESTAS ── */}
       {tab === 'polls' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
           <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCreatePoll(true)}
@@ -738,6 +961,26 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               {polls.map(poll => <PollCard key={poll.id} poll={poll} userId={user.id} />)}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── JUICIO ── */}
+      {tab === 'juicio' && selectedLeague && (
+        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+          <div className="rounded-2xl p-4 mb-4 flex items-start gap-3" style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
+            <span className="text-2xl flex-shrink-0">⚖️</span>
+            <div>
+              <p className="font-bold text-sm text-red-400">Sistema de verificación</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
+                Cualquier miembro puede impugnar una consumición ajena. El acusado tiene 3 horas para subir una foto como prueba. Si no lo hace, pierde los puntos.
+              </p>
+            </div>
+          </div>
+          <JuicioTab
+            leagueId={selectedLeague.id}
+            currentUserId={user.id}
+            members={members}
+          />
         </div>
       )}
 
@@ -811,7 +1054,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                     const isMe = msg.user_id === user.id
                     const isSameUser = msgs[index - 1]?.user_id === msg.user_id
 
-                    // ── Mensaje con encuesta integrada en el flujo del chat ──
                     if (msg.poll_id) {
                       const poll = polls.find(p => p.id === msg.poll_id)
                       if (!poll) return null
@@ -825,9 +1067,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                             </div>
                           )}
                           <div className={`flex flex-col w-64 ${isMe ? 'items-end' : 'items-start'}`}>
-                            {!isMe && !isSameUser && (
-                              <span className="text-xs text-amber-400 font-medium mb-1 ml-1">{msg.profiles?.username}</span>
-                            )}
+                            {!isMe && !isSameUser && <span className="text-xs text-amber-400 font-medium mb-1 ml-1">{msg.profiles?.username}</span>}
                             <PollCard poll={poll} userId={user.id} />
                             <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>{formatTime(msg.created_at)}</span>
                           </div>
@@ -872,22 +1112,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         {lightboxUrl && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4" onClick={() => setLightboxUrl(null)}><motion.img initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }} src={lightboxUrl} alt="Imagen ampliada" className="max-w-full max-h-full rounded-2xl object-contain" /></motion.div>}
       </AnimatePresence>
 
-      {/* Modal crear encuesta — al crearse envía mensaje al chat */}
       <AnimatePresence>
         {showCreatePoll && (
-          <CreatePollModal
-            leagueId={selectedLeague?.id}
-            userId={user.id}
-            onClose={() => setShowCreatePoll(false)}
-            onCreated={(pollId) => {
-              fetchPolls(selectedLeague?.id)
-              if (tab === 'chat') sendPollMessage(pollId)
-            }}
-          />
+          <CreatePollModal leagueId={selectedLeague?.id} userId={user.id} onClose={() => setShowCreatePoll(false)}
+            onCreated={(pollId) => { fetchPolls(selectedLeague?.id); if (tab === 'chat') sendPollMessage(pollId) }} />
         )}
       </AnimatePresence>
 
-      {/* Modales */}
       <AnimatePresence>
         {showResetConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowResetConfirm(false)}>
