@@ -522,10 +522,16 @@ export default function ClanWar() {
                       <p className="text-sm font-bold">⚡ Eventos activos</p>
                       {lastEventCheck > 12 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>Auto-generado</span>}
                     </div>
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={handleGenerateEvent} disabled={generatingEvent || events.length >= 3}
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={handleGenerateEvent}
+                      disabled={generatingEvent || events.length >= 3}
                       className="text-xs px-3 py-1.5 rounded-xl font-bold"
-                      style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}>
-                      {generatingEvent ? '...' : '🎲 Generar'}
+                      style={{
+                        backgroundColor: events.length >= 3 ? 'var(--bg-input)' : 'rgba(245,158,11,0.12)',
+                        color: events.length >= 3 ? 'var(--text-hint)' : '#f59e0b',
+                        border: `1px solid ${events.length >= 3 ? 'transparent' : 'rgba(245,158,11,0.2)'}`,
+                        opacity: events.length >= 3 ? 0.5 : 1,
+                      }}>
+                      {generatingEvent ? '...' : events.length >= 3 ? '🔒 Lleno' : '🎲 Generar'}
                     </motion.button>
                   </div>
                   {events.length === 0 ? (
