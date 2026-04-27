@@ -196,7 +196,11 @@ export default function ClanWar() {
         .gte('ends_at', since48h)
         .order('ends_at', { ascending: false }).limit(1).maybeSingle()
 
-      setFinishedWar(finishedData || null)
+        const seenWarId = localStorage.getItem('beer_league_seen_war')
+        const unseenFinished = (finishedData && String(finishedData.id) !== seenWarId)
+          ? finishedData
+          : null
+        setFinishedWar(unseenFinished)
 
       if (warData) {
         // Auto-cerrar si ends_at ya pasó
@@ -371,7 +375,10 @@ export default function ClanWar() {
       <WarResult
         war={finishedWar}
         myLeagueId={myLeagueIdForResult}
-        onDismiss={() => { setFinishedWar(null) }}
+        onDismiss={() => {
+          localStorage.setItem('beer_league_seen_war', String(finishedWar.id))
+          setFinishedWar(null)
+        }}
       />
     )
   }
