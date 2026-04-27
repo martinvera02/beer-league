@@ -941,6 +941,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [creating, setCreating] = useState(false)
   const [polls, setPolls] = useState([])
   const [showCreatePoll, setShowCreatePoll] = useState(false)
+  const [trophies, setTrophies] = useState([])
+  const [loadingTrophies, setLoadingTrophies] = useState(false)
 
   const bottomRef = useRef(null)
   const imageInputRef = useRef(null)
@@ -953,6 +955,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     fetchMembers(selectedLeague.id)
     fetchMessages(selectedLeague.id)
     fetchPolls(selectedLeague.id)
+    fetchTrophies(selectedLeague.id)
     setNewLeagueName(selectedLeague.name)
 
     const channel = supabase.channel(`chat:${selectedLeague.id}`)
@@ -1026,6 +1029,18 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchPolls = async (leagueId) => {
     const { data } = await supabase.from('polls').select('*, profiles(username, avatar_url), created_by').eq('league_id', leagueId).order('created_at', { ascending: false })
     setPolls(data || [])
+  }
+
+  const fetchTrophies = async (leagueId) => {
+    setLoadingTrophies(true)
+    const { data } = await supabase
+      .from('season_trophies')
+      .select('*, profiles(username, avatar_url), seasons(started_at, ends_at)')
+      .eq('league_id', leagueId)
+      .order('created_at', { ascending: false })
+      .limit(30)
+    setTrophies(data || [])
+    setLoadingTrophies(false)
   }
 
   const fetchTransfers = async (leagueId) => {
@@ -1154,6 +1169,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     { id: 'chat', label: '💬 Chat', unread: currentUnread },
     { id: 'polls', label: '📊 Encuestas' },
     { id: 'juicio', label: '⚖️ Juicio' },
+    { id: 'trophies', label: '🏅 Trofeos' },
     ...(canManage ? [{ id: 'admin', label: '👑 Admin' }] : []),
   ]
 
@@ -1212,7 +1228,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <button key={t.id} onClick={() => setTab(t.id)}
                 className="relative flex-shrink-0 px-3 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
                 style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-                {tab === t.id && <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : t.id === 'polls' ? '#6366f1' : t.id === 'juicio' ? '#dc2626' : '#f59e0b' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
+                {tab === t.id && <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : t.id === 'polls' ? '#6366f1' : t.id === 'juicio' ? '#dc2626' : t.id === 'trophies' ? '#f59e0b' : '#f59e0b' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
                 <span>{t.label}</span>
                 {t.unread > 0 && <UnreadBadge count={t.unread} />}
               </button>
@@ -1418,6 +1434,87 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </div>
           </div>
           <JuicioTab leagueId={selectedLeague.id} currentUserId={user.id} members={members} />
+        </div>
+      )}
+
+      {/* ── TROFEOS ── */}
+      {tab === 'trophies' && selectedLeague && (
+        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+          {loadingTrophies ? (
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-4xl mb-2">🏅</motion.div>
+              <p className="text-sm">Cargando trofeos...</p>
+            </div>
+          ) : trophies.length === 0 ? (
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <div className="text-5xl mb-3">🏅</div>
+              <p className="font-bold">Sin trofeos todavía</p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Al terminar cada temporada se reparten premios al top 3</p>
+              <div className="mt-6 space-y-2 max-w-xs mx-auto">
+                {[
+                  { pos: '🥇', label: '1er puesto', coins: '500🪙' },
+                  { pos: '🥈', label: '2do puesto', coins: '300🪙' },
+                  { pos: '🥉', label: '3er puesto', coins: '100🪙' },
+                ].map(p => (
+                  <div key={p.pos} className="rounded-2xl p-3 flex items-center justify-between" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{p.pos}</span>
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{p.label}</span>
+                    </div>
+                    <span className="font-bold text-amber-400">{p.coins}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(
+                trophies.reduce((acc, t) => {
+                  const key = t.season_id
+                  if (!acc[key]) acc[key] = { season: t.seasons, entries: [] }
+                  acc[key].entries.push(t)
+                  return acc
+                }, {})
+              ).map(([seasonId, { season, entries }]) => (
+                <div key={seasonId}>
+                  <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>
+                    📅 Temporada · {season?.started_at ? new Date(season.started_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : `#${seasonId}`}
+                  </p>
+                  <div className="space-y-2">
+                    {entries.sort((a, b) => a.position - b.position).map(trophy => (
+                      <motion.div key={trophy.id} variants={staggerItem} initial="initial" animate="animate"
+                        className="rounded-2xl p-4 flex items-center gap-3"
+                        style={{
+                          backgroundColor: 'var(--bg-card)',
+                          border: trophy.position === 1
+                            ? '2px solid rgba(245,158,11,0.5)'
+                            : trophy.position === 2
+                              ? '2px solid rgba(156,163,175,0.4)'
+                              : '2px solid rgba(180,83,9,0.35)',
+                        }}>
+                        <span className="text-3xl flex-shrink-0">
+                          {trophy.position === 1 ? '🥇' : trophy.position === 2 ? '🥈' : '🥉'}
+                        </span>
+                        <div className="w-10 h-10 flex-shrink-0">
+                          <Avatar url={trophy.profiles?.avatar_url} username={trophy.profiles?.username} size="md" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{trophy.profiles?.username}</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                            {Math.round(trophy.total_points)} pts totales
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-bold text-amber-400">+{trophy.coins_awarded}🪙</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>premio</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

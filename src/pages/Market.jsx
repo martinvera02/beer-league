@@ -221,9 +221,26 @@ export default function Market() {
   const [repaying, setRepaying] = useState(false)
   const [loanResult, setLoanResult] = useState(null)
   const [loanHistory, setLoanHistory] = useState([])
+  const [nextTick, setNextTick] = useState('')
 
   useEffect(() => { fetchAll() }, [])
   useEffect(() => { if (selectedLeague) fetchLeagueMembers(selectedLeague.id) }, [selectedLeague])
+
+  // ── Countdown próxima actualización de mercado (cada hora en punto) ──
+  useEffect(() => {
+    const update = () => {
+      const now = new Date()
+      const next = new Date(now)
+      next.setHours(next.getHours() + 1, 0, 0, 0)
+      const diff = next - now
+      const m = Math.floor(diff / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setNextTick(`${m}m ${s < 10 ? '0' : ''}${s}s`)
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const isMarketOpen = () => {
     const now = new Date()
@@ -537,6 +554,11 @@ export default function Market() {
                 {marketOpen ? 'Abierto · cierra a las 02:00h 🌙' : 'Cerrado · abre a las 22:00h'}
               </p>
             </div>
+            {nextTick && (
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
+                ⏱ Próxima actualización en {nextTick}
+              </p>
+            )}
           </div>
           <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 0.3 }} key={balance}
             className="flex items-center gap-2 px-4 py-2 rounded-2xl"
