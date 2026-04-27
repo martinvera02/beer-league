@@ -108,7 +108,6 @@ export default function ClanWar() {
             setEnemyMissions(eMissions || [])
           } else { setEnemyMissions([]) }
 
-          // Auto-generar evento si llevan más de 12h sin uno
           const { data: lastEvent } = await supabase.from('war_events').select('created_at').eq('war_id', warData.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
           const hoursSinceEvent = lastEvent ? (Date.now() - new Date(lastEvent.created_at).getTime()) / 3600000 : 99
           setLastEventCheck(hoursSinceEvent)
@@ -153,7 +152,6 @@ export default function ClanWar() {
     ]
     await supabase.from('clan_war_participants').upsert(allParticipants, { onConflict: 'war_id,user_id' })
     await supabase.rpc('generate_war_missions', { p_war_id: activeWar.id, p_challenger_id: activeWar.challenger_league_id, p_defender_id: activeWar.defender_league_id })
-    // Primer evento al arrancar
     await supabase.rpc('generate_war_event', { p_war_id: activeWar.id, p_challenger_id: activeWar.challenger_league_id, p_defender_id: activeWar.defender_league_id })
     soundSuccess(); showMsg(true, '⚔️ ¡Guerra iniciada! Elige tu rol para empezar.')
     setAccepting(false); await fetchData(); setShowRoleModal(true)
@@ -180,7 +178,7 @@ export default function ClanWar() {
   }
 
   const handleGenerateEvent = async () => {
-    if (!activeWar || generatingEvent) return
+    if (!activeWar || generatingEvent || events.length >= 3) return
     setGeneratingEvent(true)
     const { data, error } = await supabase.rpc('generate_war_event', { p_war_id: activeWar.id, p_challenger_id: activeWar.challenger_league_id, p_defender_id: activeWar.defender_league_id })
     if (error) { soundError(); showMsg(false, 'Error al generar evento') }
@@ -217,7 +215,6 @@ export default function ClanWar() {
   const today = activeWar?.started_at ? Math.min(3, Math.floor((Date.now() - new Date(activeWar.started_at).getTime()) / 86400000) + 1) : 1
   const hoursToNextDay = activeWar?.started_at ? 24 - ((Date.now() - new Date(activeWar.started_at).getTime()) / 3600000) % 24 : 0
 
-  // Resumen de roles por equipo
   const myTeam = participants.filter(p => p.league_id === myLeagueId)
   const enemyTeam = participants.filter(p => p.league_id !== myLeagueId)
   const roleCount = (team) => {
@@ -350,7 +347,6 @@ export default function ClanWar() {
                     {activeWar.status === 'pending' ? '⏳ Pendiente' : '⚔️ En curso'}
                   </span>
                 </div>
-
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex-1 text-center">
                     <p className="font-black text-sm truncate mb-1">{myLeagueName || activeWar.challenger?.name}</p>
@@ -372,16 +368,11 @@ export default function ClanWar() {
                     )}
                   </div>
                 </div>
-
                 {activeWar.status === 'active' && myTotalPoints + enemyTotalPoints > 0 && (
                   <div>
                     <div className="w-full h-3 rounded-full overflow-hidden flex" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <motion.div className="h-full bg-red-500"
-                        animate={{ width: `${(myTotalPoints / (myTotalPoints + enemyTotalPoints)) * 100}%` }}
-                        transition={{ duration: 0.8, type: 'spring' }} />
-                      <motion.div className="h-full bg-indigo-500"
-                        animate={{ width: `${(enemyTotalPoints / (myTotalPoints + enemyTotalPoints)) * 100}%` }}
-                        transition={{ duration: 0.8, type: 'spring' }} />
+                      <motion.div className="h-full bg-red-500" animate={{ width: `${(myTotalPoints / (myTotalPoints + enemyTotalPoints)) * 100}%` }} transition={{ duration: 0.8, type: 'spring' }} />
+                      <motion.div className="h-full bg-indigo-500" animate={{ width: `${(enemyTotalPoints / (myTotalPoints + enemyTotalPoints)) * 100}%` }} transition={{ duration: 0.8, type: 'spring' }} />
                     </div>
                     <div className="flex justify-between text-xs mt-1 font-bold">
                       <span className="text-red-400">{myLeagueName}</span>
@@ -429,15 +420,13 @@ export default function ClanWar() {
                 </motion.button>
               )}
 
-              {/* ── RESUMEN ROLES DEL EQUIPO ── */}
+              {/* ── RESUMEN ROLES ── */}
               {activeWar.status === 'active' && myTeam.length > 0 && (
                 <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm font-bold">🧩 Composición de equipos</p>
                     {pendingRoles > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
-                        {pendingRoles} sin elegir
-                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>{pendingRoles} sin elegir</span>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -456,7 +445,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── MISIONES DEL DÍA ── */}
+              {/* ── MISIONES ── */}
               {activeWar.status === 'active' && missions.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm font-bold mb-2">📋 Misiones — Día {today}</p>
@@ -468,17 +457,13 @@ export default function ClanWar() {
                         <motion.div key={m.id} layout className="rounded-2xl p-3"
                           style={{ backgroundColor: 'var(--bg-card)', border: m.completed ? '1px solid rgba(16,185,129,0.35)' : '1px solid transparent' }}>
                           <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <span>{info.emoji}</span>
-                              <p className="text-sm font-medium">{info.label}</p>
-                            </div>
+                            <div className="flex items-center gap-2"><span>{info.emoji}</span><p className="text-sm font-medium">{info.label}</p></div>
                             {m.completed
                               ? <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-xs font-black text-emerald-400">✅ +{m.bonus_points}pts</motion.span>
                               : <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>{m.current_value}/{m.target_value}</span>}
                           </div>
                           <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
-                            <motion.div className={`h-full rounded-full ${m.completed ? 'bg-emerald-500' : 'bg-red-500'}`}
-                              animate={{ width: `${pct}%` }} transition={{ duration: 0.6, type: 'spring' }} />
+                            <motion.div className={`h-full rounded-full ${m.completed ? 'bg-emerald-500' : 'bg-red-500'}`} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, type: 'spring' }} />
                           </div>
                         </motion.div>
                       )
@@ -522,17 +507,22 @@ export default function ClanWar() {
                       <p className="text-sm font-bold">⚡ Eventos activos</p>
                       {lastEventCheck > 12 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>Auto-generado</span>}
                     </div>
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={handleGenerateEvent}
-                      disabled={generatingEvent || events.length >= 3}
-                      className="text-xs px-3 py-1.5 rounded-xl font-bold"
-                      style={{
-                        backgroundColor: events.length >= 3 ? 'var(--bg-input)' : 'rgba(245,158,11,0.12)',
-                        color: events.length >= 3 ? 'var(--text-hint)' : '#f59e0b',
-                        border: `1px solid ${events.length >= 3 ? 'transparent' : 'rgba(245,158,11,0.2)'}`,
-                        opacity: events.length >= 3 ? 0.5 : 1,
-                      }}>
-                      {generatingEvent ? '...' : events.length >= 3 ? '🔒 Lleno' : '🎲 Generar'}
-                    </motion.button>
+                    <div className="flex items-center gap-2">
+                      {events.length >= 3 && (
+                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Máx. 3 activos</span>
+                      )}
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={handleGenerateEvent}
+                        disabled={generatingEvent || events.length >= 3}
+                        className="text-xs px-3 py-1.5 rounded-xl font-bold"
+                        style={{
+                          backgroundColor: events.length >= 3 ? 'var(--bg-input)' : 'rgba(245,158,11,0.12)',
+                          color: events.length >= 3 ? 'var(--text-hint)' : '#f59e0b',
+                          border: `1px solid ${events.length >= 3 ? 'transparent' : 'rgba(245,158,11,0.2)'}`,
+                          opacity: events.length >= 3 ? 0.5 : 1,
+                        }}>
+                        {generatingEvent ? '...' : events.length >= 3 ? '🔒 Lleno' : '🎲 Generar'}
+                      </motion.button>
+                    </div>
                   </div>
                   {events.length === 0 ? (
                     <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -547,9 +537,7 @@ export default function ClanWar() {
                           <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-xl flex-shrink-0">⚡</motion.span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium">{ev.description}</p>
-                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                              {ev.leagues?.name} · Expira en {formatTimeLeft(ev.expires_at)}
-                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{ev.leagues?.name} · Expira en {formatTimeLeft(ev.expires_at)}</p>
                           </div>
                         </motion.div>
                       ))}
@@ -613,7 +601,7 @@ export default function ClanWar() {
                     { emoji: '🛡️', role: 'Defensor', desc: 'Reduce los puntos robables por el rival' },
                     { emoji: '🕵️', role: 'Espía',    desc: 'Ve misiones rivales · x0.5 puntos' },
                     { emoji: '📋', role: 'Misiones', desc: '2 misiones diarias por liga · puntos extra' },
-                    { emoji: '⚡', role: 'Eventos',  desc: 'Aleatorios cada 12h · cambian la guerra' },
+                    { emoji: '⚡', role: 'Eventos',  desc: 'Aleatorios cada 12h · máx. 3 activos' },
                     { emoji: '🏆', role: 'Victoria', desc: `Más puntos totales al día 3 · ${REWARD_COINS.toLocaleString()}🪙 por miembro` },
                   ].map((item, i) => (
                     <div key={i} className="flex items-start gap-2">
@@ -663,7 +651,7 @@ export default function ClanWar() {
         </div>
       )}
 
-      {/* ── MODAL SELECCIÓN DE ROL ── */}
+      {/* ── MODAL ROL ── */}
       <AnimatePresence>
         {showRoleModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -678,7 +666,7 @@ export default function ClanWar() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-black">⚔️ Elige tu rol</h2>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Define tu estrategia para esta guerra · puedes cambiarlo después</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Define tu estrategia · puedes cambiarlo después</p>
                   </div>
                   {roleChosen && (
                     <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowRoleModal(false)}
@@ -709,7 +697,6 @@ export default function ClanWar() {
                     </div>
                   </motion.button>
                 ))}
-
                 {!roleChosen && (
                   <p className="text-xs text-center pt-2" style={{ color: 'var(--text-hint)' }}>
                     ⚠️ Debes elegir un rol para participar activamente en la guerra
@@ -721,7 +708,7 @@ export default function ClanWar() {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL CANCELAR GUERRA ── */}
+      {/* ── MODAL CANCELAR ── */}
       <AnimatePresence>
         {showCancelConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

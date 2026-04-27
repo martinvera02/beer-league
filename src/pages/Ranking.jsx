@@ -191,7 +191,6 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
               </motion.button>
             )}
           </div>
-          {/* Duración fija 24h */}
           <div className="rounded-xl px-4 py-3 flex items-center gap-2"
             style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
             <span className="text-sm">⏱</span>
@@ -220,23 +219,15 @@ function JuicioTab({ leagueId, currentUserId, members }) {
   const fetchAll = async () => {
     setLoading(true)
     await supabase.rpc('resolve_expired_disputes')
-
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-
     const [{ data: drinksData }, { data: disputesData }] = await Promise.all([
-      supabase.from('drinks')
-        .select('*, profiles(username, avatar_url), drink_types(name, emoji)')
-        .eq('league_id', leagueId)
-        .gte('consumed_at', since)
-        .eq('is_adjustment', false)
-        .order('consumed_at', { ascending: false })
-        .limit(50),
+      supabase.from('drinks').select('*, profiles(username, avatar_url), drink_types(name, emoji)')
+        .eq('league_id', leagueId).gte('consumed_at', since).eq('is_adjustment', false)
+        .order('consumed_at', { ascending: false }).limit(50),
       supabase.from('drink_disputes')
         .select('*, disputed_by_profile:profiles!drink_disputes_disputed_by_fkey(username, avatar_url)')
-        .eq('league_id', leagueId)
-        .order('created_at', { ascending: false }),
+        .eq('league_id', leagueId).order('created_at', { ascending: false }),
     ])
-
     setRecentDrinks(drinksData || [])
     setDisputes(disputesData || [])
     setMyDisputes((disputesData || []).filter(d => {
@@ -249,79 +240,44 @@ function JuicioTab({ leagueId, currentUserId, members }) {
   const handleDispute = async (drink) => {
     if (disputing) return
     setDisputing(drink.id)
-    const { error } = await supabase.from('drink_disputes').insert({
-      drink_id: drink.id,
-      league_id: leagueId,
-      disputed_by: currentUserId,
-    })
-    if (!error) {
-      await supabase.from('drinks').update({ dispute_status: 'disputed' }).eq('id', drink.id)
-      soundSuccess()
-    } else soundError()
-    setDisputing(null)
-    fetchAll()
+    const { error } = await supabase.from('drink_disputes').insert({ drink_id: drink.id, league_id: leagueId, disputed_by: currentUserId })
+    if (!error) { await supabase.from('drinks').update({ dispute_status: 'disputed' }).eq('id', drink.id); soundSuccess() }
+    else soundError()
+    setDisputing(null); fetchAll()
   }
 
   const handleUploadProof = async (e, drinkId) => {
     const file = e.target.files[0]; if (!file) return
-    setUploadingProof(drinkId)
-    setAiResult(null)
-
-    // 1. Subir foto
+    setUploadingProof(drinkId); setAiResult(null)
     const ext = file.name.split('.').pop()
     const path = `disputes/${currentUserId}/${drinkId}_${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
     if (uploadError) { soundError(); setUploadingProof(null); e.target.value = ''; return }
-
     const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
-
-    // Guardar URL siempre, independiente del resultado
     await supabase.from('drinks').update({ proof_image_url: publicUrl }).eq('id', drinkId)
-
-    // 2. Validar con IA
-    let aiValid = false
-    let aiReason = 'No se pudo analizar la imagen'
+    let aiValid = false, aiReason = 'No se pudo analizar la imagen'
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 200,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'url', url: publicUrl } },
-              { type: 'text', text: 'Analiza esta imagen y determina si muestra una bebida (alcohólica o no alcohólica) de forma clara y verosímil, como en un bar, restaurante, en mano, o sobre una mesa en un contexto real de consumo. No es válida si parece imagen de internet, catálogo, producto en tienda sin contexto de consumo, o no se ve ninguna bebida. Responde ÚNICAMENTE con JSON sin texto adicional: {"valid": true, "reason": "explicación breve en español de máximo 20 palabras"}' }
-            ]
-          }]
+          model: 'claude-sonnet-4-20250514', max_tokens: 200,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'url', url: publicUrl } },
+            { type: 'text', text: 'Analiza esta imagen y determina si muestra una bebida (alcohólica o no alcohólica) de forma clara y verosímil, como en un bar, restaurante, en mano, o sobre una mesa en un contexto real de consumo. No es válida si parece imagen de internet, catálogo, producto en tienda sin contexto de consumo, o no se ve ninguna bebida. Responde ÚNICAMENTE con JSON sin texto adicional: {"valid": true, "reason": "explicación breve en español de máximo 20 palabras"}' }
+          ]}]
         })
       })
       const data = await response.json()
-      const text = data.content?.[0]?.text || ''
-      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
-      aiValid = parsed.valid === true
-      aiReason = parsed.reason || aiReason
-    } catch {
-      aiReason = 'Error al analizar — intenta de nuevo'
-    }
-
-    // 3. Actualizar según resultado
+      const parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim())
+      aiValid = parsed.valid === true; aiReason = parsed.reason || aiReason
+    } catch { aiReason = 'Error al analizar — intenta de nuevo' }
     if (aiValid) {
       await supabase.from('drinks').update({ dispute_status: 'proven' }).eq('id', drinkId)
-      await supabase.from('drink_disputes')
-        .update({ status: 'proven', resolved_at: new Date().toISOString() })
-        .eq('drink_id', drinkId).eq('status', 'pending')
+      await supabase.from('drink_disputes').update({ status: 'proven', resolved_at: new Date().toISOString() }).eq('drink_id', drinkId).eq('status', 'pending')
       soundSuccess()
-    } else {
-      soundError()
-      // No marcamos como forfeited — puede reintentar mientras no expire
-    }
-
+    } else soundError()
     setAiResult({ drinkId, valid: aiValid, reason: aiReason })
-    setUploadingProof(null)
-    e.target.value = ''
-    fetchAll()
+    setUploadingProof(null); e.target.value = ''; fetchAll()
   }
 
   const getDisputeForDrink = (drinkId) => disputes.find(d => d.drink_id === drinkId)
@@ -330,17 +286,14 @@ function JuicioTab({ leagueId, currentUserId, members }) {
   const formatTimeLeft = (expiresAt) => {
     const diff = new Date(expiresAt) - new Date()
     if (diff <= 0) return 'Expirado'
-    const h = Math.floor(diff / 3600000)
-    const m = Math.floor((diff % 3600000) / 60000)
+    const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000)
     return `${h}h ${m}m`
   }
 
   const formatAgo = (ts) => {
     const diff = Date.now() - new Date(ts).getTime()
     const m = Math.floor(diff / 60000), h = Math.floor(m / 60)
-    if (h > 0) return `hace ${h}h`
-    if (m > 0) return `hace ${m}m`
-    return 'ahora'
+    if (h > 0) return `hace ${h}h`; if (m > 0) return `hace ${m}m`; return 'ahora'
   }
 
   if (loading) return (
@@ -352,44 +305,27 @@ function JuicioTab({ leagueId, currentUserId, members }) {
 
   return (
     <div className="space-y-4">
-
-      {/* Resultado validación IA */}
       <AnimatePresence>
         {aiResult && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="rounded-2xl p-4"
-            style={{
-              backgroundColor: aiResult.valid ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-              border: `1px solid ${aiResult.valid ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-            }}>
+            style={{ backgroundColor: aiResult.valid ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${aiResult.valid ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <p className={`font-bold text-sm ${aiResult.valid ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {aiResult.valid ? '✅ Foto verificada por IA' : '❌ Foto rechazada por IA'}
-                </p>
+                <p className={`font-bold text-sm ${aiResult.valid ? 'text-emerald-400' : 'text-red-400'}`}>{aiResult.valid ? '✅ Foto verificada por IA' : '❌ Foto rechazada por IA'}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{aiResult.reason}</p>
-                {!aiResult.valid && (
-                  <p className="text-xs mt-1.5 font-medium" style={{ color: '#f59e0b' }}>
-                    Puedes intentarlo con otra foto mientras no expire el tiempo
-                  </p>
-                )}
+                {!aiResult.valid && <p className="text-xs mt-1.5 font-medium" style={{ color: '#f59e0b' }}>Puedes intentarlo con otra foto mientras no expire el tiempo</p>}
               </div>
-              <motion.button whileTap={{ scale: 0.9 }} onClick={() => setAiResult(null)}
-                className="text-xs px-2 py-1 rounded-lg flex-shrink-0"
-                style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>✕</motion.button>
+              <motion.button whileTap={{ scale: 0.9 }} onClick={() => setAiResult(null)} className="text-xs px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>✕</motion.button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Mis impugnaciones pendientes */}
       {myDisputes.length > 0 && (
         <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.3)' }}>
           <div className="px-4 pt-4 pb-2">
             <p className="font-bold text-red-400 flex items-center gap-2">⚠️ Tienes consumiciones impugnadas</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-              Sube una foto como prueba. La IA la analizará automáticamente. Tienes 3 horas o perderás los puntos.
-            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sube una foto como prueba. La IA la analizará automáticamente. Tienes 3 horas o perderás los puntos.</p>
           </div>
           {myDisputes.map(dispute => {
             const drink = recentDrinks.find(d => d.id === dispute.drink_id)
@@ -400,35 +336,24 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm">{drink?.drink_types?.name || 'Consumición'}</p>
                     <p className="text-xs" style={{ color: '#ef4444' }}>⏱ {formatTimeLeft(dispute.expires_at)} para responder</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                      Impugnada por {dispute.disputed_by_profile?.username}
-                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Impugnada por {dispute.disputed_by_profile?.username}</p>
                   </div>
                   <motion.button whileTap={{ scale: 0.95 }}
                     onClick={() => { setActiveProofDrinkId(drink?.id); proofInputRef.current?.click() }}
                     disabled={uploadingProof === drink?.id}
-                    className="px-3 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
-                    style={{ backgroundColor: '#ef4444' }}>
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0" style={{ backgroundColor: '#ef4444' }}>
                     {uploadingProof === drink?.id ? '🤖 Analizando...' : '📷 Subir prueba'}
                   </motion.button>
                 </div>
               </div>
             )
           })}
-          <input ref={proofInputRef} type="file" accept="image/*"
-            onChange={e => activeProofDrinkId && handleUploadProof(e, activeProofDrinkId)}
-            className="hidden" />
+          <input ref={proofInputRef} type="file" accept="image/*" onChange={e => activeProofDrinkId && handleUploadProof(e, activeProofDrinkId)} className="hidden" />
         </div>
       )}
-
-      {/* Consumiciones recientes */}
       <p className="text-sm font-bold" style={{ color: 'var(--text-muted)' }}>Últimas 24h · {recentDrinks.length} consumiciones</p>
-
       {recentDrinks.length === 0 ? (
-        <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
-          <div className="text-4xl mb-2">🍺</div>
-          <p className="text-sm">Sin consumiciones recientes</p>
-        </div>
+        <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}><div className="text-4xl mb-2">🍺</div><p className="text-sm">Sin consumiciones recientes</p></div>
       ) : (
         <div className="space-y-2">
           {recentDrinks.map(drink => {
@@ -438,23 +363,13 @@ function JuicioTab({ leagueId, currentUserId, members }) {
             const isForfeited = drink.dispute_status === 'forfeited'
             const isProven = drink.dispute_status === 'proven'
             const isDisputed = drink.dispute_status === 'disputed'
-
             return (
               <motion.div key={drink.id} variants={staggerItem} initial="initial" animate="animate"
                 className="rounded-2xl p-3"
-                style={{
-                  backgroundColor: 'var(--bg-card)',
-                  border: isForfeited ? '1px solid rgba(239,68,68,0.4)' :
-                    isProven ? '1px solid rgba(16,185,129,0.3)' :
-                    isDisputed ? '1px solid rgba(245,158,11,0.3)' :
-                    '1px solid transparent',
-                  opacity: isForfeited ? 0.7 : 1,
-                }}>
+                style={{ backgroundColor: 'var(--bg-card)', border: isForfeited ? '1px solid rgba(239,68,68,0.4)' : isProven ? '1px solid rgba(16,185,129,0.3)' : isDisputed ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent', opacity: isForfeited ? 0.7 : 1 }}>
                 <div className="flex items-center gap-3">
                   <div className="relative flex-shrink-0">
-                    {drink.profiles?.avatar_url
-                      ? <img src={drink.profiles.avatar_url} className="w-9 h-9 rounded-full object-cover" alt="" />
-                      : <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                    {drink.profiles?.avatar_url ? <img src={drink.profiles.avatar_url} className="w-9 h-9 rounded-full object-cover" alt="" /> : <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
                     <span className="absolute -bottom-1 -right-1 text-sm">{drink.drink_types?.emoji || '🍺'}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -464,35 +379,17 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                       {isProven && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✅ Verificada por IA</span>}
                       {isDisputed && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>⚠️ En revisión</span>}
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                      {drink.drink_types?.name} · {isForfeited ? <span style={{ color: '#ef4444' }}>0 pts</span> : `${drink.points} pts`} · {formatAgo(drink.consumed_at)}
-                    </p>
-                    {dispute && (
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
-                        Impugnada por {dispute.disputed_by_profile?.username}
-                        {dispute.status === 'pending' && ` · expira en ${formatTimeLeft(dispute.expires_at)}`}
-                      </p>
-                    )}
-                    {drink.proof_image_url && (
-                      <a href={drink.proof_image_url} target="_blank" rel="noreferrer"
-                        className="text-xs font-medium mt-1 inline-flex items-center gap-1"
-                        style={{ color: '#10b981' }}>
-                        📷 Ver prueba
-                      </a>
-                    )}
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{drink.drink_types?.name} · {isForfeited ? <span style={{ color: '#ef4444' }}>0 pts</span> : `${drink.points} pts`} · {formatAgo(drink.consumed_at)}</p>
+                    {dispute && <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Impugnada por {dispute.disputed_by_profile?.username}{dispute.status === 'pending' && ` · expira en ${formatTimeLeft(dispute.expires_at)}`}</p>}
+                    {drink.proof_image_url && <a href={drink.proof_image_url} target="_blank" rel="noreferrer" className="text-xs font-medium mt-1 inline-flex items-center gap-1" style={{ color: '#10b981' }}>📷 Ver prueba</a>}
                   </div>
                   {!isMe && !alreadyDisputed && !isDisputed && !isForfeited && !isProven && (
-                    <motion.button whileTap={{ scale: 0.9 }}
-                      onClick={() => handleDispute(drink)}
-                      disabled={disputing === drink.id}
-                      className="px-3 py-2 rounded-xl text-xs font-bold flex-shrink-0"
-                      style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDispute(drink)} disabled={disputing === drink.id}
+                      className="px-3 py-2 rounded-xl text-xs font-bold flex-shrink-0" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
                       {disputing === drink.id ? '...' : '⚖️ Impugnar'}
                     </motion.button>
                   )}
-                  {alreadyDisputed && !isMe && (
-                    <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>Impugnada ✓</span>
-                  )}
+                  {alreadyDisputed && !isMe && <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>Impugnada ✓</span>}
                 </div>
               </motion.div>
             )
@@ -503,6 +400,510 @@ function JuicioTab({ leagueId, currentUserId, members }) {
   )
 }
 
+// ─── MINI BARCHART ────────────────────────────────────────────────────────────
+function BarChart({ data, color = '#f59e0b', label = '' }) {
+  if (!data || data.length === 0) return null
+  const max = Math.max(...data.map(d => d.value), 1)
+  return (
+    <div>
+      {label && <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-muted)' }}>{label}</p>}
+      <div className="flex items-end gap-1 h-20">
+        {data.map((d, i) => (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <motion.div className="w-full rounded-t-lg" style={{ backgroundColor: color, opacity: 0.85 }}
+              initial={{ height: 0 }} animate={{ height: `${Math.max(4, (d.value / max) * 72)}px` }}
+              transition={{ duration: 0.5, delay: i * 0.04, ease: 'easeOut' }} />
+            <span className="text-xs" style={{ color: 'var(--text-hint)', fontSize: 9 }}>{d.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── PANEL ADMIN ──────────────────────────────────────────────────────────────
+function AdminTab({ selectedLeague, members, myRole, onMsg, onRefreshRanking }) {
+  const { user } = useAuth()
+  const [adminStats, setAdminStats] = useState(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [kickTarget, setKickTarget] = useState(null)
+  const [roleTarget, setRoleTarget] = useState(null)
+  const [actionLog, setActionLog] = useState([])
+  const [loadingLog, setLoadingLog] = useState(false)
+
+  // Ajuste manual de puntos
+  const [adjTarget, setAdjTarget] = useState(null)
+  const [adjAmount, setAdjAmount] = useState('')
+  const [adjReason, setAdjReason] = useState('')
+  const [adjusting, setAdjusting] = useState(false)
+  const [showAdjModal, setShowAdjModal] = useState(false)
+
+  // Gráficas
+  const [chartData, setChartData] = useState(null)
+  const [loadingCharts, setLoadingCharts] = useState(false)
+
+  const canManage = myRole === 'owner' || myRole === 'admin'
+  const manageableMembers = members.filter(m => {
+    if (m.id === user.id || m.role === 'owner') return false
+    if (myRole === 'admin' && m.role === 'admin') return false
+    return true
+  })
+
+  const roleLabel = { owner: '👑 Creador', admin: '⚡ Admin', member: 'Miembro' }
+  const roleBadgeStyle = {
+    owner: { backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+    admin: { backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' },
+    member: { backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' },
+  }
+
+  const Avatar = ({ url, username, size = 'sm' }) => {
+    const dim = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10'
+    return url ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
+      : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-sm`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+  }
+
+  useEffect(() => {
+    if (selectedLeague) {
+      fetchAdminStats()
+      fetchCharts()
+      fetchActionLog()
+    }
+  }, [selectedLeague?.id])
+
+  const fetchAdminStats = async () => {
+    setLoadingStats(true)
+    const { data } = await supabase.rpc('get_league_stats', { p_league_id: selectedLeague.id })
+    setAdminStats(data); setLoadingStats(false)
+  }
+
+  const fetchCharts = async () => {
+    setLoadingCharts(true)
+    const since7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: drinks } = await supabase.from('drinks')
+      .select('consumed_at, points, user_id, profiles(username)')
+      .eq('league_id', selectedLeague.id)
+      .gte('consumed_at', since7)
+      .eq('is_adjustment', false)
+      .order('consumed_at', { ascending: true })
+
+    if (drinks) {
+      // Consumiciones por día últimos 7 días
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (6 - i)); d.setHours(0, 0, 0, 0)
+        return { date: d, label: d.toLocaleDateString('es-ES', { weekday: 'short' }).slice(0, 2), value: 0 }
+      })
+      drinks.forEach(dr => {
+        const drDate = new Date(dr.consumed_at); drDate.setHours(0, 0, 0, 0)
+        const found = days.find(d => d.date.getTime() === drDate.getTime())
+        if (found) found.value++
+      })
+
+      // Puntos por miembro
+      const byMember = {}
+      drinks.forEach(dr => {
+        const name = dr.profiles?.username || 'Usuario'
+        if (!byMember[name]) byMember[name] = 0
+        byMember[name] += dr.points || 0
+      })
+      const memberData = Object.entries(byMember).sort(([, a], [, b]) => b - a).slice(0, 6).map(([label, value]) => ({ label: label.slice(0, 4), value: Math.round(value) }))
+
+      // Horas pico
+      const hours = Array.from({ length: 24 }, (_, i) => ({ label: i % 4 === 0 ? `${i}h` : '', value: 0 }))
+      drinks.forEach(dr => { const h = new Date(dr.consumed_at).getHours(); hours[h].value++ })
+      // Agrupar en bloques de 4h para legibilidad
+      const hourBlocks = Array.from({ length: 6 }, (_, i) => ({
+        label: `${i * 4}h`, value: hours.slice(i * 4, i * 4 + 4).reduce((s, h) => s + h.value, 0)
+      }))
+
+      setChartData({ days, memberData, hourBlocks })
+    }
+    setLoadingCharts(false)
+  }
+
+  const fetchActionLog = async () => {
+    setLoadingLog(true)
+    const { data } = await supabase.from('admin_action_log')
+      .select('*, admin:profiles!admin_action_log_admin_id_fkey(username, avatar_url), target:profiles!admin_action_log_target_user_id_fkey(username)')
+      .eq('league_id', selectedLeague.id)
+      .order('created_at', { ascending: false })
+      .limit(30)
+    setActionLog(data || [])
+    setLoadingLog(false)
+  }
+
+  const logAction = async (actionType, targetUserId, details) => {
+    await supabase.from('admin_action_log').insert({
+      league_id: selectedLeague.id,
+      admin_id: user.id,
+      action_type: actionType,
+      target_user_id: targetUserId || null,
+      details,
+    })
+  }
+
+  const handleResetSeason = async () => {
+    setResetting(true); setShowResetConfirm(false)
+    const { data: season } = await supabase.from('seasons').select('id').eq('active', true).single()
+    if (!season) { onMsg(false, 'No hay temporada activa'); setResetting(false); return }
+    const { error } = await supabase.from('drinks').delete().eq('league_id', selectedLeague.id).eq('season_id', season.id)
+    if (error) { soundError(); onMsg(false, 'Error al resetear: ' + error.message) }
+    else {
+      soundSuccess(); onMsg(true, '✅ Puntos reseteados correctamente')
+      await logAction('season_reset', null, { season_id: season.id })
+      fetchAdminStats(); fetchCharts(); fetchActionLog()
+      if (onRefreshRanking) onRefreshRanking()
+    }
+    setResetting(false)
+  }
+
+  const kickMember = async () => {
+    if (!kickTarget) return
+    await supabase.from('league_members').delete().eq('league_id', selectedLeague.id).eq('user_id', kickTarget.id)
+    await logAction('kick', kickTarget.id, { username: kickTarget.username })
+    setKickTarget(null); soundSuccess()
+    onMsg(true, `✅ ${kickTarget.username} expulsado de la liga`)
+    fetchActionLog()
+  }
+
+  const changeRole = async (memberId, newRole) => {
+    await supabase.from('league_members').update({ role: newRole }).eq('league_id', selectedLeague.id).eq('user_id', memberId)
+    await logAction('role_change', memberId, { new_role: newRole, username: roleTarget?.username })
+    setRoleTarget(null); fetchActionLog()
+  }
+
+  const handleAdjustPoints = async () => {
+    if (!adjTarget || !adjAmount || !adjReason.trim()) return
+    const amount = parseFloat(adjAmount)
+    if (isNaN(amount) || amount === 0) return
+    setAdjusting(true)
+    const { data: season } = await supabase.from('seasons').select('id').eq('active', true).single()
+    const { error } = await supabase.from('drinks').insert({
+      user_id: adjTarget.id,
+      league_id: selectedLeague.id,
+      season_id: season?.id,
+      points: amount,
+      is_adjustment: true,
+      consumed_at: new Date().toISOString(),
+      notes: adjReason.trim(),
+    })
+    if (error) { soundError(); onMsg(false, 'Error al ajustar puntos') }
+    else {
+      soundSuccess()
+      onMsg(true, `✅ ${amount > 0 ? '+' : ''}${amount} pts a ${adjTarget.username}`)
+      await logAction('points_adjustment', adjTarget.id, { amount, reason: adjReason.trim(), username: adjTarget.username })
+      fetchActionLog(); fetchCharts()
+      if (onRefreshRanking) onRefreshRanking()
+    }
+    setAdjusting(false); setShowAdjModal(false)
+    setAdjTarget(null); setAdjAmount(''); setAdjReason('')
+  }
+
+  const formatDateLong = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+  const formatAgo = (ts) => {
+    const diff = Date.now() - new Date(ts).getTime()
+    const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24)
+    if (d > 0) return `hace ${d}d`; if (h > 0) return `hace ${h}h`; if (m > 0) return `hace ${m}m`; return 'ahora'
+  }
+
+  const actionLabel = {
+    points_adjustment: { emoji: '✏️', label: 'Ajuste de puntos' },
+    kick: { emoji: '🚫', label: 'Expulsión' },
+    role_change: { emoji: '⚡', label: 'Cambio de rol' },
+    season_reset: { emoji: '🗑️', label: 'Reset de temporada' },
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Banner admin */}
+      <div className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)' }}>
+        <span className="text-3xl">👑</span>
+        <div><p className="font-bold text-purple-400">Panel de administración</p><p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{myRole === 'owner' ? 'Acceso completo como creador' : 'Acceso de administrador'}</p></div>
+      </div>
+
+      {/* ── GRÁFICAS ── */}
+      <div>
+        <p className="text-sm font-bold mb-3">📊 Actividad de la liga</p>
+        {loadingCharts ? (
+          <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-2xl mb-1">📊</motion.div>
+            <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Cargando gráficas...</p>
+          </div>
+        ) : chartData ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <BarChart data={chartData.days} color="#f59e0b" label="🍺 Consumiciones últimos 7 días" />
+            </div>
+            {chartData.memberData.length > 0 && (
+              <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                <BarChart data={chartData.memberData} color="#6366f1" label="🏆 Puntos por miembro (7 días)" />
+              </div>
+            )}
+            <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <BarChart data={chartData.hourBlocks} color="#10b981" label="🕐 Actividad por franja horaria" />
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Sin datos suficientes todavía</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── STATS ── */}
+      <div>
+        <p className="text-sm font-bold mb-3">📋 Estadísticas generales</p>
+        {loadingStats ? (
+          <div className="text-center py-6" style={{ color: 'var(--text-muted)' }}>
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-2xl mb-1">📋</motion.div>
+          </div>
+        ) : adminStats ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              {[
+                { label: 'Total consumiciones', value: adminStats.total_drinks, emoji: '🍺' },
+                { label: 'Miembros', value: adminStats.member_count, emoji: '👥' },
+                { label: 'Monedas en circulación', value: `${Number(adminStats.total_coins).toLocaleString()}🪙`, emoji: '💰' },
+                { label: 'Temporada desde', value: adminStats.season_start ? formatDateLong(adminStats.season_start) : '—', emoji: '📅' },
+              ].map(stat => (
+                <div key={stat.label} className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <p className="text-2xl mb-1">{stat.emoji}</p>
+                  <p className="font-bold text-amber-400 text-lg leading-tight">{stat.value}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{stat.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}><p className="text-2xl mb-1">🏆</p><p className="font-bold text-amber-400 text-sm leading-tight">{adminStats.most_active_member || '—'}</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Miembro más activo</p></div>
+              <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}><p className="text-2xl mb-1">⭐</p><p className="font-bold text-amber-400 text-sm leading-tight">{adminStats.most_popular_drink || '—'}</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Bebida más popular</p></div>
+            </div>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => { fetchAdminStats(); fetchCharts() }} className="w-full py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>🔄 Actualizar todo</motion.button>
+          </>
+        ) : null}
+      </div>
+
+      {/* ── AJUSTE MANUAL DE PUNTOS ── */}
+      <div>
+        <p className="text-sm font-bold mb-3">✏️ Ajuste manual de puntos</p>
+        <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+          <p className="text-xs mb-3" style={{ color: 'var(--text-hint)' }}>Selecciona un miembro para añadir o quitar puntos. Queda registrado en el log.</p>
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+            {members.filter(m => m.id !== user.id).map(member => (
+              <motion.button key={member.id} whileTap={{ scale: 0.93 }}
+                onClick={() => { setAdjTarget(adjTarget?.id === member.id ? null : member); setShowAdjModal(adjTarget?.id !== member.id) }}
+                className="flex-shrink-0 flex flex-col items-center gap-1 p-2 rounded-2xl min-w-16"
+                style={{ backgroundColor: adjTarget?.id === member.id ? 'rgba(124,58,237,0.15)' : 'var(--bg-input)', border: adjTarget?.id === member.id ? '2px solid #7c3aed' : '2px solid transparent' }}>
+                <Avatar url={member.avatar_url} username={member.username} size="sm" />
+                <p className="text-xs font-medium truncate w-14 text-center" style={{ color: adjTarget?.id === member.id ? '#a78bfa' : 'var(--text-muted)' }}>{member.username}</p>
+                {adjTarget?.id === member.id && <span className="text-xs" style={{ color: '#a78bfa' }}>✓</span>}
+              </motion.button>
+            ))}
+          </div>
+          {adjTarget && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+              <div>
+                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Puntos (negativo para quitar)</p>
+                <div className="flex gap-2">
+                  <input type="number" value={adjAmount} onChange={e => setAdjAmount(e.target.value)}
+                    placeholder="ej: 10 o -5" step="0.5"
+                    className="flex-1 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                    style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                  <div className="flex gap-1">
+                    {[5, 10, 20, -5, -10].map(v => (
+                      <motion.button key={v} whileTap={{ scale: 0.9 }} onClick={() => setAdjAmount(String(v))}
+                        className="px-2 py-2 rounded-lg text-xs font-bold flex-shrink-0"
+                        style={{ backgroundColor: v < 0 ? 'rgba(239,68,68,0.1)' : 'rgba(124,58,237,0.1)', color: v < 0 ? '#ef4444' : '#a78bfa' }}>
+                        {v > 0 ? `+${v}` : v}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Motivo (obligatorio)</p>
+                <input type="text" value={adjReason} onChange={e => setAdjReason(e.target.value)}
+                  placeholder="ej: Premio por reto especial" maxLength={100}
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              </div>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={handleAdjustPoints}
+                disabled={adjusting || !adjAmount || !adjReason.trim()}
+                className="w-full py-3 rounded-xl font-bold text-white text-sm disabled:opacity-40"
+                style={{ backgroundColor: parseFloat(adjAmount) < 0 ? '#ef4444' : '#7c3aed' }}>
+                {adjusting ? 'Aplicando...' : adjAmount ? `${parseFloat(adjAmount) > 0 ? '+' : ''}${adjAmount} pts a ${adjTarget.username}` : 'Introduce una cantidad'}
+              </motion.button>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* ── GESTIÓN DE MIEMBROS ── */}
+      <div>
+        <p className="text-sm font-bold mb-3">👥 Gestión de miembros</p>
+        {manageableMembers.length === 0 ? (
+          <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>No hay miembros que puedas gestionar</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {manageableMembers.map(member => (
+              <motion.div key={member.id} variants={staggerItem} initial="initial" animate="animate"
+                className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                <Avatar url={member.avatar_url} username={member.username} size="md" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate">{member.username}</p>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={roleBadgeStyle[member.role]}>{roleLabel[member.role]}</span>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  {myRole === 'owner' && (
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)}
+                      className="text-xs font-semibold px-3 py-2 rounded-xl" style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>Rol</motion.button>
+                  )}
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)}
+                    className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">Expulsar</motion.button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── GESTIÓN DE TEMPORADA ── */}
+      <div>
+        <p className="text-sm font-bold mb-3">⚠️ Gestión de temporada</p>
+        <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.2)' }}>
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-2xl flex-shrink-0">🗑️</span>
+            <div>
+              <p className="font-bold text-sm text-red-400">Resetear puntos de la temporada</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Elimina todas las consumiciones de la temporada actual en esta liga. Esta acción no se puede deshacer.</p>
+            </div>
+          </div>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowResetConfirm(true)} disabled={resetting}
+            className="w-full py-3 rounded-xl font-bold text-red-400 text-sm border border-red-900 disabled:opacity-40"
+            style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
+            {resetting ? 'Reseteando...' : '🗑️ Resetear puntos'}
+          </motion.button>
+        </div>
+      </div>
+
+      {/* ── LOG DE ACCIONES ── */}
+      <div>
+        <p className="text-sm font-bold mb-3">📝 Log de acciones admin</p>
+        {loadingLog ? (
+          <div className="text-center py-6" style={{ color: 'var(--text-muted)' }}>
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-xl">📝</motion.div>
+          </div>
+        ) : actionLog.length === 0 ? (
+          <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Sin acciones registradas todavía</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {actionLog.map(entry => {
+              const aInfo = actionLabel[entry.action_type] || { emoji: '⚙️', label: entry.action_type }
+              const details = entry.details || {}
+              let desc = ''
+              if (entry.action_type === 'points_adjustment') desc = `${details.amount > 0 ? '+' : ''}${details.amount} pts a ${details.username} — "${details.reason}"`
+              else if (entry.action_type === 'kick') desc = `Expulsó a ${details.username}`
+              else if (entry.action_type === 'role_change') desc = `${details.username} → ${details.new_role}`
+              else if (entry.action_type === 'season_reset') desc = 'Reset de puntos de temporada'
+
+              return (
+                <motion.div key={entry.id} variants={staggerItem} initial="initial" animate="animate"
+                  className="rounded-2xl p-3 flex items-start gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                  <span className="text-lg flex-shrink-0 mt-0.5">{aInfo.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{aInfo.label}</p>
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>por {entry.admin?.username}</span>
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{desc}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{formatAgo(entry.created_at)}</p>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── MODALES ── */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowResetConfirm(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-5"><div className="text-4xl mb-2">🗑️</div><h2 className="text-xl font-bold">¿Resetear puntos?</h2>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminarán todas las consumiciones de la temporada en <strong>{selectedLeague?.name}</strong>. No se puede deshacer.</p>
+              </div>
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowResetConfirm(false)} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleResetSeason} className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl">Resetear</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {kickTarget && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setKickTarget(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-4"><div className="text-4xl mb-2">🚫</div><h2 className="text-xl font-bold">¿Expulsar a {kickTarget?.username}?</h2>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminará de la liga y perderá su historial en esta temporada.</p>
+              </div>
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setKickTarget(null)} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={kickMember} className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl">Expulsar</motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {roleTarget && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setRoleTarget(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              <div className="text-center mb-5"><div className="text-4xl mb-2">⚡</div><h2 className="text-xl font-bold">Rol de {roleTarget?.username}</h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Elige qué permisos tendrá en la liga</p>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { role: 'admin', emoji: '⚡', label: 'Admin', desc: 'Puede expulsar miembros y cambiar el nombre', color: '#818cf8', bg: 'rgba(99,102,241,0.15)' },
+                  { role: 'member', emoji: '🍺', label: 'Miembro', desc: 'Solo puede participar y chatear', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+                ].map(opt => (
+                  <motion.button key={opt.role} whileTap={{ scale: 0.97 }} onClick={() => changeRole(roleTarget.id, opt.role)}
+                    className="w-full rounded-2xl p-4 text-left"
+                    style={{ backgroundColor: roleTarget.role === opt.role ? opt.bg : 'var(--bg-input)', border: roleTarget.role === opt.role ? `2px solid ${opt.color}` : '2px solid transparent' }}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{opt.emoji}</span>
+                      <div className="flex-1"><p className="font-bold text-sm" style={{ color: roleTarget.role === opt.role ? opt.color : 'var(--text-primary)' }}>{opt.label}</p><p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{opt.desc}</p></div>
+                      {roleTarget.role === opt.role && <span style={{ color: opt.color }}>✓</span>}
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+              <motion.button whileTap={{ scale: 0.96 }} onClick={() => setRoleTarget(null)} className="w-full mt-4 font-semibold py-3 rounded-xl text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>Cancelar</motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── RANKING PRINCIPAL ────────────────────────────────────────────────────────
 export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const { user } = useAuth()
   const [leagues, setLeagues] = useState([])
@@ -516,8 +917,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [tab, setTab] = useState('ranking')
   const [loading, setLoading] = useState(true)
   const [lightboxUrl, setLightboxUrl] = useState(null)
-  const [kickTarget, setKickTarget] = useState(null)
-  const [roleTarget, setRoleTarget] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [newLeagueName, setNewLeagueName] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -531,10 +930,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [sendingTransfer, setSendingTransfer] = useState(false)
   const [transferResult, setTransferResult] = useState(null)
   const [loadingTransfers, setLoadingTransfers] = useState(false)
-  const [adminStats, setAdminStats] = useState(null)
-  const [loadingStats, setLoadingStats] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [adminMsg, setAdminMsg] = useState(null)
   const [showJoinModal, setShowJoinModal] = useState(false)
   const [joinCode, setJoinCode] = useState('')
@@ -570,8 +965,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           if (payload.new.poll_id) fetchPolls(selectedLeague.id)
           setMessages(prev => [...prev, { ...payload.new, profiles: { username: profile?.username || 'Desconocido', avatar_url: profile?.avatar_url } }])
         })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'polls', filter: `league_id=eq.${selectedLeague.id}` },
-        () => fetchPolls(selectedLeague.id))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'polls', filter: `league_id=eq.${selectedLeague.id}` }, () => fetchPolls(selectedLeague.id))
       .subscribe()
 
     return () => supabase.removeChannel(channel)
@@ -580,10 +974,11 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   useEffect(() => {
     if (tab === 'chat') { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); if (selectedLeague) markChatRead(selectedLeague.id) }
     if (tab === 'transfers' && selectedLeague) fetchTransfers(selectedLeague.id)
-    if (tab === 'admin' && selectedLeague) fetchAdminStats(selectedLeague.id)
   }, [tab])
 
   useEffect(() => { if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const showAdminMsg = (success, text) => { setAdminMsg({ success, text }); setTimeout(() => setAdminMsg(null), 4000) }
 
   const fetchLeagues = async () => {
     const { data } = await supabase.from('league_members').select('league_id, role, leagues(id, name, created_by, invite_code)').eq('user_id', user.id)
@@ -642,27 +1037,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setTransfers(transferData || []); setMyBalance(walletData?.balance || 0); setLoadingTransfers(false)
   }
 
-  const fetchAdminStats = async (leagueId) => {
-    setLoadingStats(true)
-    const { data } = await supabase.rpc('get_league_stats', { p_league_id: leagueId })
-    setAdminStats(data); setLoadingStats(false)
-  }
-
-  const handleResetSeason = async () => {
-    if (!selectedLeague) return
-    setResetting(true); setShowResetConfirm(false)
-    const { data: season } = await supabase.from('seasons').select('id').eq('active', true).single()
-    if (!season) { setAdminMsg({ success: false, text: 'No hay temporada activa' }); setResetting(false); return }
-    const { error } = await supabase.from('drinks').delete().eq('league_id', selectedLeague.id).eq('season_id', season.id)
-    if (error) { soundError(); setAdminMsg({ success: false, text: 'Error al resetear: ' + error.message }) }
-    else { soundSuccess(); setAdminMsg({ success: true, text: '✅ Puntos reseteados correctamente' }); fetchRanking(selectedLeague.id); fetchAdminStats(selectedLeague.id) }
-    setResetting(false); setTimeout(() => setAdminMsg(null), 4000)
-  }
-
   const handleSelectLeague = (league) => {
     setSelectedLeague(league); setMyRole(league.myRole || 'member'); setNewLeagueName(league.name)
     setTab('ranking'); setEditingName(false); setSelectedReceiver(null)
-    setTransferAmount(''); setTransferNote(''); setTransferResult(null); setAdminStats(null); setAdminMsg(null)
+    setTransferAmount(''); setTransferNote(''); setTransferResult(null); setAdminMsg(null)
   }
 
   const saveLeagueName = async () => {
@@ -696,11 +1074,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setCreating(false)
   }
 
-  const changeRole = async (memberId, newRole) => {
-    await supabase.from('league_members').update({ role: newRole }).eq('league_id', selectedLeague.id).eq('user_id', memberId)
-    setRoleTarget(null); fetchMembers(selectedLeague.id)
-  }
-
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedLeague || sending) return
     setSending(true); soundMessage()
@@ -708,14 +1081,12 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     const tempMsg = { id: `temp-${Date.now()}`, league_id: selectedLeague.id, user_id: user.id, content, image_url: null, created_at: new Date().toISOString(), profiles: { username: 'Tú', avatar_url: null } }
     setMessages(prev => [...prev, tempMsg]); setNewMessage('')
     const { error } = await supabase.from('messages').insert({ league_id: selectedLeague.id, user_id: user.id, content })
-    if (error) { console.error('Error al enviar mensaje:', error); setMessages(prev => prev.filter(m => m.id !== tempMsg.id)) }
+    if (error) setMessages(prev => prev.filter(m => m.id !== tempMsg.id))
     setSending(false)
   }
 
   const sendPollMessage = async (pollId) => {
-    const { data } = await supabase.from('messages')
-      .insert({ league_id: selectedLeague.id, user_id: user.id, content: '', poll_id: pollId })
-      .select('*, profiles(username, avatar_url)').single()
+    const { data } = await supabase.from('messages').insert({ league_id: selectedLeague.id, user_id: user.id, content: '', poll_id: pollId }).select('*, profiles(username, avatar_url)').single()
     if (data) { await fetchPolls(selectedLeague.id); setMessages(prev => [...prev, data]) }
   }
 
@@ -733,20 +1104,10 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setUploadingImage(false); e.target.value = ''
   }
 
-  const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
-
   const leaveLeague = async () => {
     if (!selectedLeague) return
     await supabase.from('league_members').delete().eq('league_id', selectedLeague.id).eq('user_id', user.id)
     setSelectedLeague(null); setMyRole('member'); fetchLeagues(); setTab('ranking')
-  }
-
-  const kickMember = async () => {
-    if (!kickTarget || !selectedLeague) return
-    await supabase.from('league_members').delete().eq('league_id', selectedLeague.id).eq('user_id', kickTarget.id)
-    setKickTarget(null); fetchMembers(selectedLeague.id); soundSuccess()
-    setAdminMsg({ success: true, text: `✅ ${kickTarget.username} expulsado de la liga` })
-    setTimeout(() => setAdminMsg(null), 3000)
   }
 
   const handleSendTransfer = async () => {
@@ -758,10 +1119,11 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     setSendingTransfer(false); setTimeout(() => setTransferResult(null), 4000)
   }
 
+  const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
+
   const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
   const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
   const formatDateShort = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-  const formatDateLong = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
 
   const groupedMessages = messages.reduce((groups, msg) => {
     const date = new Date(msg.created_at).toDateString()
@@ -770,15 +1132,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   }, {})
 
   const medals = ['🥇', '🥈', '🥉']
-  const roleLabel = { owner: '👑 Creador', admin: '⚡ Admin', member: 'Miembro' }
-  const roleBadgeStyle = {
-    owner: { backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-    admin: { backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' },
-    member: { backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' },
-  }
   const canManage = myRole === 'owner' || myRole === 'admin'
   const otherMembers = members.filter(m => m.id !== user.id)
-  const manageableMembers = members.filter(m => { if (m.id === user.id || m.role === 'owner') return false; if (myRole === 'admin' && m.role === 'admin') return false; return true })
 
   const Avatar = ({ url, username, size = 'sm' }) => {
     const dim = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10'
@@ -868,6 +1223,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
         {leagues.length === 0 && <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}><div className="text-5xl mb-3">🏆</div><p className="font-bold">Aún no estás en ninguna liga</p><p className="text-sm mt-1">Crea una nueva o únete con un código</p></div>}
       </div>
 
+      {/* Msg admin global */}
+      <AnimatePresence>
+        {adminMsg && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="mx-4 rounded-2xl p-4 mb-2 text-center"
+            style={{ backgroundColor: adminMsg.success ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${adminMsg.success ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+            <p className={`font-bold text-sm ${adminMsg.success ? 'text-emerald-400' : 'text-red-400'}`}>{adminMsg.text}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── RANKING ── */}
       {tab === 'ranking' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24">
@@ -919,6 +1285,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           <div className="space-y-3 pt-4">
             {members.map(member => {
               const isMe = member.id === user.id
+              const roleBadgeStyle = { owner: { backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }, admin: { backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }, member: { backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' } }
+              const roleLabel = { owner: '👑 Creador', admin: '⚡ Admin', member: 'Miembro' }
               return (
                 <motion.div key={member.id} variants={staggerItem} initial="initial" animate="animate" className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: isMe ? '2px solid #f59e0b' : '2px solid transparent' }}>
                   <div className="flex items-center gap-3">
@@ -1018,17 +1386,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* ── ENCUESTAS ── */}
       {tab === 'polls' && selectedLeague && (
         <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCreatePoll(true)}
-            className="w-full py-3 rounded-2xl font-bold text-white mb-5 flex items-center justify-center gap-2"
-            style={{ backgroundColor: '#6366f1' }}>
-            📊 Crear nueva encuesta
-          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCreatePoll(true)} className="w-full py-3 rounded-2xl font-bold text-white mb-5 flex items-center justify-center gap-2" style={{ backgroundColor: '#6366f1' }}>📊 Crear nueva encuesta</motion.button>
           {polls.length === 0 ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">📊</div>
-              <p className="font-bold">Sin encuestas todavía</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Crea la primera para la liga</p>
-            </div>
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}><div className="text-5xl mb-3">📊</div><p className="font-bold">Sin encuestas todavía</p><p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Crea la primera para la liga</p></div>
           ) : (
             <div className="space-y-4">
               {polls.map(poll => (
@@ -1036,14 +1396,9 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   <PollCard poll={poll} userId={user.id} />
                   {poll.created_by === user.id && (
                     <motion.button whileTap={{ scale: 0.9 }}
-                      onClick={async () => {
-                        await supabase.from('polls').delete().eq('id', poll.id)
-                        fetchPolls(selectedLeague.id)
-                      }}
+                      onClick={async () => { await supabase.from('polls').delete().eq('id', poll.id); fetchPolls(selectedLeague.id) }}
                       className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-xs z-10"
-                      style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
-                      🗑️
-                    </motion.button>
+                      style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>🗑️</motion.button>
                   )}
                 </div>
               ))}
@@ -1059,9 +1414,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             <span className="text-2xl flex-shrink-0">⚖️</span>
             <div>
               <p className="font-bold text-sm text-red-400">Sistema de verificación con IA</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>
-                Cualquier miembro puede impugnar una consumición. El acusado tiene 3 horas para subir una foto. La IA la analiza automáticamente y decide si es válida. Puedes reintentar con otra foto si la primera es rechazada.
-              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Cualquier miembro puede impugnar una consumición. El acusado tiene 3 horas para subir una foto. La IA la analiza automáticamente y decide si es válida.</p>
             </div>
           </div>
           <JuicioTab leagueId={selectedLeague.id} currentUserId={user.id} members={members} />
@@ -1071,50 +1424,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       {/* ── ADMIN ── */}
       {tab === 'admin' && selectedLeague && canManage && (
         <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-          <div className="rounded-2xl p-4 mb-5 flex items-center gap-3" style={{ backgroundColor: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)' }}>
-            <span className="text-3xl">👑</span>
-            <div><p className="font-bold text-purple-400">Panel de administración</p><p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{myRole === 'owner' ? 'Acceso completo como creador' : 'Acceso de administrador'}</p></div>
-          </div>
-          <AnimatePresence>
-            {adminMsg && <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: adminMsg.success ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${adminMsg.success ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}><p className={`font-bold text-sm ${adminMsg.success ? 'text-emerald-400' : 'text-red-400'}`}>{adminMsg.text}</p></motion.div>}
-          </AnimatePresence>
-          <p className="text-sm font-bold mb-3">📊 Estadísticas del grupo</p>
-          {loadingStats ? <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}><motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">📊</motion.div><p className="text-sm">Cargando...</p></div>
-            : adminStats ? (
-              <>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  {[{ label: 'Total consumiciones', value: adminStats.total_drinks, emoji: '🍺' }, { label: 'Miembros', value: adminStats.member_count, emoji: '👥' }, { label: 'Monedas en circulación', value: `${Number(adminStats.total_coins).toLocaleString()}🪙`, emoji: '💰' }, { label: 'Temporada desde', value: adminStats.season_start ? formatDateLong(adminStats.season_start) : '—', emoji: '📅' }].map(stat => (
-                    <div key={stat.label} className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}><p className="text-2xl mb-1">{stat.emoji}</p><p className="font-bold text-amber-400 text-lg leading-tight">{stat.value}</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{stat.label}</p></div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}><p className="text-2xl mb-1">🏆</p><p className="font-bold text-amber-400 text-sm leading-tight">{adminStats.most_active_member || '—'}</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Miembro más activo</p></div>
-                  <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)' }}><p className="text-2xl mb-1">⭐</p><p className="font-bold text-amber-400 text-sm leading-tight">{adminStats.most_popular_drink || '—'}</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Bebida más popular</p></div>
-                </div>
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => fetchAdminStats(selectedLeague.id)} className="w-full py-2.5 rounded-xl text-sm font-medium mb-5" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>🔄 Actualizar estadísticas</motion.button>
-              </>
-            ) : null}
-          <p className="text-sm font-bold mb-3">👥 Gestión de miembros</p>
-          {manageableMembers.length === 0 ? <div className="rounded-2xl p-4 mb-5 text-center" style={{ backgroundColor: 'var(--bg-card)' }}><p className="text-sm" style={{ color: 'var(--text-hint)' }}>No hay miembros que puedas gestionar</p></div>
-            : (
-              <div className="space-y-2 mb-5">
-                {manageableMembers.map(member => (
-                  <motion.div key={member.id} variants={staggerItem} initial="initial" animate="animate" className="rounded-2xl p-3 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    <Avatar url={member.avatar_url} username={member.username} size="md" />
-                    <div className="flex-1 min-w-0"><p className="font-bold text-sm truncate">{member.username}</p><span className="text-xs font-medium px-2 py-0.5 rounded-full" style={roleBadgeStyle[member.role]}>{roleLabel[member.role]}</span></div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      {myRole === 'owner' && <motion.button whileTap={{ scale: 0.9 }} onClick={() => setRoleTarget(member)} className="text-xs font-semibold px-3 py-2 rounded-xl" style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>Rol</motion.button>}
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => setKickTarget(member)} className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950 text-red-400">Expulsar</motion.button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          <p className="text-sm font-bold mb-3">⚠️ Gestión de temporada</p>
-          <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.2)' }}>
-            <div className="flex items-start gap-3 mb-4"><span className="text-2xl flex-shrink-0">🗑️</span><div><p className="font-bold text-sm text-red-400">Resetear puntos de la temporada</p><p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Elimina todas las consumiciones de la temporada actual en esta liga. Los puntos y monedas ganados no se devuelven. Esta acción no se puede deshacer.</p></div></div>
-            <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowResetConfirm(true)} disabled={resetting} className="w-full py-3 rounded-xl font-bold text-red-400 text-sm border border-red-900 disabled:opacity-40" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>{resetting ? 'Reseteando...' : '🗑️ Resetear puntos'}</motion.button>
-          </div>
+          <AdminTab
+            selectedLeague={selectedLeague}
+            members={members}
+            myRole={myRole}
+            onMsg={showAdminMsg}
+            onRefreshRanking={() => fetchRanking(selectedLeague.id)}
+          />
         </div>
       )}
 
@@ -1137,19 +1453,13 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   {msgs.map((msg, index) => {
                     const isMe = msg.user_id === user.id
                     const isSameUser = msgs[index - 1]?.user_id === msg.user_id
-
                     if (msg.poll_id) {
                       const poll = polls.find(p => p.id === msg.poll_id)
                       if (!poll) return null
                       return (
-                        <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.2 }}
+                        <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
                           className={`flex gap-2 mb-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                          {!isMe && (
-                            <div className="flex-shrink-0 self-end">
-                              {!isSameUser ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} size="sm" /> : <div className="w-8" />}
-                            </div>
-                          )}
+                          {!isMe && <div className="flex-shrink-0 self-end">{!isSameUser ? <Avatar url={msg.profiles?.avatar_url} username={msg.profiles?.username} size="sm" /> : <div className="w-8" />}</div>}
                           <div className={`flex flex-col w-64 ${isMe ? 'items-end' : 'items-start'}`}>
                             {!isMe && !isSameUser && <span className="text-xs text-amber-400 font-medium mb-1 ml-1">{msg.profiles?.username}</span>}
                             <PollCard poll={poll} userId={user.id} />
@@ -1158,7 +1468,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                         </motion.div>
                       )
                     }
-
                     return (
                       <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
                         className={`flex gap-2 mb-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -1204,43 +1513,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showResetConfirm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowResetConfirm(false)}>
-            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
-              <div className="text-center mb-5"><div className="text-4xl mb-2">🗑️</div><h2 className="text-xl font-bold">¿Resetear puntos?</h2><p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminarán todas las consumiciones de la temporada actual en <strong>{selectedLeague?.name}</strong>. Esta acción no se puede deshacer.</p></div>
-              <div className="flex gap-3"><motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowResetConfirm(false)} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button><motion.button whileTap={{ scale: 0.96 }} onClick={handleResetSeason} className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl">Resetear</motion.button></div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {kickTarget && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setKickTarget(null)}>
-            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
-              <div className="text-center mb-4"><div className="text-4xl mb-2">🚫</div><h2 className="text-xl font-bold">¿Expulsar a {kickTarget?.username}?</h2><p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se eliminará de la liga y perderá su historial en esta temporada.</p></div>
-              <div className="flex gap-3"><motion.button whileTap={{ scale: 0.96 }} onClick={() => setKickTarget(null)} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button><motion.button whileTap={{ scale: 0.96 }} onClick={kickMember} className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl">Expulsar</motion.button></div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {roleTarget && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setRoleTarget(null)}>
-            <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
-              <div className="text-center mb-5"><div className="text-4xl mb-2">⚡</div><h2 className="text-xl font-bold">Rol de {roleTarget?.username}</h2><p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Elige qué permisos tendrá en la liga</p></div>
-              <div className="space-y-3">
-                {[{ role: 'admin', emoji: '⚡', label: 'Admin', desc: 'Puede expulsar miembros y cambiar el nombre', color: '#818cf8', bg: 'rgba(99,102,241,0.15)' }, { role: 'member', emoji: '🍺', label: 'Miembro', desc: 'Solo puede participar y chatear', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' }].map(opt => (
-                  <motion.button key={opt.role} whileTap={{ scale: 0.97 }} onClick={() => changeRole(roleTarget.id, opt.role)} className="w-full rounded-2xl p-4 text-left" style={{ backgroundColor: roleTarget.role === opt.role ? opt.bg : 'var(--bg-input)', border: roleTarget.role === opt.role ? `2px solid ${opt.color}` : '2px solid transparent' }}>
-                    <div className="flex items-center gap-3"><span className="text-2xl">{opt.emoji}</span><div className="flex-1"><p className="font-bold text-sm" style={{ color: roleTarget.role === opt.role ? opt.color : 'var(--text-primary)' }}>{opt.label}</p><p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{opt.desc}</p></div>{roleTarget.role === opt.role && <span style={{ color: opt.color }}>✓</span>}</div>
-                  </motion.button>
-                ))}
-              </div>
-              <motion.button whileTap={{ scale: 0.96 }} onClick={() => setRoleTarget(null)} className="w-full mt-4 font-semibold py-3 rounded-xl text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>Cancelar</motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
         {showJoinModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }}>
             <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
@@ -1250,18 +1522,25 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                 {joinError && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-red-400 text-sm text-center mb-3">⚠️ {joinError}</motion.p>}
                 {joinSuccess && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-emerald-400 text-sm text-center mb-3 font-bold">{joinSuccess}</motion.p>}
               </AnimatePresence>
-              <div className="flex gap-3"><motion.button whileTap={{ scale: 0.96 }} onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button><motion.button whileTap={{ scale: 0.96 }} onClick={handleJoinLeague} disabled={!joinCode.trim() || joining} className="flex-1 bg-amber-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl">{joining ? 'Uniéndose...' : 'Unirse'}</motion.button></div>
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(''); setJoinSuccess('') }} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleJoinLeague} disabled={!joinCode.trim() || joining} className="flex-1 bg-amber-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl">{joining ? 'Uniéndose...' : 'Unirse'}</motion.button>
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
       <AnimatePresence>
         {showCreateModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }}>
             <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-5"><div className="text-4xl mb-2">🏆</div><h2 className="text-xl font-bold">Nueva liga</h2><p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Se generará un código de invitación automáticamente</p></div>
               <input type="text" value={newLeagueCreateName} onChange={e => setNewLeagueCreateName(e.target.value)} placeholder="Nombre de la liga..." onKeyDown={e => e.key === 'Enter' && handleCreateLeague()} className="w-full rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-500 mb-4" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
-              <div className="flex gap-3"><motion.button whileTap={{ scale: 0.96 }} onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button><motion.button whileTap={{ scale: 0.96 }} onClick={handleCreateLeague} disabled={!newLeagueCreateName.trim() || creating} className="flex-1 bg-amber-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl">{creating ? 'Creando...' : 'Crear'}</motion.button></div>
+              <div className="flex gap-3">
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => { setShowCreateModal(false); setNewLeagueCreateName('') }} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Cancelar</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleCreateLeague} disabled={!newLeagueCreateName.trim() || creating} className="flex-1 bg-amber-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl">{creating ? 'Creando...' : 'Crear'}</motion.button>
+              </div>
             </motion.div>
           </motion.div>
         )}
