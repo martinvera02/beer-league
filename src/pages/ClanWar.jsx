@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -19,13 +19,12 @@ const MISSION_LABELS = {
   night_drink:    { emoji: '🌙', label: 'Consumiciones nocturnas (22h-4h)' },
 }
 
-// ─── Confetti animado ─────────────────────────────────────────────────────────
 function Confetti() {
-  const pieces = Array.from({ length: 18 }, (_, i) => ({
+  const pieces = Array.from({ length: 24 }, (_, i) => ({
     x: Math.random() * 100,
-    delay: Math.random() * 0.4,
-    color: ['#ef4444','#f59e0b','#6366f1','#10b981','#ec4899'][i % 5],
-    size: 6 + Math.random() * 6,
+    delay: Math.random() * 0.6,
+    color: ['#ef4444','#f59e0b','#6366f1','#10b981','#ec4899','#fff'][i % 6],
+    size: 6 + Math.random() * 8,
   }))
   return (
     <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
@@ -34,8 +33,105 @@ function Confetti() {
           style={{ left: `${p.x}%`, top: -10, width: p.size, height: p.size, backgroundColor: p.color }}
           initial={{ y: -20, rotate: 0, opacity: 1 }}
           animate={{ y: '110vh', rotate: 720, opacity: [1, 1, 0] }}
-          transition={{ duration: 1.8, delay: p.delay, ease: 'easeIn' }} />
+          transition={{ duration: 2, delay: p.delay, ease: 'easeIn' }} />
       ))}
+    </div>
+  )
+}
+
+// ─── PANTALLA RESULTADO DE GUERRA ─────────────────────────────────────────────
+function WarResult({ war, myLeagueId, onDismiss }) {
+  const isChallenger = myLeagueId === war.challenger_league_id
+  const myPoints = (isChallenger ? war.challenger_war_points : war.defender_war_points || 0) +
+                   (isChallenger ? war.challenger_missions_points : war.defender_missions_points || 0)
+  const enemyPoints = (isChallenger ? war.defender_war_points : war.challenger_war_points || 0) +
+                      (isChallenger ? war.defender_missions_points : war.challenger_missions_points || 0)
+  const myName = isChallenger ? war.challenger?.name : war.defender?.name
+  const enemyName = isChallenger ? war.defender?.name : war.challenger?.name
+  const won = myPoints > enemyPoints
+  const draw = myPoints === enemyPoints
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-24"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+      {won && <Confetti />}
+
+      <motion.div initial={{ opacity: 0, scale: 0.8, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        className="w-full max-w-sm">
+
+        {/* Resultado principal */}
+        <div className="text-center mb-8">
+          <motion.div className="text-7xl mb-4"
+            animate={won ? { rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] } : { scale: [1, 0.95, 1] }}
+            transition={{ duration: 0.6, delay: 0.3 }}>
+            {won ? '🏆' : draw ? '🤝' : '💀'}
+          </motion.div>
+          <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+            className="text-3xl font-black mb-2"
+            style={{ color: won ? '#f59e0b' : draw ? '#6366f1' : '#ef4444' }}>
+            {won ? '¡Victoria!' : draw ? '¡Empate!' : 'Derrota'}
+          </motion.h1>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+            className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            {won ? `${myName} ha ganado la guerra` : draw ? 'Ninguna liga ganó' : `${enemyName} ha ganado la guerra`}
+          </motion.p>
+        </div>
+
+        {/* Marcador final */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+          className="rounded-2xl p-5 mb-4"
+          style={{
+            background: won
+              ? 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(245,158,11,0.05))'
+              : draw
+                ? 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(99,102,241,0.05))'
+                : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))',
+            border: `2px solid ${won ? 'rgba(245,158,11,0.5)' : draw ? 'rgba(99,102,241,0.4)' : 'rgba(239,68,68,0.3)'}`,
+          }}>
+          <p className="text-xs font-bold text-center mb-4" style={{ color: 'var(--text-muted)' }}>RESULTADO FINAL</p>
+          <div className="flex items-center justify-between">
+            <div className="flex-1 text-center">
+              <p className="font-black text-sm mb-1 truncate">{myName}</p>
+              <motion.p initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.7, type: 'spring' }}
+                className="text-4xl font-black"
+                style={{ color: won ? '#f59e0b' : draw ? '#818cf8' : 'var(--text-primary)' }}>
+                {myPoints}
+              </motion.p>
+              {won && <p className="text-xs mt-1 text-amber-400 font-bold">👑 GANADOR</p>}
+            </div>
+            <div className="text-2xl font-black mx-4 flex-shrink-0" style={{ color: 'var(--text-hint)' }}>VS</div>
+            <div className="flex-1 text-center">
+              <p className="font-black text-sm mb-1 truncate">{enemyName}</p>
+              <motion.p initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.8, type: 'spring' }}
+                className="text-4xl font-black"
+                style={{ color: !won && !draw ? '#ef4444' : 'var(--text-muted)' }}>
+                {enemyPoints}
+              </motion.p>
+              {!won && !draw && <p className="text-xs mt-1 text-red-400 font-bold">👑 GANADOR</p>}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Premio */}
+        {won && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}
+            className="rounded-2xl p-4 mb-4 text-center"
+            style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+            <p className="text-sm font-bold text-amber-400">🎁 Premio de victoria</p>
+            <p className="text-2xl font-black text-amber-400 mt-1">+{REWARD_COINS.toLocaleString()}🪙</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Para cada miembro del equipo ganador</p>
+          </motion.div>
+        )}
+
+        {/* Botón nueva guerra */}
+        <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
+          whileTap={{ scale: 0.97 }} onClick={onDismiss}
+          className="w-full py-4 rounded-2xl font-bold text-white"
+          style={{ backgroundColor: won ? '#f59e0b' : '#dc2626' }}>
+          ⚔️ Nueva guerra
+        </motion.button>
+      </motion.div>
     </div>
   )
 }
@@ -46,6 +142,7 @@ export default function ClanWar() {
   const [myLeagues, setMyLeagues] = useState([])
   const [myRole, setMyRole] = useState({})
   const [activeWar, setActiveWar] = useState(null)
+  const [finishedWar, setFinishedWar] = useState(null) // ← guerra terminada
   const [myParticipation, setMyParticipation] = useState(null)
   const [participants, setParticipants] = useState([])
   const [missions, setMissions] = useState([])
@@ -83,41 +180,64 @@ export default function ClanWar() {
     const leagueIds = leagues.map(l => l.id)
 
     if (leagueIds.length > 0) {
+      // Buscar guerra activa o pendiente
       const { data: warData } = await supabase
         .from('clan_wars').select(`*, challenger:leagues!clan_wars_challenger_league_id_fkey(id,name), defender:leagues!clan_wars_defender_league_id_fkey(id,name)`)
         .in('status', ['pending', 'active'])
         .or(leagueIds.map(id => `challenger_league_id.eq.${id},defender_league_id.eq.${id}`).join(','))
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
 
+      // Buscar guerra terminada reciente (últimas 48h)
+      const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+      const { data: finishedData } = await supabase
+        .from('clan_wars').select(`*, challenger:leagues!clan_wars_challenger_league_id_fkey(id,name), defender:leagues!clan_wars_defender_league_id_fkey(id,name)`)
+        .eq('status', 'finished')
+        .or(leagueIds.map(id => `challenger_league_id.eq.${id},defender_league_id.eq.${id}`).join(','))
+        .gte('ends_at', since48h)
+        .order('ends_at', { ascending: false }).limit(1).maybeSingle()
+
+      setFinishedWar(finishedData || null)
+
       if (warData) {
-        setActiveWar(warData)
-        const { data: part } = await supabase.from('clan_war_participants').select('*').eq('war_id', warData.id).eq('user_id', user.id).maybeSingle()
-        setMyParticipation(part)
-        const { data: parts } = await supabase.from('clan_war_participants').select('*, profiles(id, username, avatar_url)').eq('war_id', warData.id)
-        setParticipants(parts || [])
+        // Auto-cerrar si ends_at ya pasó
+        if (warData.status === 'active' && warData.ends_at && new Date(warData.ends_at) < new Date()) {
+          await supabase.from('clan_wars').update({ status: 'finished' }).eq('id', warData.id)
+          setActiveWar(null)
+          // Recargar finished
+          const { data: newFinished } = await supabase
+            .from('clan_wars').select(`*, challenger:leagues!clan_wars_challenger_league_id_fkey(id,name), defender:leagues!clan_wars_defender_league_id_fkey(id,name)`)
+            .eq('id', warData.id).single()
+          setFinishedWar(newFinished)
+        } else {
+          setActiveWar(warData)
+          const { data: part } = await supabase.from('clan_war_participants').select('*').eq('war_id', warData.id).eq('user_id', user.id).maybeSingle()
+          setMyParticipation(part)
+          const { data: parts } = await supabase.from('clan_war_participants').select('*, profiles(id, username, avatar_url)').eq('war_id', warData.id)
+          setParticipants(parts || [])
 
-        const myLeagueId = part?.league_id
-        if (myLeagueId && warData.status === 'active') {
-          const today = warData.started_at ? Math.min(3, Math.floor((Date.now() - new Date(warData.started_at).getTime()) / 86400000) + 1) : 1
-          const { data: myMissions } = await supabase.from('war_missions').select('*').eq('war_id', warData.id).eq('league_id', myLeagueId).eq('day', today)
-          setMissions(myMissions || [])
+          const myLeagueId = part?.league_id
+          if (myLeagueId && warData.status === 'active') {
+            const today = warData.started_at ? Math.min(3, Math.floor((Date.now() - new Date(warData.started_at).getTime()) / 86400000) + 1) : 1
+            const { data: myMissions } = await supabase.from('war_missions').select('*').eq('war_id', warData.id).eq('league_id', myLeagueId).eq('day', today)
+            setMissions(myMissions || [])
 
-          if (part?.role === 'spy') {
-            const enemyLeagueId = myLeagueId === warData.challenger_league_id ? warData.defender_league_id : warData.challenger_league_id
-            const { data: eMissions } = await supabase.from('war_missions').select('*').eq('war_id', warData.id).eq('league_id', enemyLeagueId).eq('day', today)
-            setEnemyMissions(eMissions || [])
-          } else { setEnemyMissions([]) }
+            if (part?.role === 'spy') {
+              const enemyLeagueId = myLeagueId === warData.challenger_league_id ? warData.defender_league_id : warData.challenger_league_id
+              const { data: eMissions } = await supabase.from('war_missions').select('*').eq('war_id', warData.id).eq('league_id', enemyLeagueId).eq('day', today)
+              setEnemyMissions(eMissions || [])
+            } else { setEnemyMissions([]) }
 
-          const { data: lastEvent } = await supabase.from('war_events').select('created_at').eq('war_id', warData.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-          const hoursSinceEvent = lastEvent ? (Date.now() - new Date(lastEvent.created_at).getTime()) / 3600000 : 99
-          setLastEventCheck(hoursSinceEvent)
-          if (hoursSinceEvent > 12) {
-            await supabase.rpc('generate_war_event', { p_war_id: warData.id, p_challenger_id: warData.challenger_league_id, p_defender_id: warData.defender_league_id })
+            const { data: lastEvent } = await supabase.from('war_events').select('created_at').eq('war_id', warData.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+            const hoursSinceEvent = lastEvent ? (Date.now() - new Date(lastEvent.created_at).getTime()) / 3600000 : 99
+            setLastEventCheck(hoursSinceEvent)
+            if (hoursSinceEvent > 12) {
+              await supabase.rpc('generate_war_event', { p_war_id: warData.id, p_challenger_id: warData.challenger_league_id, p_defender_id: warData.defender_league_id })
+            }
           }
-        }
 
-        const { data: eventsData } = await supabase.from('war_events').select('*, leagues(name)').eq('war_id', warData.id).eq('active', true).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
-        setEvents(eventsData || [])
+          const { data: eventsData } = await supabase.from('war_events').select('*, leagues(name)').eq('war_id', warData.id).eq('active', true).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
+          setEvents(eventsData || [])
+        }
       } else {
         setActiveWar(null); setMyParticipation(null); setParticipants([]); setMissions([]); setEnemyMissions([]); setEvents([])
       }
@@ -225,6 +345,14 @@ export default function ClanWar() {
   const enemyRoleCounts = roleCount(enemyTeam)
   const pendingRoles = myTeam.filter(p => !p.role_chosen).length
 
+  // Liga del usuario para mostrar resultado
+  const myLeagueIdForResult = myLeagues.length > 0
+    ? (finishedWar
+        ? (myLeagues.find(l => l.id === finishedWar.challenger_league_id)?.id ||
+           myLeagues.find(l => l.id === finishedWar.defender_league_id)?.id)
+        : null)
+    : null
+
   const Avatar = ({ url, username, size = 'sm' }) => {
     const dim = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10'
     return url ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
@@ -236,6 +364,17 @@ export default function ClanWar() {
       <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-4xl">⚔️</motion.div>
     </div>
   )
+
+  // ── Mostrar resultado si hay guerra terminada y no hay guerra activa ──
+  if (finishedWar && !activeWar && tab === 'war' && myLeagueIdForResult) {
+    return (
+      <WarResult
+        war={finishedWar}
+        myLeagueId={myLeagueIdForResult}
+        onDismiss={() => { setFinishedWar(null) }}
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
@@ -291,7 +430,7 @@ export default function ClanWar() {
             </div>
           ) : (
             <>
-              {/* ── AVISO ROL PENDIENTE ── */}
+              {/* Aviso rol pendiente */}
               <AnimatePresence>
                 {activeWar.status === 'active' && myParticipation && !roleChosen && (
                   <motion.div initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
@@ -308,7 +447,7 @@ export default function ClanWar() {
                 )}
               </AnimatePresence>
 
-              {/* ── DÍA DE GUERRA ── */}
+              {/* Día de guerra */}
               {activeWar.status === 'active' && (
                 <div className="rounded-2xl p-3 mb-4 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <div className="flex gap-1.5">
@@ -335,7 +474,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── MARCADOR ── */}
+              {/* Marcador */}
               <div className="rounded-2xl p-4 mb-4" style={{
                 background: activeWar.status === 'pending'
                   ? 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05))'
@@ -401,7 +540,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── MI ROL ── */}
+              {/* Mi rol */}
               {activeWar.status === 'active' && myParticipation && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowRoleModal(true)}
                   className="w-full rounded-2xl p-4 mb-4 flex items-center gap-3"
@@ -420,7 +559,7 @@ export default function ClanWar() {
                 </motion.button>
               )}
 
-              {/* ── RESUMEN ROLES ── */}
+              {/* Resumen roles */}
               {activeWar.status === 'active' && myTeam.length > 0 && (
                 <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <div className="flex items-center justify-between mb-3">
@@ -445,7 +584,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── MISIONES ── */}
+              {/* Misiones */}
               {activeWar.status === 'active' && missions.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm font-bold mb-2">📋 Misiones — Día {today}</p>
@@ -472,7 +611,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── MISIONES RIVALES (espía) ── */}
+              {/* Misiones rivales (espía) */}
               {activeWar.status === 'active' && currentRole === 'spy' && enemyMissions.length > 0 && (
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -499,7 +638,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── EVENTOS ── */}
+              {/* Eventos */}
               {activeWar.status === 'active' && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
@@ -508,9 +647,7 @@ export default function ClanWar() {
                       {lastEventCheck > 12 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>Auto-generado</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {events.length >= 3 && (
-                        <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Máx. 3 activos</span>
-                      )}
+                      {events.length >= 3 && <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Máx. 3 activos</span>}
                       <motion.button whileTap={{ scale: 0.9 }} onClick={handleGenerateEvent}
                         disabled={generatingEvent || events.length >= 3}
                         className="text-xs px-3 py-1.5 rounded-xl font-bold"
@@ -546,7 +683,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* ── PARTICIPANTES ── */}
+              {/* Participantes */}
               {activeWar.status === 'active' && participants.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm font-bold mb-2">👥 Participantes</p>
@@ -599,9 +736,9 @@ export default function ClanWar() {
                   {[
                     { emoji: '🗡️', role: 'Atacante', desc: 'Consumiciones x2 puntos de guerra' },
                     { emoji: '🛡️', role: 'Defensor', desc: 'Reduce los puntos robables por el rival' },
-                    { emoji: '🕵️', role: 'Espía',    desc: 'Ve misiones rivales · x0.5 puntos' },
+                    { emoji: '🕵️', role: 'Espía', desc: 'Ve misiones rivales · x0.5 puntos' },
                     { emoji: '📋', role: 'Misiones', desc: '2 misiones diarias por liga · puntos extra' },
-                    { emoji: '⚡', role: 'Eventos',  desc: 'Aleatorios cada 12h · máx. 3 activos' },
+                    { emoji: '⚡', role: 'Eventos', desc: 'Aleatorios cada 12h · máx. 3 activos' },
                     { emoji: '🏆', role: 'Victoria', desc: `Más puntos totales al día 3 · ${REWARD_COINS.toLocaleString()}🪙 por miembro` },
                   ].map((item, i) => (
                     <div key={i} className="flex items-start gap-2">
@@ -651,7 +788,7 @@ export default function ClanWar() {
         </div>
       )}
 
-      {/* ── MODAL ROL ── */}
+      {/* Modal rol */}
       <AnimatePresence>
         {showRoleModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -708,7 +845,7 @@ export default function ClanWar() {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL CANCELAR ── */}
+      {/* Modal cancelar */}
       <AnimatePresence>
         {showCancelConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

@@ -18,7 +18,6 @@ function MarketTicker({ drinkMarket }) {
     return { emoji: d.drink_types?.emoji, name: d.drink_types?.name, mult, isUp, pct }
   })
 
-  // Duplicar para bucle infinito sin saltos
   const doubled = [...items, ...items, ...items]
   const duration = items.length * 5
 
@@ -33,12 +32,10 @@ function MarketTicker({ drinkMarket }) {
           <div key={i} className="flex items-center gap-1.5 px-4 flex-shrink-0">
             <span className="text-base">{item.emoji}</span>
             <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{item.name}</span>
-            <span className="text-xs font-black ml-0.5"
-              style={{ color: item.mult > 1 ? '#10b981' : item.mult < 1 ? '#ef4444' : '#9ca3af' }}>
+            <span className="text-xs font-black ml-0.5" style={{ color: item.mult > 1 ? '#10b981' : item.mult < 1 ? '#ef4444' : '#9ca3af' }}>
               x{item.mult.toFixed(2)}
             </span>
-            <span className="text-xs font-bold"
-              style={{ color: item.isUp ? '#10b981' : '#ef4444' }}>
+            <span className="text-xs font-bold" style={{ color: item.isUp ? '#10b981' : '#ef4444' }}>
               {item.isUp ? '▲' : '▼'}{item.pct}%
             </span>
             <span className="text-xs ml-2" style={{ color: 'var(--border)' }}>|</span>
@@ -118,8 +115,7 @@ function DetailChart({ history, width = 320, height = 150 }) {
       <div className="flex items-end gap-3 mb-2">
         <div>
           <p className="text-xs mb-0.5" style={{ color: 'var(--text-hint)' }}>Multiplicador actual</p>
-          <p className="text-3xl font-bold"
-            style={{ color: current > 1 ? '#10b981' : current < 1 ? '#ef4444' : 'var(--text-primary)' }}>
+          <p className="text-3xl font-bold" style={{ color: current > 1 ? '#10b981' : current < 1 ? '#ef4444' : 'var(--text-primary)' }}>
             x{current.toFixed(2)}
           </p>
         </div>
@@ -291,7 +287,8 @@ export default function Market() {
 
     setBalance(walletData?.balance || 0)
     setDrinkTypes(drinkTypesData || [])
-    setPowerups(powerupData || [])
+    // ── FIX: asegurar que id de powerups sea número
+    setPowerups((powerupData || []).map(p => ({ ...p, id: parseInt(p.id) })))
     setMyPowerups(myPowerupData || [])
     setMyPositions(positionData || [])
     setActiveLoan(loanData || null)
@@ -386,28 +383,50 @@ export default function Market() {
     setClosingPosition(null)
   }
 
+  // ── FIX PRINCIPAL: conversión explícita de tipos en buy_powerup ──
   const executeBuyPowerup = async () => {
     if (!selectedPowerup || !selectedLeague) return
     const needsTarget = ['freeze', 'sniper', 'sabotage'].includes(selectedPowerup.effect_type)
     if (needsTarget && !targetUser) return
     if (selectedPowerup.effect_type === 'turbo' && !turboDrink) return
     if (selectedPowerup.effect_type === 'market_reset' && !resetDrink) return
+
     setBuying(true)
+    setBuyResult(null)
+
     let extraData = {}
-    if (selectedPowerup.effect_type === 'turbo') extraData.drink_type_id = turboDrink
-    if (selectedPowerup.effect_type === 'market_reset') extraData.drink_type_id = resetDrink
-    const { data } = await supabase.rpc('buy_powerup', {
-      p_target_user_id: targetUser?.id || user.id,
-      p_league_id: selectedLeague.id,
-      p_powerup_id: selectedPowerup.id,
-      p_extra_data: extraData,
-    })
-    if (data?.success) {
-      soundSuccess(); setBalance(prev => prev - selectedPowerup.cost)
-      setLastPowerupTime(new Date().toISOString()); setBuyResult(data)
-      setTimeout(() => { setBuyResult(null); setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null); setResetDrink(null) }, 2000)
+    if (selectedPowerup.effect_type === 'turbo') extraData.drink_type_id = parseInt(turboDrink)
+    if (selectedPowerup.effect_type === 'market_reset') extraData.drink_type_id = parseInt(resetDrink)
+
+    const params = {
+      p_powerup_id: parseInt(selectedPowerup.id),   // ← FIX: integer explícito
+      p_league_id: parseInt(selectedLeague.id),      // ← FIX: integer explícito
+      p_target_user_id: targetUser?.id || null,
+      p_extra_data: Object.keys(extraData).length > 0 ? extraData : {},
+    }
+
+    console.log('buy_powerup params:', params) // para debug
+    const { data, error } = await supabase.rpc('buy_powerup', params)
+
+    if (error) {
+      console.error('buy_powerup error:', error)
+      soundError()
+      setBuyResult({ success: false, error: error.message || 'Error al comprar' })
+    } else if (data?.success) {
+      soundSuccess()
+      setBalance(prev => prev - selectedPowerup.cost)
+      setLastPowerupTime(new Date().toISOString())
+      setBuyResult(data)
+      setTimeout(() => {
+        setBuyResult(null); setSelectedPowerup(null)
+        setTargetUser(null); setTurboDrink(null); setResetDrink(null)
+      }, 2000)
       fetchAll()
-    } else { soundError(); setBuyResult(data); setTimeout(() => setBuyResult(null), 4000) }
+    } else {
+      soundError()
+      setBuyResult(data)
+      setTimeout(() => setBuyResult(null), 4000)
+    }
     setBuying(false)
   }
 
@@ -553,7 +572,6 @@ export default function Market() {
         </div>
       </div>
 
-      {/* ── TICKER DE COTIZACIONES ── */}
       <MarketTicker drinkMarket={drinkMarket} />
 
       {/* ── COTIZACIÓN ── */}
@@ -597,9 +615,7 @@ export default function Market() {
                   className="w-full rounded-2xl p-4 text-left" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ backgroundColor: 'var(--bg-input)' }}>
-                      {drink.drink_types?.emoji}
-                    </div>
+                      style={{ backgroundColor: 'var(--bg-input)' }}>{drink.drink_types?.emoji}</div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{drink.drink_types?.name}</p>
                       <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Vol: {drink.volume?.toLocaleString()}🪙</p>
@@ -730,7 +746,7 @@ export default function Market() {
         </div>
       )}
 
-      {/* ── CARTERA UNIFICADA ── */}
+      {/* ── CARTERA ── */}
       {tab === 'portfolio' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
           <motion.div {...fadeIn} className="rounded-2xl p-5 mb-4"
@@ -781,7 +797,6 @@ export default function Market() {
             <div className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
               <div className="text-3xl mb-2">📊</div>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin acciones todavía</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Ve al S&PINTA 500 para invertir</p>
             </div>
           ) : (
             <div className="space-y-3 mb-6">
@@ -871,7 +886,6 @@ export default function Market() {
             <div className="rounded-2xl p-4 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
               <div className="text-3xl mb-2">📈</div>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin posiciones abiertas</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Ve a Cotización para invertir</p>
             </div>
           ) : (
             <div className="space-y-3 mb-6">
@@ -1137,7 +1151,7 @@ export default function Market() {
                       <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Dirección</p>
                       <div className="flex gap-2">
                         {[
-                          { d: 'long',  label: '▲ LONG',  sub: 'sube multiplicador', color: '#10b981', bg: 'rgba(16,185,129,0.2)' },
+                          { d: 'long', label: '▲ LONG', sub: 'sube multiplicador', color: '#10b981', bg: 'rgba(16,185,129,0.2)' },
                           { d: 'short', label: '▼ SHORT', sub: 'baja multiplicador', color: '#ef4444', bg: 'rgba(239,68,68,0.2)' },
                         ].map(opt => (
                           <motion.button key={opt.d} whileTap={{ scale: 0.95 }} onClick={() => setTradeDirection(opt.d)}
@@ -1190,7 +1204,7 @@ export default function Market() {
         {selectedPowerup && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-end justify-center z-50"
-            onClick={() => { setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null); setResetDrink(null) }}>
+            onClick={() => { setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null); setResetDrink(null); setBuyResult(null) }}>
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
@@ -1208,7 +1222,7 @@ export default function Market() {
                   </div>
                 </div>
                 <motion.button whileTap={{ scale: 0.9 }}
-                  onClick={() => { setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null); setResetDrink(null) }}
+                  onClick={() => { setSelectedPowerup(null); setTargetUser(null); setTurboDrink(null); setResetDrink(null); setBuyResult(null) }}
                   className="w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
               </div>
