@@ -34,3 +34,13 @@ jobs:
           else
             echo "Skipping decay (hour $HOUR, not a multiple of 6)"
           fi
+
+      - name: Reward war winners
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/reward_war_winner" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "reward_war_winner response: $RESPONSE"

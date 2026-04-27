@@ -205,6 +205,7 @@ export default function ClanWar() {
       if (warData) {
         // Auto-cerrar si ends_at ya pasó
         if (warData.status === 'active' && warData.ends_at && new Date(warData.ends_at) < new Date()) {
+          await supabase.rpc('reward_war_winner')
           await supabase.from('clan_wars').update({ status: 'finished' }).eq('id', warData.id)
           setActiveWar(null)
           // Recargar finished
