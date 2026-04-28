@@ -328,10 +328,7 @@ export default function Market() {
     if (userLeagues.length > 0 && !selectedLeague) setSelectedLeague(userLeagues[0])
 
     const { data: histData } = await supabase
-      .from('drink_market_history')
-      .select('*')
-      .eq('drink_type_id', selectedDrinkTypeId)
-      .order('recorded_at', { ascending: true })
+      .from('drink_market_history').select('*').order('recorded_at', { ascending: true })
     if (histData) {
       const grouped = histData.reduce((acc, h) => {
         if (!acc[h.drink_type_id]) acc[h.drink_type_id] = []
