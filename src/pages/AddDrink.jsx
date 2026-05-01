@@ -21,6 +21,12 @@ const isMartesEnMadrid = () => {
   return dow === 2 || (dow === 3 && hour < 4)
 }
 
+const isOperacionBarbacoa = () => {
+  const now = new Date()
+  const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+  return madrid.getDate() === 9 && madrid.getMonth() === 4 // Mayo = mes 4
+}
+
 // ─── Dígito animado individual ────────────────────────────────────────────────
 function CountdownDigit({ value }) {
   return (
@@ -36,7 +42,6 @@ function CountdownDigit({ value }) {
   )
 }
 
-// ─── Cuenta atrás con dígitos separados ──────────────────────────────────────
 function CountdownDisplay({ countdown }) {
   if (!countdown) return null
   const [hh, mm, ss] = countdown.split(':')
@@ -49,19 +54,13 @@ function CountdownDisplay({ countdown }) {
       <CountdownDigit value={mm[0]} />
       <CountdownDigit value={mm[1]} />
       <span className="text-white/60 font-black text-lg leading-none mb-0.5">:</span>
-      <motion.div
-        key={ss}
-        initial={{ scale: 1.3, opacity: 0.5 }}
-        animate={{ scale: 1, opacity: 1 }}
+      <motion.div key={ss} initial={{ scale: 1.3, opacity: 0.5 }} animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.2 }}
         className="inline-block w-7 text-center font-black text-white text-xl leading-none rounded-lg py-1"
         style={{ background: 'rgba(255,255,255,0.18)', fontVariantNumeric: 'tabular-nums' }}>
         {ss[0]}
       </motion.div>
-      <motion.div
-        key={ss + 'b'}
-        initial={{ scale: 1.3, opacity: 0.5 }}
-        animate={{ scale: 1, opacity: 1 }}
+      <motion.div key={ss + 'b'} initial={{ scale: 1.3, opacity: 0.5 }} animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.2 }}
         className="inline-block w-7 text-center font-black text-white text-xl leading-none rounded-lg py-1"
         style={{ background: 'rgba(255,255,255,0.18)', fontVariantNumeric: 'tabular-nums' }}>
@@ -87,12 +86,14 @@ export default function AddDrink() {
   const [balance, setBalance] = useState(0)
 
   const isMartes = isMartesEnMadrid()
+  const isBarbacoa = isOperacionBarbacoa()
+  // Barbacoa tiene prioridad sobre Martes Macarra
+  const isEventActive = isBarbacoa || isMartes
 
-  // ── CUENTA ATRÁS ──────────────────────────────────────────────────────────
   const [countdown, setCountdown] = useState('')
 
   useEffect(() => {
-    if (!isMartes) return
+    if (!isMartes || isBarbacoa) return
     const tick = () => {
       const now = new Date()
       const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
@@ -100,25 +101,21 @@ export default function AddDrink() {
       const h = madrid.getHours()
       const m = madrid.getMinutes()
       const s = madrid.getSeconds()
-
       let secsLeft
       if (dow === 2) {
         secsLeft = (24 - h) * 3600 - m * 60 - s + 4 * 3600
       } else {
         secsLeft = (4 - h - 1) * 3600 + (60 - m - 1) * 60 + (60 - s)
       }
-
       const hh = Math.floor(secsLeft / 3600)
-      const mm = Math.floor((secsLeft % 3600) / 60)
-      const ss = secsLeft % 60
-      setCountdown(
-        `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
-      )
+      const mm2 = Math.floor((secsLeft % 3600) / 60)
+      const ss2 = secsLeft % 60
+      setCountdown(`${String(hh).padStart(2, '0')}:${String(mm2).padStart(2, '0')}:${String(ss2).padStart(2, '0')}`)
     }
     tick()
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
-  }, [isMartes])
+  }, [isMartes, isBarbacoa])
 
   useEffect(() => { fetchData() }, [])
 
@@ -164,7 +161,7 @@ export default function AddDrink() {
     const hasGamble = activePowerups.some(p => p.powerup_catalog?.effect_type === 'gamble')
     if (hasGamble) return '?'
     let multiplier = marketMultiplier
-    if (isMartes) multiplier *= 2
+    if (isEventActive) multiplier *= 2
     if (hasDouble) multiplier *= 2
     if (hasTurbo) multiplier *= 3
     return Math.round(drink.points * multiplier * 10) / 10
@@ -192,12 +189,10 @@ export default function AddDrink() {
     if (error || !data?.success) {
       if (data?.frozen) {
         if (data?.shield_blocked) {
-          setShieldBlocked(true)
-          soundSuccess()
+          setShieldBlocked(true); soundSuccess()
           setTimeout(() => setShieldBlocked(false), 3000)
         } else {
-          setFrozen(true)
-          soundError()
+          setFrozen(true); soundError()
           setTimeout(() => setFrozen(false), 3000)
         }
       }
@@ -229,6 +224,17 @@ export default function AddDrink() {
     }
   }
 
+  // Colores del evento activo
+  const eventGradient = isBarbacoa
+    ? 'linear-gradient(135deg, #8B0000, #B22222, #8B0000)'
+    : 'linear-gradient(135deg, #7c3aed, #dc2626)'
+  const eventGlow = isBarbacoa
+    ? '0 0 30px rgba(139,0,0,0.6)'
+    : '0 0 30px rgba(124,58,237,0.4)'
+  const eventButtonBg = isBarbacoa
+    ? 'linear-gradient(135deg, #8B0000, #CC2200)'
+    : 'linear-gradient(135deg, #7c3aed, #dc2626)'
+
   return (
     <div className="min-h-screen pb-24 px-4 pt-6 transition-colors duration-300"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
@@ -241,9 +247,95 @@ export default function AddDrink() {
           </p>
         </motion.div>
 
-        {/* ── BANNER MARTES MACARRA ── */}
+        {/* ── BANNER OPERACIÓN BARBACOA ── */}
         <AnimatePresence>
-          {isMartes && (
+          {isBarbacoa && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.93 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.93 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="rounded-2xl mb-4 relative overflow-hidden"
+              style={{
+                background: eventGradient,
+                border: '2px solid #FFD700',
+                boxShadow: eventGlow,
+              }}>
+
+              {/* Brillo animado */}
+              <motion.div className="absolute inset-0 pointer-events-none"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(255,215,0,0.08), transparent)' }}
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }} />
+
+              {/* Borde dorado superior */}
+              <div style={{ height: 3, background: 'linear-gradient(90deg, transparent, #FFD700, #FFA500, #FFD700, transparent)' }} />
+
+              <div className="flex items-stretch">
+                {/* Logo izquierdo */}
+                <div className="flex-shrink-0 flex items-center justify-center p-3"
+                  style={{ background: 'rgba(0,0,0,0.25)', borderRight: '1px solid rgba(255,215,0,0.3)' }}>
+                  <motion.img
+                    src="/operacion-barbacoa.png"
+                    alt="Operación Barbacoa"
+                    className="object-contain"
+                    style={{ width: 72, height: 72 }}
+                    animate={{ scale: [1, 1.04, 1] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                </div>
+
+                {/* Contenido derecho */}
+                <div className="flex-1 p-4">
+                  {/* Título estilo propaganda */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <motion.div
+                      animate={{ opacity: [1, 0.4, 1] }}
+                      transition={{ duration: 1.2, repeat: Infinity }}
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: '#FFD700' }} />
+                    <p className="font-black text-base tracking-widest uppercase"
+                      style={{ color: '#FFD700', textShadow: '0 0 12px rgba(255,215,0,0.5)', fontFamily: 'serif', letterSpacing: '0.15em' }}>
+                      Operación Barbacoa
+                    </p>
+                  </div>
+
+                  {/* Subtítulo */}
+                  <p className="text-xs mb-2 font-medium" style={{ color: 'rgba(255,220,100,0.85)' }}>
+                    🍖 Día de la Victoria · 9 de Mayo
+                  </p>
+
+                  {/* Tags */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <motion.span
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="text-xs font-black px-2.5 py-1 rounded-full"
+                      style={{ background: '#FFD700', color: '#8B0000', letterSpacing: '0.05em' }}>
+                      ✕2 PUNTOS
+                    </motion.span>
+                    <span className="text-xs font-medium px-2 py-1 rounded-full"
+                      style={{ background: 'rgba(255,215,0,0.15)', color: 'rgba(255,215,0,0.9)', border: '1px solid rgba(255,215,0,0.3)' }}>
+                      🔥 Todo el día
+                    </span>
+                  </div>
+
+                  {/* Cita propaganda */}
+                  <p className="text-xs mt-2 italic" style={{ color: 'rgba(255,200,100,0.6)' }}>
+                    "¡Trabajadores de todas las ligas, bebed unidos!"
+                  </p>
+                </div>
+              </div>
+
+              {/* Borde dorado inferior */}
+              <div style={{ height: 3, background: 'linear-gradient(90deg, transparent, #FFD700, #FFA500, #FFD700, transparent)' }} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── BANNER MARTES MACARRA (solo si no es Barbacoa) ── */}
+        <AnimatePresence>
+          {isMartes && !isBarbacoa && (
             <motion.div
               initial={{ opacity: 0, y: -16, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -254,15 +346,10 @@ export default function AddDrink() {
                 border: '2px solid rgba(255,255,255,0.2)',
                 boxShadow: '0 0 30px rgba(124,58,237,0.4)',
               }}>
-              {/* Brillo animado */}
-              <motion.div
-                className="absolute inset-0"
+              <motion.div className="absolute inset-0"
                 style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)' }}
                 animate={{ x: ['-100%', '200%'] }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 1 }}
-              />
-
-              {/* Partículas */}
+                transition={{ duration: 2.5, repeat: Infinity, ease: 'linear', repeatDelay: 1 }} />
               {[
                 { top: '15%', left: '70%', size: 2, delay: 0 },
                 { top: '60%', left: '80%', size: 3, delay: 0.6 },
@@ -273,33 +360,24 @@ export default function AddDrink() {
                   animate={{ opacity: [0.1, 0.6, 0.1], scale: [1, 1.8, 1] }}
                   transition={{ duration: 2, repeat: Infinity, delay: s.delay }} />
               ))}
-
               <div className="flex items-start gap-3 relative">
-                <motion.div
-                  className="text-4xl flex-shrink-0 mt-0.5"
+                <motion.div className="text-4xl flex-shrink-0 mt-0.5"
                   animate={{ rotate: [-5, 5, -5], scale: [1, 1.1, 1] }}
                   transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}>
                   😈
                 </motion.div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <motion.p
-                      className="text-white font-black text-lg tracking-tight"
-                      animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                      transition={{ duration: 3, repeat: Infinity }}>
+                    <motion.p className="text-white font-black text-lg tracking-tight">
                       MARTES MACARRA
                     </motion.p>
-                    <motion.span
-                      animate={{ scale: [1, 1.15, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
+                    <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 1, repeat: Infinity }}
                       className="text-xs font-black px-2 py-0.5 rounded-full"
                       style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
                       x2
                     </motion.span>
                   </div>
                   <p className="text-white/70 text-xs mb-1">¡Doble de puntos y monedas! 🍺🍺</p>
-
-                  {/* ── CUENTA ATRÁS MODERNA ── */}
                   <CountdownDisplay countdown={countdown} />
                 </div>
               </div>
@@ -333,9 +411,7 @@ export default function AddDrink() {
               style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)' }}>
               <div className="flex items-center gap-3">
                 <motion.span className="text-2xl flex-shrink-0"
-                  animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
-                  🔴
-                </motion.span>
+                  animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 2 }}>🔴</motion.span>
                 <div>
                   <p className="font-bold text-red-400 text-sm">Saldo en números rojos · {balance}🪙</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>
@@ -399,11 +475,13 @@ export default function AddDrink() {
                 onClick={() => setSelectedDrink(drink.id)}
                 className={`rounded-2xl p-5 text-center transition-all relative ${isSelected ? 'shadow-lg' : ''}`}
                 style={isSelected
-                  ? { background: isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b', color: '#fff' }
+                  ? { background: isBarbacoa ? eventGradient : isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b', color: '#fff', border: isBarbacoa ? '2px solid #FFD700' : 'none' }
                   : { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
 
-                {isMartes && (
-                  <div className="absolute top-1.5 left-1.5 text-xs font-black px-1.5 py-0.5 rounded-full bg-white/20 text-white">
+                {/* Badge evento */}
+                {isEventActive && (
+                  <div className="absolute top-1.5 left-1.5 text-xs font-black px-1.5 py-0.5 rounded-full"
+                    style={{ background: isBarbacoa ? '#FFD700' : 'rgba(255,255,255,0.2)', color: isBarbacoa ? '#8B0000' : '#fff' }}>
                     x2
                   </div>
                 )}
@@ -430,13 +508,13 @@ export default function AddDrink() {
                         style={{ color: isSelected ? 'rgba(255,255,255,0.5)' : 'var(--text-hint)' }}>
                         {baseEffective}pts
                       </span>
-                      <span className="text-sm font-bold" style={{ color: isSelected ? '#fff' : (isMartes ? '#a78bfa' : '#10b981') }}>
+                      <span className="text-sm font-bold"
+                        style={{ color: isSelected ? '#fff' : (isBarbacoa ? '#FFD700' : '#10b981') }}>
                         {effectivePoints}pts
                       </span>
                     </div>
                   ) : (
-                    <div className="text-xs"
-                      style={{ color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
+                    <div className="text-xs" style={{ color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-hint)' }}>
                       {basePoints} {basePoints === 1 ? 'punto' : 'puntos'}
                     </div>
                   )}
@@ -452,20 +530,23 @@ export default function AddDrink() {
           })}
         </motion.div>
 
+        {/* Botón anotar */}
         <motion.button onClick={handleAdd}
           disabled={!selectedDrink || loading || leagues.length === 0 || isFreezeActive}
           whileTap={{ scale: 0.97 }}
           whileHover={selectedDrink && !isFreezeActive ? { scale: 1.02 } : {}}
           className="w-full disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl text-lg transition-all"
           style={{
-            background: isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b',
-            boxShadow: isMartes ? '0 0 20px rgba(124,58,237,0.4)' : undefined,
+            background: isBarbacoa ? eventButtonBg : isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b',
+            boxShadow: isEventActive ? eventGlow : undefined,
+            border: isBarbacoa ? '2px solid rgba(255,215,0,0.5)' : 'none',
           }}>
           {loading ? 'Guardando...' :
            isFreezeActive ? '🧊 Congelado' :
            isGambleActive ? '🎰 ¡Apostar!' :
            leagues.length === 0 ? 'Únete a una liga primero' :
            inDebt ? '🍺 Anotar (monedas → deuda)' :
+           isBarbacoa ? '🍖 ¡Anotar — Operación Barbacoa!' :
            isMartes ? '😈 ¡Anotar — Martes Macarra!' :
            '¡Apuntar consumición!'}
         </motion.button>
@@ -484,21 +565,29 @@ export default function AddDrink() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
               className="mt-6 rounded-2xl py-5 px-4 text-center"
-              style={result.martes_macarra
-                ? { background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(220,38,38,0.2))', border: '2px solid rgba(124,58,237,0.5)' }
-                : { backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+              style={isBarbacoa
+                ? { background: 'linear-gradient(135deg, rgba(139,0,0,0.25), rgba(180,20,20,0.15))', border: '2px solid rgba(255,215,0,0.5)' }
+                : result.martes_macarra
+                  ? { background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(220,38,38,0.2))', border: '2px solid rgba(124,58,237,0.5)' }
+                  : { backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
 
               <motion.div className="text-5xl mb-2"
                 animate={{ rotate: [0, -15, 15, -10, 0], scale: [1, 1.3, 1] }}
                 transition={{ duration: 0.6 }}>
-                {result.martes_macarra ? '😈' : '🎉'}
+                {isBarbacoa ? '🍖' : result.martes_macarra ? '😈' : '🎉'}
               </motion.div>
 
-              {result.martes_macarra && (
+              {isBarbacoa && (
+                <p className="font-black text-sm mb-1" style={{ color: '#FFD700', letterSpacing: '0.1em' }}>
+                  ¡OPERACIÓN BARBACOA!
+                </p>
+              )}
+              {!isBarbacoa && result.martes_macarra && (
                 <p className="font-black text-sm mb-1" style={{ color: '#a78bfa' }}>¡MARTES MACARRA!</p>
               )}
 
-              <p className="font-bold text-lg" style={{ color: result.martes_macarra ? '#fff' : '#10b981' }}>
+              <p className="font-bold text-lg"
+                style={{ color: isBarbacoa ? '#FFD700' : result.martes_macarra ? '#fff' : '#10b981' }}>
                 ¡Consumición anotada!
               </p>
 
@@ -515,7 +604,13 @@ export default function AddDrink() {
                     </span>
                   </div>
                 )}
-                {result.martes_macarra && (
+                {isBarbacoa && (
+                  <div className="flex justify-between text-sm px-4">
+                    <span style={{ color: 'var(--text-muted)' }}>🍖 Operación Barbacoa</span>
+                    <span className="font-bold" style={{ color: '#FFD700' }}>x2</span>
+                  </div>
+                )}
+                {!isBarbacoa && result.martes_macarra && (
                   <div className="flex justify-between text-sm px-4">
                     <span style={{ color: 'var(--text-muted)' }}>😈 Martes Macarra</span>
                     <span className="font-bold text-purple-400">x2</span>
@@ -540,9 +635,9 @@ export default function AddDrink() {
                   </div>
                 )}
                 <div className="border-t mt-2 pt-2 flex justify-between text-sm px-4"
-                  style={{ borderColor: result.martes_macarra ? 'rgba(124,58,237,0.4)' : 'rgba(16,185,129,0.3)' }}>
-                  <span className="font-bold" style={{ color: result.martes_macarra ? '#a78bfa' : '#10b981' }}>Total</span>
-                  <span className="font-bold" style={{ color: result.martes_macarra ? '#a78bfa' : '#10b981' }}>
+                  style={{ borderColor: isBarbacoa ? 'rgba(255,215,0,0.3)' : result.martes_macarra ? 'rgba(124,58,237,0.4)' : 'rgba(16,185,129,0.3)' }}>
+                  <span className="font-bold" style={{ color: isBarbacoa ? '#FFD700' : result.martes_macarra ? '#a78bfa' : '#10b981' }}>Total</span>
+                  <span className="font-bold" style={{ color: isBarbacoa ? '#FFD700' : result.martes_macarra ? '#a78bfa' : '#10b981' }}>
                     {result.final_points}pts
                   </span>
                 </div>
@@ -551,7 +646,7 @@ export default function AddDrink() {
               <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
                 className="font-bold mt-3 text-lg"
-                style={{ color: inDebt ? '#ef4444' : result.martes_macarra ? '#a78bfa' : '#f59e0b' }}>
+                style={{ color: inDebt ? '#ef4444' : isBarbacoa ? '#FFD700' : result.martes_macarra ? '#a78bfa' : '#f59e0b' }}>
                 {inDebt ? `${result.coins}🪙 → reduciendo deuda` : `+${result.coins}🪙`}
               </motion.p>
               <p className="text-xs mt-2" style={{ color: 'var(--text-hint)' }}>
@@ -588,9 +683,7 @@ export default function AddDrink() {
           )}
 
           {frozen && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
               className="mt-6 rounded-2xl py-5 text-center"
               style={{ backgroundColor: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.4)' }}>
@@ -603,9 +696,7 @@ export default function AddDrink() {
           )}
 
           {shieldBlocked && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
               className="mt-6 rounded-2xl py-5 text-center"
               style={{ backgroundColor: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.4)' }}>
