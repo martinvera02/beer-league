@@ -24,7 +24,7 @@ const isMartesEnMadrid = () => {
 const isOperacionBarbacoa = () => {
   const now = new Date()
   const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-  return madrid.getDate() === 9 && madrid.getMonth() === 4 // Mayo = mes 4
+  return madrid.getDate() === 9 && madrid.getMonth() === 4
 }
 
 // ─── Dígito animado individual ────────────────────────────────────────────────

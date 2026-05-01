@@ -1696,7 +1696,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
                   transition={{ type: 'spring', stiffness: 400, damping: 40 }}
                   onClick={e => e.stopPropagation()}
                   className="rounded-t-3xl w-full max-w-lg overflow-y-auto"
-                  style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh', paddingBottom: '32px' }}>
+                  style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh', paddingBottom: '100px' }}>
                   <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
                     <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setShowCreateBet(false); setBetTarget(null); setBetAmount(''); setBetDescription('') }} className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cancelar</motion.button>
                     <h2 className="text-base font-bold">🎰 Nueva apuesta</h2>
