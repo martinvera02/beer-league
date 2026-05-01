@@ -328,7 +328,10 @@ export default function Market() {
     if (userLeagues.length > 0 && !selectedLeague) setSelectedLeague(userLeagues[0])
 
     const { data: histData } = await supabase
-      .from('drink_market_history').select('*').order('recorded_at', { ascending: true })
+      .from('drink_market_history')
+      .select('*')
+      .gte('recorded_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('recorded_at', { ascending: true })
     if (histData) {
       const grouped = histData.reduce((acc, h) => {
         if (!acc[h.drink_type_id]) acc[h.drink_type_id] = []
@@ -363,7 +366,7 @@ export default function Market() {
     const { data } = await supabase
       .from('drink_market_history').select('*')
       .eq('drink_type_id', drink.drink_type_id)
-      .order('recorded_at', { ascending: true }).limit(60)
+      .order('recorded_at', { ascending: true }).limit(200)
     setDrinkHistory(data || [])
   }
 
