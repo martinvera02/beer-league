@@ -256,20 +256,18 @@ function JuicioTab({ leagueId, currentUserId, members }) {
     const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
     await supabase.from('drinks').update({ proof_image_url: publicUrl }).eq('id', drinkId)
     let aiValid = false, aiReason = 'No se pudo analizar la imagen'
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 200,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'url', url: publicUrl } },
-            { type: 'text', text: 'Analiza esta imagen y determina si muestra una bebida (alcohólica o no alcohólica) de forma clara y verosímil, como en un bar, restaurante, en mano, o sobre una mesa en un contexto real de consumo. No es válida si parece imagen de internet, catálogo, producto en tienda sin contexto de consumo, o no se ve ninguna bebida. Responde ÚNICAMENTE con JSON sin texto adicional: {"valid": true, "reason": "explicación breve en español de máximo 20 palabras"}' }
-          ]}]
-        })
-      })
-      const data = await response.json()
-      const parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim())
-      aiValid = parsed.valid === true; aiReason = parsed.reason || aiReason
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-drink-proof`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl: publicUrl })
+          }
+        )
+        const parsed = await response.json()
+        aiValid = parsed.valid === true
+        aiReason = parsed.reason || aiReason
     } catch { aiReason = 'Error al analizar — intenta de nuevo' }
     if (aiValid) {
       await supabase.from('drinks').update({ dispute_status: 'proven' }).eq('id', drinkId)
