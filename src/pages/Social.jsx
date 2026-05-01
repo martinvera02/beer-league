@@ -40,233 +40,6 @@ const ACHIEVEMENTS = [
   { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas' },
 ]
 
-// ─── COMPONENTE ENCUESTA ──────────────────────────────────────────────────────
-function PollCard({ poll, currentUserId, onDelete }) {
-  const [votes, setVotes] = useState([])
-  const [myVote, setMyVote] = useState(null)
-  const [voting, setVoting] = useState(false)
-  const [showVoters, setShowVoters] = useState(null)
-
-  useEffect(() => { fetchVotes() }, [poll.id])
-
-  const fetchVotes = async () => {
-    const { data } = await supabase
-      .from('poll_votes')
-      .select('option_id, user_id, profiles(username, avatar_url)')
-      .eq('poll_id', poll.id)
-    setVotes(data || [])
-    const mine = data?.find(v => v.user_id === currentUserId)
-    setMyVote(mine?.option_id || null)
-  }
-
-  const handleVote = async (optionId) => {
-    if (voting || isClosed) return
-    setVoting(true)
-    if (myVote) await supabase.from('poll_votes').delete().eq('poll_id', poll.id).eq('user_id', currentUserId)
-    if (myVote !== optionId) {
-      await supabase.from('poll_votes').insert({ poll_id: poll.id, option_id: optionId, user_id: currentUserId })
-      setMyVote(optionId)
-    } else setMyVote(null)
-    await fetchVotes()
-    setVoting(false)
-  }
-
-  const totalVotes = votes.length
-  const isClosed = poll.closes_at && new Date(poll.closes_at) < new Date()
-  const isOwner = poll.created_by === currentUserId
-
-  const formatCloses = (ts) => {
-    if (!ts) return null
-    const diff = new Date(ts) - new Date()
-    if (diff <= 0) return 'Cerrada'
-    const h = Math.floor(diff / 3600000), d = Math.floor(h / 24)
-    if (d > 0) return `Cierra en ${d}d`
-    if (h > 0) return `Cierra en ${h}h`
-    return 'Cierra en <1h'
-  }
-
-  const options = (poll.poll_options || []).sort((a, b) => a.position - b.position)
-
-  return (
-    <div className="rounded-2xl p-4 w-full"
-      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid rgba(245,158,11,0.2)' }}>
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-lg flex-shrink-0">📊</span>
-          <p className="font-bold text-sm truncate">{poll.question}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {poll.closes_at && (
-            <span className="text-xs px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: isClosed ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', color: isClosed ? '#ef4444' : '#f59e0b' }}>
-              {formatCloses(poll.closes_at)}
-            </span>
-          )}
-          {isOwner && onDelete && (
-            <motion.button whileTap={{ scale: 0.9 }} onClick={() => onDelete(poll.id)}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
-              style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>🗑️</motion.button>
-          )}
-        </div>
-      </div>
-      <div className="space-y-2">
-        {options.map(opt => {
-          const optVotes = votes.filter(v => v.option_id === opt.id)
-          const pct = totalVotes > 0 ? Math.round((optVotes.length / totalVotes) * 100) : 0
-          const isMyVote = myVote === opt.id
-          return (
-            <div key={opt.id}>
-              <motion.button whileTap={!isClosed ? { scale: 0.98 } : {}}
-                onClick={() => !isClosed && handleVote(opt.id)}
-                disabled={voting || isClosed}
-                className="w-full rounded-xl overflow-hidden relative"
-                style={{ cursor: isClosed ? 'default' : 'pointer' }}>
-                <div className="absolute inset-0 rounded-xl overflow-hidden">
-                  <motion.div animate={{ width: `${pct}%` }} transition={{ duration: 0.4, ease: 'easeOut' }}
-                    className="h-full absolute left-0 top-0"
-                    style={{ backgroundColor: isMyVote ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.05)' }} />
-                </div>
-                <div className="relative flex items-center justify-between px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    {isMyVote && <span className="text-amber-400 text-xs">✓</span>}
-                    <span className="text-sm" style={{ color: isMyVote ? '#f59e0b' : 'var(--text-primary)' }}>{opt.text}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs font-bold" style={{ color: isMyVote ? '#f59e0b' : 'var(--text-muted)' }}>{pct}%</span>
-                    {optVotes.length > 0 && (
-                      <motion.button whileTap={{ scale: 0.9 }}
-                        onClick={e => { e.stopPropagation(); setShowVoters(showVoters === opt.id ? null : opt.id) }}
-                        className="text-xs px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'var(--text-hint)' }}>
-                        {optVotes.length}
-                      </motion.button>
-                    )}
-                  </div>
-                </div>
-              </motion.button>
-              <AnimatePresence>
-                {showVoters === opt.id && optVotes.length > 0 && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                    <div className="flex flex-wrap gap-1.5 pt-1.5 pb-1 px-1">
-                      {optVotes.map((v, i) => (
-                        <div key={i} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full"
-                          style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                          {v.profiles?.avatar_url
-                            ? <img src={v.profiles.avatar_url} className="w-4 h-4 rounded-full object-cover" alt="" />
-                            : <span>🍺</span>}
-                          {v.profiles?.username || 'Usuario'}
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )
-        })}
-      </div>
-      <p className="text-xs mt-3" style={{ color: 'var(--text-hint)' }}>
-        {totalVotes} {totalVotes === 1 ? 'voto' : 'votos'}{isClosed ? ' · Encuesta cerrada' : ''}
-      </p>
-    </div>
-  )
-}
-
-// ─── MODAL CREAR ENCUESTA ─────────────────────────────────────────────────────
-function CreatePollModal({ onClose, onCreated, leagueId, currentUserId }) {
-  const [question, setQuestion] = useState('')
-  const [options, setOptions] = useState(['', ''])
-  const [creating, setCreating] = useState(false)
-
-  // Cierre automático a 24h desde ahora
-  const closes24h = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-
-  const addOption = () => { if (options.length < 4) setOptions([...options, '']) }
-  const removeOption = (i) => { if (options.length > 2) setOptions(options.filter((_, idx) => idx !== i)) }
-  const updateOption = (i, v) => setOptions(options.map((o, idx) => idx === i ? v : o))
-  const canCreate = question.trim() && options.filter(o => o.trim()).length >= 2
-
-  const handleCreate = async () => {
-    if (!canCreate) return
-    setCreating(true)
-    const { data: poll, error } = await supabase.from('polls').insert({
-      created_by: currentUserId,
-      question: question.trim(),
-      closes_at: closes24h,
-      league_id: leagueId || null,
-    }).select().single()
-    if (error || !poll) { setCreating(false); return }
-    const validOptions = options.filter(o => o.trim())
-    await supabase.from('poll_options').insert(
-      validOptions.map((text, i) => ({ poll_id: poll.id, text: text.trim(), position: i }))
-    )
-    onCreated(poll.id)
-    setCreating(false)
-  }
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/70 flex items-end justify-center z-50"
-      onClick={onClose}>
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-        onClick={e => e.stopPropagation()}
-        className="rounded-t-3xl w-full max-w-lg overflow-y-auto pb-10"
-        style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh' }}>
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cancelar</motion.button>
-          <h2 className="text-base font-bold">Nueva encuesta 📊</h2>
-          <motion.button whileTap={{ scale: 0.95 }} onClick={handleCreate} disabled={!canCreate || creating}
-            className="px-4 py-2 rounded-full text-sm font-bold"
-            style={{ backgroundColor: canCreate ? '#f59e0b' : 'var(--bg-input)', color: canCreate ? '#fff' : 'var(--text-hint)' }}>
-            {creating ? '...' : 'Crear'}
-          </motion.button>
-        </div>
-        <div className="px-5 pt-4 space-y-4">
-          <div>
-            <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-muted)' }}>Pregunta</p>
-            <input type="text" value={question} onChange={e => setQuestion(e.target.value)}
-              placeholder="¿Cuál es la mejor cerveza?" maxLength={120} autoFocus
-              className="w-full rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-500"
-              style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
-          </div>
-          <div>
-            <p className="text-xs font-bold mb-2" style={{ color: 'var(--text-muted)' }}>Opciones</p>
-            <div className="space-y-2">
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input type="text" value={opt} onChange={e => updateOption(i, e.target.value)}
-                    placeholder={`Opción ${i + 1}`} maxLength={80}
-                    className="flex-1 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                    style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
-                  {options.length > 2 && (
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => removeOption(i)}
-                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>✕</motion.button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {options.length < 4 && (
-              <motion.button whileTap={{ scale: 0.96 }} onClick={addOption}
-                className="mt-2 w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed"
-                style={{ borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-                + Añadir opción
-              </motion.button>
-            )}
-          </div>
-          {/* Info duración fija */}
-          <div className="rounded-xl px-4 py-3 flex items-center gap-2"
-            style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-            <span className="text-sm">⏱</span>
-            <p className="text-xs" style={{ color: '#f59e0b' }}>La encuesta cierra automáticamente a las 24 horas</p>
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
 // ─── CHAT PRIVADO ─────────────────────────────────────────────────────────────
 function PrivateChat({ chat, otherUser, onClose }) {
   const { user } = useAuth()
@@ -281,6 +54,7 @@ function PrivateChat({ chat, otherUser, onClose }) {
   useEffect(() => {
     fetchMessages()
     markRead()
+
     const channel = supabase.channel(`private_chat:${chat.id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `chat_id=eq.${chat.id}` },
@@ -300,13 +74,17 @@ function PrivateChat({ chat, otherUser, onClose }) {
   const fetchMessages = async () => {
     const { data } = await supabase.from('private_messages')
       .select('*, profiles(username, avatar_url)')
-      .eq('chat_id', chat.id).order('created_at', { ascending: true }).limit(100)
+      .eq('chat_id', chat.id)
+      .order('created_at', { ascending: true })
+      .limit(100)
     setMessages(data || [])
   }
 
   const markRead = async () => {
     await supabase.from('private_message_reads').upsert({
-      user_id: user.id, chat_id: chat.id, last_read_at: new Date().toISOString(),
+      user_id: user.id,
+      chat_id: chat.id,
+      last_read_at: new Date().toISOString(),
     }, { onConflict: 'user_id,chat_id' })
   }
 
@@ -318,7 +96,8 @@ function PrivateChat({ chat, otherUser, onClose }) {
   }
 
   const handleImageUpload = async (e) => {
-    const file = e.target.files[0]; if (!file) return
+    const file = e.target.files[0]
+    if (!file) return
     setUploadingImage(true)
     const ext = file.name.split('.').pop()
     const path = `private/${user.id}/${Date.now()}.${ext}`
@@ -326,18 +105,25 @@ function PrivateChat({ chat, otherUser, onClose }) {
     if (!error) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
       soundMessage()
-      await supabase.from('private_messages').insert({ chat_id: chat.id, sender_id: user.id, content: '', image_url: publicUrl })
+      await supabase.from('private_messages').insert({
+        chat_id: chat.id, sender_id: user.id, content: '', image_url: publicUrl
+      })
     }
-    setUploadingImage(false); e.target.value = ''
+    setUploadingImage(false)
+    e.target.value = ''
   }
 
-  const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
   const formatTime = (ts) => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
   const formatDate = (ts) => new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
 
   const grouped = messages.reduce((g, m) => {
     const d = new Date(m.created_at).toDateString()
-    if (!g[d]) g[d] = []; g[d].push(m); return g
+    if (!g[d]) g[d] = []
+    g[d].push(m); return g
   }, {})
 
   const Avatar = ({ url, username }) => url
@@ -349,6 +135,8 @@ function PrivateChat({ chat, otherUser, onClose }) {
       transition={{ type: 'spring', stiffness: 400, damping: 40 }}
       className="fixed inset-0 z-[60] flex flex-col"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-4 border-b flex-shrink-0"
         style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
         <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
@@ -360,6 +148,8 @@ function PrivateChat({ chat, otherUser, onClose }) {
           <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Chat privado</p>
         </div>
       </div>
+
+      {/* Mensajes */}
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
           <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
@@ -386,8 +176,17 @@ function PrivateChat({ chat, otherUser, onClose }) {
                       </div>
                     )}
                     <div className={`max-w-xs flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                      {msg.image_url && <img src={msg.image_url} alt="Imagen" onClick={() => setLightboxUrl(msg.image_url)} className={`max-w-52 rounded-2xl cursor-pointer object-cover ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} />}
-                      {msg.content && <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} style={{ backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)', color: isMe ? '#fff' : 'var(--text-primary)' }}>{msg.content}</div>}
+                      {msg.image_url && (
+                        <img src={msg.image_url} alt="Imagen"
+                          onClick={() => setLightboxUrl(msg.image_url)}
+                          className={`max-w-52 rounded-2xl cursor-pointer object-cover ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} />
+                      )}
+                      {msg.content && (
+                        <div className={`px-4 py-2 rounded-2xl text-sm ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
+                          style={{ backgroundColor: isMe ? '#f59e0b' : 'var(--bg-card)', color: isMe ? '#fff' : 'var(--text-primary)' }}>
+                          {msg.content}
+                        </div>
+                      )}
                       <span className="text-xs mt-0.5 mx-1" style={{ color: 'var(--text-hint)' }}>{formatTime(msg.created_at)}</span>
                     </div>
                   </motion.div>
@@ -398,13 +197,19 @@ function PrivateChat({ chat, otherUser, onClose }) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Input */}
       <div className="px-4 py-3 pb-10 border-t flex-shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-base)' }}>
         <div className="flex gap-2 items-end">
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}
-            className="p-3 rounded-2xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
+          {/* Botón foto */}
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => imageInputRef.current?.click()}
+            disabled={uploadingImage}
+            className="p-3 rounded-2xl flex-shrink-0"
+            style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
             {uploadingImage ? '⏳' : '📷'}
           </motion.button>
           <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+
           <textarea value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyDown={handleKeyDown}
             placeholder="Escribe un mensaje..." rows={1}
             className="flex-1 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-500 resize-none text-sm"
@@ -417,13 +222,16 @@ function PrivateChat({ chat, otherUser, onClose }) {
           </motion.button>
         </div>
       </div>
+
+      {/* Lightbox */}
       <AnimatePresence>
         {lightboxUrl && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/90 flex items-center justify-center z-[70] p-4"
             onClick={() => setLightboxUrl(null)}>
             <motion.img initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
-              src={lightboxUrl} alt="Imagen ampliada" className="max-w-full max-h-full rounded-2xl object-contain" />
+              src={lightboxUrl} alt="Imagen ampliada"
+              className="max-w-full max-h-full rounded-2xl object-contain" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -449,8 +257,13 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
   const fetchProfile = async () => {
     setLoading(true)
     const [
-      { data: profileData }, { data: drinksData }, { data: achievementsData },
-      { data: followData }, { count: followersCount2 }, { count: followingCount2 }, { data: chatFollow },
+      { data: profileData },
+      { data: drinksData },
+      { data: achievementsData },
+      { data: followData },
+      { count: followersCount2 },
+      { count: followingCount2 },
+      { data: chatFollow },
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', profileId).single(),
       supabase.from('drinks').select('drink_group_id, points').eq('user_id', profileId),
@@ -460,14 +273,19 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', profileId),
       supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle(),
     ])
-    setProfile(profileData); setIsFollowing(!!followData)
-    setFollowersCount(followersCount2 || 0); setFollowingCount(followingCount2 || 0)
+
+    setProfile(profileData)
+    setIsFollowing(!!followData)
+    setFollowersCount(followersCount2 || 0)
+    setFollowingCount(followingCount2 || 0)
     setCanChat(!!followData && !!chatFollow)
+
     if (drinksData) {
       const seen = new Set()
       const unique = drinksData.filter(d => { if (seen.has(d.drink_group_id)) return false; seen.add(d.drink_group_id); return true })
-      setStats({ count: unique.length, total: Math.round(unique.reduce((s, d) => s + (d.points || 0), 0) * 10) / 10 })
+      setStats({ count: unique.length, total: unique.reduce((s, d) => s + (d.points || 0), 0) })
     }
+
     setAchievements((achievementsData || []).map(a => a.achievement_id))
     setLoading(false)
   }
@@ -480,10 +298,15 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setIsFollowing(true); setFollowersCount(prev => prev + 1); soundSuccess()
+      // Notificar al usuario seguido
       const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
       await supabase.from('notifications').insert({
-        user_id: profileId, type: 'follow', title: '¡Nuevo seguidor!',
-        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`, read: false,
+        user_id: profileId,
+        type: 'new_follower',
+        title: '👤 Nuevo seguidor',
+        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
+        read: false,
+        sent_push: false,
       })
     }
     const { data: chatFollow } = await supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle()
@@ -519,6 +342,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
       transition={{ type: 'spring', stiffness: 400, damping: 40 }}
       className="fixed inset-0 z-50 overflow-y-auto pb-24"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+
       <div className="flex items-center gap-3 px-4 py-4 border-b sticky top-0 z-10"
         style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
         <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
@@ -526,6 +350,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
           style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>←</motion.button>
         <p className="font-bold flex-1">{profile?.username}</p>
       </div>
+
       <div className="px-4 pt-6 max-w-md mx-auto">
         <div className="flex items-center gap-4 mb-6">
           {profile?.avatar_url
@@ -543,6 +368,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
             </div>
           </div>
         </div>
+
         {!isMe && (
           <div className="flex gap-3 mb-6">
             <motion.button whileTap={{ scale: 0.96 }} onClick={toggleFollow} disabled={toggling}
@@ -564,9 +390,10 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
             ) : null}
           </div>
         )}
+
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <p className="text-2xl font-bold text-amber-400">{stats ? (Number.isInteger(stats.total) ? stats.total : stats.total.toFixed(1)) : 0}</p>
+            <p className="text-2xl font-bold text-amber-400">{stats?.total || 0}</p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Puntos totales</p>
           </div>
           <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -574,6 +401,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Logros</p>
           </div>
         </div>
+
         <p className="text-sm font-bold mb-3">🏅 Logros desbloqueados</p>
         {unlockedAchievements.length === 0 ? (
           <div className="rounded-2xl p-6 text-center mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
@@ -591,6 +419,7 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
             ))}
           </div>
         )}
+
         {ACHIEVEMENTS.filter(a => !achievements.includes(a.id)).length > 0 && (
           <>
             <p className="text-sm font-bold mb-3" style={{ color: 'var(--text-muted)' }}>🔒 Sin desbloquear</p>
@@ -628,18 +457,18 @@ export default function Social() {
   const [commentText, setCommentText] = useState('')
   const [comments, setComments] = useState([])
   const [sendingComment, setSendingComment] = useState(false)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
   const [following, setFollowing] = useState([])
   const [chats, setChats] = useState([])
   const [loadingChats, setLoadingChats] = useState(false)
-  const [unreadByChat, setUnreadByChat] = useState({})
+  const [unreadByChat, setUnreadByChat] = useState({}) // { chatId: count }
   const [totalUnread, setTotalUnread] = useState(0)
+
   const [viewingProfile, setViewingProfile] = useState(null)
   const [activeChat, setActiveChat] = useState(null)
-  const [polls, setPolls] = useState({})
-  const [showCreatePoll, setShowCreatePoll] = useState(false)
 
   const postImageRef = useRef(null)
   const storyImageRef = useRef(null)
@@ -650,31 +479,36 @@ export default function Social() {
   useEffect(() => { fetchFeed(); fetchFollowing(); fetchUnreadCounts() }, [])
   useEffect(() => { if (tab === 'chats') { fetchChats(); fetchUnreadCounts() } }, [tab])
 
+  // Realtime: escuchar nuevos mensajes privados para actualizar badges
   useEffect(() => {
     const channel = supabase.channel('private_messages_unread')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-        if (payload.new.sender_id !== user.id) {
-          setUnreadByChat(prev => {
-            const chatId = payload.new.chat_id
-            const newCount = (prev[chatId] || 0) + 1
-            const updated = { ...prev, [chatId]: newCount }
-            setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
-            return updated
-          })
-        }
-      })
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'private_messages' },
+        (payload) => {
+          if (payload.new.sender_id !== user.id) {
+            setUnreadByChat(prev => {
+              const chatId = payload.new.chat_id
+              const newCount = (prev[chatId] || 0) + 1
+              const updated = { ...prev, [chatId]: newCount }
+              setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
+              return updated
+            })
+          }
+        })
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [user.id])
 
   useEffect(() => {
-    if (showNewPost && textareaRef.current) setTimeout(() => textareaRef.current?.focus(), 100)
+    if (showNewPost && textareaRef.current)
+      setTimeout(() => textareaRef.current?.focus(), 100)
   }, [showNewPost])
 
   useEffect(() => {
     if (!openComments) return
     const channel = supabase.channel(`comments:${openComments.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_comments', filter: `post_id=eq.${openComments.id}` },
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'post_comments', filter: `post_id=eq.${openComments.id}` },
         async (payload) => {
           const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
           setComments(prev => [...prev, { ...payload.new, profiles: profile }])
@@ -685,15 +519,24 @@ export default function Social() {
   }, [openComments])
 
   const fetchUnreadCounts = async () => {
-    const { data: myChats } = await supabase.from('private_chats').select('id').or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+    const { data: myChats } = await supabase.from('private_chats')
+      .select('id').or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+
     if (!myChats || myChats.length === 0) return
+
     const counts = {}
     await Promise.all(myChats.map(async (chat) => {
-      const { data: readData } = await supabase.from('private_message_reads').select('last_read_at').eq('user_id', user.id).eq('chat_id', chat.id).maybeSingle()
+      const { data: readData } = await supabase.from('private_message_reads')
+        .select('last_read_at').eq('user_id', user.id).eq('chat_id', chat.id).maybeSingle()
       const lastRead = readData?.last_read_at || '1970-01-01'
-      const { count } = await supabase.from('private_messages').select('id', { count: 'exact', head: true }).eq('chat_id', chat.id).neq('sender_id', user.id).gt('created_at', lastRead)
+      const { count } = await supabase.from('private_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('chat_id', chat.id)
+        .neq('sender_id', user.id)
+        .gt('created_at', lastRead)
       counts[chat.id] = count || 0
     }))
+
     setUnreadByChat(counts)
     setTotalUnread(Object.values(counts).reduce((s, c) => s + c, 0))
   }
@@ -708,20 +551,7 @@ export default function Social() {
     ])
     setPosts(postsData || [])
     setStories(storiesData || [])
-
-    const pollIds = [...new Set((postsData || []).filter(p => p.poll_id).map(p => p.poll_id))]
-    if (pollIds.length > 0) {
-      const { data: pollsData } = await supabase.from('polls').select('*, poll_options(*)').in('id', pollIds)
-      const pollsMap = {}
-      pollsData?.forEach(p => { pollsMap[p.id] = p })
-      setPolls(pollsMap)
-    }
     setLoading(false)
-  }
-
-  const fetchPoll = async (pollId) => {
-    const { data } = await supabase.from('polls').select('*, poll_options(*)').eq('id', pollId).single()
-    if (data) setPolls(prev => ({ ...prev, [pollId]: data }))
   }
 
   const fetchFollowing = async () => {
@@ -733,22 +563,31 @@ export default function Social() {
     setLoadingChats(true)
     const { data } = await supabase.from('private_chats')
       .select(`*, user_a_profile:profiles!private_chats_user_a_fkey(id, username, avatar_url), user_b_profile:profiles!private_chats_user_b_fkey(id, username, avatar_url)`)
-      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`).order('created_at', { ascending: false })
+      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+      .order('created_at', { ascending: false })
+
     const chatsWithLastMsg = await Promise.all((data || []).map(async (chat) => {
-      const { data: lastMsg } = await supabase.from('private_messages').select('content, image_url, created_at').eq('chat_id', chat.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      const { data: lastMsg } = await supabase.from('private_messages')
+        .select('content, image_url, created_at').eq('chat_id', chat.id)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
       const otherUser = chat.user_a === user.id ? chat.user_b_profile : chat.user_a_profile
       return { ...chat, otherUser, lastMsg }
     }))
-    setChats(chatsWithLastMsg); setLoadingChats(false)
+
+    setChats(chatsWithLastMsg)
+    setLoadingChats(false)
   }
 
   const handleSearch = (query) => {
-    setSearchQuery(query); clearTimeout(searchTimeout.current)
+    setSearchQuery(query)
+    clearTimeout(searchTimeout.current)
     if (!query.trim()) { setSearchResults([]); return }
     searchTimeout.current = setTimeout(async () => {
       setSearching(true)
-      const { data } = await supabase.from('profiles').select('id, username, avatar_url').ilike('username', `%${query.trim()}%`).neq('id', user.id).limit(15)
-      setSearchResults(data || []); setSearching(false)
+      const { data } = await supabase.from('profiles').select('id, username, avatar_url')
+        .ilike('username', `%${query.trim()}%`).neq('id', user.id).limit(15)
+      setSearchResults(data || [])
+      setSearching(false)
     }, 400)
   }
 
@@ -760,11 +599,6 @@ export default function Social() {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setFollowing(prev => [...prev, profileId]); soundSuccess()
-      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
-      await supabase.from('notifications').insert({
-        user_id: profileId, type: 'follow', title: '¡Nuevo seguidor!',
-        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`, read: false,
-      })
     }
   }
 
@@ -790,20 +624,6 @@ export default function Social() {
     closeNewPost(); setUploadingPost(false); fetchFeed()
   }
 
-  const handleFeedPollCreated = async (pollId) => {
-    setShowCreatePoll(false); soundSuccess()
-    await supabase.from('posts').insert({ user_id: user.id, content: '', poll_id: pollId })
-    await fetchPoll(pollId)
-    fetchFeed()
-  }
-
-  // Eliminar encuesta propia del feed
-  const handleDeletePoll = async (pollId) => {
-    await supabase.from('polls').delete().eq('id', pollId)
-    setPolls(prev => { const next = { ...prev }; delete next[pollId]; return next })
-    fetchFeed()
-  }
-
   const submitStory = async (e) => {
     const file = e.target.files[0]; if (!file) return
     setUploadingStory(true)
@@ -812,7 +632,8 @@ export default function Social() {
     const { error } = await supabase.storage.from('social').upload(path, file)
     if (!error) {
       const { data: { publicUrl } } = supabase.storage.from('social').getPublicUrl(path)
-      await supabase.from('stories').insert({ user_id: user.id, image_url: publicUrl }); fetchFeed()
+      await supabase.from('stories').insert({ user_id: user.id, image_url: publicUrl })
+      fetchFeed()
     }
     setUploadingStory(false); e.target.value = ''
   }
@@ -829,7 +650,8 @@ export default function Social() {
 
   const openCommentsPanel = async (post) => {
     setOpenComments(post); setCommentText('')
-    const { data } = await supabase.from('post_comments').select('*, profiles(username, avatar_url)').eq('post_id', post.id).order('created_at', { ascending: true })
+    const { data } = await supabase.from('post_comments').select('*, profiles(username, avatar_url)')
+      .eq('post_id', post.id).order('created_at', { ascending: true })
     setComments(data || [])
   }
 
@@ -846,6 +668,7 @@ export default function Social() {
   const closeNewPost = () => { setShowNewPost(false); setNewPostContent(''); setNewPostImage(null); setNewPostPreview(null) }
 
   const handleOpenChat = (chat, otherUser) => {
+    // Limpiar badge del chat al abrirlo
     setUnreadByChat(prev => {
       const updated = { ...prev, [chat.id]: 0 }
       setTotalUnread(Object.values(updated).reduce((s, c) => s + c, 0))
@@ -875,14 +698,15 @@ export default function Social() {
   const canPublish = (newPostContent.trim().length > 0 || newPostImage !== null) && !uploadingPost
 
   const TABS = [
-    { id: 'feed', label: '📰 Feed' },
+    { id: 'feed',    label: '📰 Feed' },
     { id: 'stories', label: '⭕ Historias' },
-    { id: 'people', label: '🔍 Buscar' },
-    { id: 'chats', label: '💬 Chats', unread: totalUnread },
+    { id: 'people',  label: '🔍 Buscar' },
+    { id: 'chats',   label: '💬 Chats', unread: totalUnread },
   ]
 
   return (
-    <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+    <div className="min-h-screen pb-24 transition-colors duration-300"
+      style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
@@ -928,14 +752,12 @@ export default function Social() {
               ))}
             </div>
           )}
-
           <motion.div {...fadeIn} className="rounded-2xl p-3 mb-4 flex items-center gap-3 cursor-pointer"
             style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}
             onClick={() => setShowNewPost(true)}>
             <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
             <div className="flex-1 rounded-xl px-4 py-2.5 text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>¿Qué estás bebiendo?</div>
           </motion.div>
-
           {loading ? <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando feed...</p>
             : posts.length === 0 ? (
               <motion.div {...fadeIn} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
@@ -961,20 +783,8 @@ export default function Social() {
                         </div>
                         {isMe && <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)} className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>}
                       </div>
-
                       {post.content && <p className="px-4 pb-3 text-sm leading-relaxed">{post.content}</p>}
                       {post.image_url && <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />}
-
-                      {post.poll_id && polls[post.poll_id] && (
-                        <div className="px-4 pb-3">
-                          <PollCard
-                            poll={polls[post.poll_id]}
-                            currentUserId={user.id}
-                            onDelete={isMe ? handleDeletePoll : null}
-                          />
-                        </div>
-                      )}
-
                       <div className="flex items-center gap-4 px-4 py-3 border-t" style={{ borderColor: 'var(--border)' }}>
                         <motion.button whileTap={{ scale: 0.8 }} onClick={() => toggleLike(post)} className="flex items-center gap-1.5 text-sm">
                           <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} transition={{ duration: 0.3 }} className="text-xl">{liked ? '🍺' : '🤍'}</motion.span>
@@ -1030,7 +840,8 @@ export default function Social() {
       {tab === 'people' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           <div className="relative mb-5">
-            <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)} placeholder="Buscar usuarios..."
+            <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)}
+              placeholder="Buscar usuarios..."
               className="w-full rounded-2xl px-5 py-3.5 text-sm outline-none focus:ring-2 focus:ring-amber-500 pr-10"
               style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }} />
             {searching
@@ -1103,13 +914,18 @@ export default function Social() {
                 const lastMsgText = chat.lastMsg?.image_url && !chat.lastMsg?.content ? '📷 Imagen' : (chat.lastMsg?.content || 'Inicia la conversación...')
                 return (
                   <motion.button key={chat.id} variants={staggerItem} initial="initial" animate="animate"
-                    whileTap={{ scale: 0.97 }} onClick={() => handleOpenChat(chat, chat.otherUser)}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => handleOpenChat(chat, chat.otherUser)}
                     className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
-                    style={{ backgroundColor: 'var(--bg-card)', border: unread > 0 ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent' }}>
+                    style={{
+                      backgroundColor: 'var(--bg-card)',
+                      border: unread > 0 ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent',
+                    }}>
                     <div className="relative flex-shrink-0">
                       {chat.otherUser?.avatar_url
                         ? <img src={chat.otherUser.avatar_url} alt={chat.otherUser.username} className="w-12 h-12 rounded-full object-cover" />
                         : <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                      {/* Badge de no leídos en el avatar */}
                       {unread > 0 && (
                         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
                           className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-white font-black"
@@ -1121,9 +937,15 @@ export default function Social() {
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm ${unread > 0 ? 'font-bold' : 'font-medium'}`}>{chat.otherUser?.username}</p>
                       <p className={`text-xs truncate mt-0.5 ${unread > 0 ? 'font-semibold' : ''}`}
-                        style={{ color: unread > 0 ? 'var(--text-primary)' : 'var(--text-hint)' }}>{lastMsgText}</p>
+                        style={{ color: unread > 0 ? 'var(--text-primary)' : 'var(--text-hint)' }}>
+                        {lastMsgText}
+                      </p>
                     </div>
-                    {chat.lastMsg && <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>{formatTime(chat.lastMsg.created_at)}</p>}
+                    {chat.lastMsg && (
+                      <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                        {formatTime(chat.lastMsg.created_at)}
+                      </p>
+                    )}
                   </motion.button>
                 )
               })}
@@ -1184,9 +1006,6 @@ export default function Social() {
                   </svg>
                 </motion.button>
                 <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => { closeNewPost(); setShowCreatePoll(true) }} style={{ color: '#f59e0b' }}>
-                  <span className="text-xl">📊</span>
-                </motion.button>
                 <p className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>{newPostContent.length > 0 && `${newPostContent.length} caracteres`}</p>
               </div>
             </motion.div>
@@ -1268,18 +1087,6 @@ export default function Social() {
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Modal encuesta */}
-      <AnimatePresence>
-        {showCreatePoll && (
-          <CreatePollModal
-            onClose={() => setShowCreatePoll(false)}
-            onCreated={handleFeedPollCreated}
-            leagueId={null}
-            currentUserId={user.id}
-          />
         )}
       </AnimatePresence>
 

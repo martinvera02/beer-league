@@ -251,23 +251,25 @@ function JuicioTab({ leagueId, currentUserId, members }) {
     setUploadingProof(drinkId); setAiResult(null)
     const ext = file.name.split('.').pop()
     const path = `disputes/${currentUserId}/${drinkId}_${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: false })
+    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
     if (uploadError) { soundError(); setUploadingProof(null); e.target.value = ''; return }
     const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
     await supabase.from('drinks').update({ proof_image_url: publicUrl }).eq('id', drinkId)
     let aiValid = false, aiReason = 'No se pudo analizar la imagen'
-      try {
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-drink-proof`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: publicUrl })
-          }
-        )
-        const parsed = await response.json()
-        aiValid = parsed.valid === true
-        aiReason = parsed.reason || aiReason
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514', max_tokens: 200,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'url', url: publicUrl } },
+            { type: 'text', text: 'Analiza esta imagen y determina si muestra una bebida (alcohólica o no alcohólica) de forma clara y verosímil, como en un bar, restaurante, en mano, o sobre una mesa en un contexto real de consumo. No es válida si parece imagen de internet, catálogo, producto en tienda sin contexto de consumo, o no se ve ninguna bebida. Responde ÚNICAMENTE con JSON sin texto adicional: {"valid": true, "reason": "explicación breve en español de máximo 20 palabras"}' }
+          ]}]
+        })
+      })
+      const data = await response.json()
+      const parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim())
+      aiValid = parsed.valid === true; aiReason = parsed.reason || aiReason
     } catch { aiReason = 'Error al analizar — intenta de nuevo' }
     if (aiValid) {
       await supabase.from('drinks').update({ dispute_status: 'proven' }).eq('id', drinkId)
@@ -939,17 +941,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const [creating, setCreating] = useState(false)
   const [polls, setPolls] = useState([])
   const [showCreatePoll, setShowCreatePoll] = useState(false)
-  const [trophies, setTrophies] = useState([])
-  const [loadingTrophies, setLoadingTrophies] = useState(false)
-  const [bets, setBets] = useState([])
-  const [loadingBets, setLoadingBets] = useState(false)
-  const [showCreateBet, setShowCreateBet] = useState(false)
-  const [betTarget, setBetTarget] = useState(null)
-  const [betAmount, setBetAmount] = useState('')
-  const [betDescription, setBetDescription] = useState('')
-  const [creatingBet, setCreatingBet] = useState(false)
-  const [betBalance, setBetBalance] = useState(0)
-  const [resolvingBet, setResolvingBet] = useState(null)
 
   const bottomRef = useRef(null)
   const imageInputRef = useRef(null)
@@ -962,8 +953,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     fetchMembers(selectedLeague.id)
     fetchMessages(selectedLeague.id)
     fetchPolls(selectedLeague.id)
-    fetchTrophies(selectedLeague.id)
-    fetchBets(selectedLeague.id)
     setNewLeagueName(selectedLeague.name)
 
     const channel = supabase.channel(`chat:${selectedLeague.id}`)
@@ -973,6 +962,17 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           const { data: profile } = await supabase.from('profiles').select('username, avatar_url').eq('id', payload.new.user_id).single()
           soundMessageReceived()
           if (tab !== 'chat') setUnreadByLeague(prev => ({ ...prev, [selectedLeague.id]: (prev[selectedLeague.id] || 0) + 1 }))
+          // Notificación push si la app está en background
+          if (document.hidden) {
+            await supabase.from('notifications').insert({
+              user_id: user.id,
+              type: 'new_message',
+              title: `💬 Nuevo mensaje en ${selectedLeague?.name}`,
+              body: payload.new.content ? payload.new.content.slice(0, 80) : '📷 Imagen',
+              read: false,
+              sent_push: false,
+            })
+          }
           if (payload.new.poll_id) fetchPolls(selectedLeague.id)
           setMessages(prev => [...prev, { ...payload.new, profiles: { username: profile?.username || 'Desconocido', avatar_url: profile?.avatar_url } }])
         })
@@ -1037,80 +1037,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
   const fetchPolls = async (leagueId) => {
     const { data } = await supabase.from('polls').select('*, profiles(username, avatar_url), created_by').eq('league_id', leagueId).order('created_at', { ascending: false })
     setPolls(data || [])
-  }
-
-  const fetchTrophies = async (leagueId) => {
-    setLoadingTrophies(true)
-    const { data } = await supabase
-      .from('season_trophies')
-      .select('*, profiles(username, avatar_url), seasons(started_at, ends_at)')
-      .eq('league_id', leagueId)
-      .order('created_at', { ascending: false })
-      .limit(30)
-    setTrophies(data || [])
-    setLoadingTrophies(false)
-  }
-
-  const fetchBets = async (leagueId) => {
-    setLoadingBets(true)
-    const [{ data: betsData }, { data: walletData }] = await Promise.all([
-      supabase.from('member_bets')
-        .select('*, creator:profiles!member_bets_creator_id_fkey(id, username, avatar_url), challenger:profiles!member_bets_challenger_id_fkey(id, username, avatar_url), winner:profiles!member_bets_winner_id_fkey(username)')
-        .eq('league_id', leagueId)
-        .in('status', ['pending', 'active', 'resolved'])
-        .order('created_at', { ascending: false })
-        .limit(30),
-      supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
-    ])
-    setBets(betsData || [])
-    setBetBalance(walletData?.balance || 0)
-    setLoadingBets(false)
-  }
-
-  const handleCreateBet = async () => {
-    if (!betTarget || !betAmount || !betDescription.trim() || !selectedLeague) return
-    const amount = parseInt(betAmount)
-    if (isNaN(amount) || amount < 1 || amount > betBalance) return
-    setCreatingBet(true)
-    const { error } = await supabase.from('member_bets').insert({
-      league_id: selectedLeague.id,
-      creator_id: user.id,
-      challenger_id: betTarget.id,
-      amount,
-      description: betDescription.trim(),
-      status: 'pending',
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
-    if (!error) {
-      soundSuccess()
-      await supabase.from('notifications').insert({
-        user_id: betTarget.id, type: 'bet_challenge',
-        title: '🎰 Te han retado a una apuesta',
-        body: betDescription.trim() + ' · ' + amount + '🪙',
-        read: false,
-      })
-      setShowCreateBet(false); setBetTarget(null); setBetAmount(''); setBetDescription('')
-      fetchBets(selectedLeague.id)
-    } else soundError()
-    setCreatingBet(false)
-  }
-
-  const handleAcceptBet = async (betId) => {
-    await supabase.from('member_bets').update({ status: 'active' }).eq('id', betId)
-    soundSuccess(); fetchBets(selectedLeague.id)
-  }
-
-  const handleDeclineBet = async (betId) => {
-    await supabase.from('member_bets').update({ status: 'cancelled' }).eq('id', betId)
-    fetchBets(selectedLeague.id)
-  }
-
-  const handleResolveBet = async (betId, winnerId) => {
-    setResolvingBet(betId)
-    const { data } = await supabase.rpc('resolve_bet', { p_bet_id: betId, p_winner_id: winnerId })
-    if (data?.success) { soundSuccess(); fetchBets(selectedLeague.id) }
-    else soundError()
-    setResolvingBet(null)
   }
 
   const fetchTransfers = async (leagueId) => {
@@ -1239,8 +1165,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
     { id: 'chat', label: '💬 Chat', unread: currentUnread },
     { id: 'polls', label: '📊 Encuestas' },
     { id: 'juicio', label: '⚖️ Juicio' },
-    { id: 'trophies', label: '🏅 Trofeos' },
-    { id: 'bets', label: '🎰 Apuestas' },
     ...(canManage ? [{ id: 'admin', label: '👑 Admin' }] : []),
   ]
 
@@ -1299,7 +1223,7 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
               <button key={t.id} onClick={() => setTab(t.id)}
                 className="relative flex-shrink-0 px-3 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
                 style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-                {tab === t.id && <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : t.id === 'polls' ? '#6366f1' : t.id === 'juicio' ? '#dc2626' : t.id === 'trophies' ? '#f59e0b' : t.id === 'bets' ? '#8b5cf6' : '#f59e0b' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
+                {tab === t.id && <motion.div layoutId="tab-indicator" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: t.id === 'transfers' ? '#10b981' : t.id === 'admin' ? '#7c3aed' : t.id === 'polls' ? '#6366f1' : t.id === 'juicio' ? '#dc2626' : '#f59e0b' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
                 <span>{t.label}</span>
                 {t.unread > 0 && <UnreadBadge count={t.unread} />}
               </button>
@@ -1505,259 +1429,6 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
             </div>
           </div>
           <JuicioTab leagueId={selectedLeague.id} currentUserId={user.id} members={members} />
-        </div>
-      )}
-
-
-      {/* ── TROFEOS ── */}
-      {tab === 'trophies' && selectedLeague && (
-        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-          {loadingTrophies ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-4xl mb-2">🏅</motion.div>
-              <p className="text-sm">Cargando trofeos...</p>
-            </div>
-          ) : trophies.length === 0 ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">🏅</div>
-              <p className="font-bold">Sin trofeos todavía</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Al terminar cada temporada se reparten premios al top 3</p>
-              <div className="mt-6 space-y-2 max-w-xs mx-auto">
-                {[
-                  { pos: '🥇', label: '1er puesto', coins: '500🪙' },
-                  { pos: '🥈', label: '2do puesto', coins: '300🪙' },
-                  { pos: '🥉', label: '3er puesto', coins: '100🪙' },
-                ].map(p => (
-                  <div key={p.pos} className="rounded-2xl p-3 flex items-center justify-between" style={{ backgroundColor: 'var(--bg-card)' }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{p.pos}</span>
-                      <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{p.label}</span>
-                    </div>
-                    <span className="font-bold text-amber-400">{p.coins}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {Object.entries(
-                trophies.reduce((acc, t) => {
-                  const key = t.season_id
-                  if (!acc[key]) acc[key] = { season: t.seasons, entries: [] }
-                  acc[key].entries.push(t)
-                  return acc
-                }, {})
-              ).map(([seasonId, { season, entries }]) => (
-                <div key={seasonId}>
-                  <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>
-                    📅 Temporada · {season?.started_at ? new Date(season.started_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : `#${seasonId}`}
-                  </p>
-                  <div className="space-y-2">
-                    {entries.sort((a, b) => a.position - b.position).map(trophy => (
-                      <motion.div key={trophy.id} variants={staggerItem} initial="initial" animate="animate"
-                        className="rounded-2xl p-4 flex items-center gap-3"
-                        style={{
-                          backgroundColor: 'var(--bg-card)',
-                          border: trophy.position === 1 ? '2px solid rgba(245,158,11,0.5)' : trophy.position === 2 ? '2px solid rgba(156,163,175,0.4)' : '2px solid rgba(180,83,9,0.35)',
-                        }}>
-                        <span className="text-3xl flex-shrink-0">{trophy.position === 1 ? '🥇' : trophy.position === 2 ? '🥈' : '🥉'}</span>
-                        <Avatar url={trophy.profiles?.avatar_url} username={trophy.profiles?.username} size="md" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm truncate">{trophy.profiles?.username}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{Math.round(trophy.total_points)} pts totales</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-bold text-amber-400">+{trophy.coins_awarded}🪙</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>premio</p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── APUESTAS ── */}
-      {tab === 'bets' && selectedLeague && (
-        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-          {/* Saldo */}
-          <div className="rounded-2xl p-4 mb-4 flex items-center justify-between" style={{ backgroundColor: betBalance < 0 ? 'rgba(239,68,68,0.1)' : 'rgba(139,92,246,0.1)', border: `1px solid ${betBalance < 0 ? 'rgba(239,68,68,0.3)' : 'rgba(139,92,246,0.3)'}` }}>
-            <div>
-              <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-muted)' }}>Tu saldo</p>
-              <p className="text-2xl font-black" style={{ color: betBalance < 0 ? '#ef4444' : '#a78bfa' }}>{betBalance.toLocaleString()}🪙</p>
-            </div>
-            <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowCreateBet(true)}
-              className="px-4 py-2.5 rounded-2xl font-bold text-white text-sm"
-              style={{ backgroundColor: '#8b5cf6' }}>
-              + Nueva apuesta
-            </motion.button>
-          </div>
-
-          {/* Lista de apuestas */}
-          {loadingBets ? (
-            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">🎰</motion.div>
-            </div>
-          ) : bets.length === 0 ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">🎰</div>
-              <p className="font-bold">Sin apuestas todavía</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Reta a otro miembro a una apuesta y el ganador se lleva las monedas</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {bets.map(bet => {
-                const isCreator = bet.creator_id === user.id
-                const isChallenger = bet.challenger_id === user.id
-                const isPending = bet.status === 'pending'
-                const isActive = bet.status === 'active'
-                const isResolved = bet.status === 'resolved'
-                const iWon = bet.winner_id === user.id
-                const statusColor = isPending ? '#f59e0b' : isActive ? '#10b981' : isResolved ? (iWon ? '#10b981' : '#ef4444') : '#6b7280'
-                const statusLabel = isPending ? '⏳ Pendiente' : isActive ? '⚔️ En juego' : isResolved ? (iWon ? '🏆 Ganada' : '💀 Perdida') : '❌ Cancelada'
-
-                return (
-                  <motion.div key={bet.id} variants={staggerItem} initial="initial" animate="animate"
-                    className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: `1px solid ${statusColor}30` }}>
-                    <div className="flex items-start justify-between mb-3">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: `${statusColor}20`, color: statusColor }}>{statusLabel}</span>
-                      <span className="font-black text-lg" style={{ color: '#a78bfa' }}>{bet.amount}🪙</span>
-                    </div>
-                    <p className="text-sm font-medium mb-3">{bet.description}</p>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Avatar url={bet.creator?.avatar_url} username={bet.creator?.username} size="sm" />
-                      <span className="text-xs font-medium">{isCreator ? 'Tú' : bet.creator?.username}</span>
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>vs</span>
-                      <Avatar url={bet.challenger?.avatar_url} username={bet.challenger?.username} size="sm" />
-                      <span className="text-xs font-medium">{isChallenger ? 'Tú' : bet.challenger?.username}</span>
-                    </div>
-
-                    {/* Acciones según estado */}
-                    {isPending && isChallenger && (
-                      <div className="flex gap-2">
-                        <motion.button whileTap={{ scale: 0.97 }} onClick={() => handleAcceptBet(bet.id)}
-                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ backgroundColor: '#10b981' }}>
-                          ✓ Aceptar
-                        </motion.button>
-                        <motion.button whileTap={{ scale: 0.97 }} onClick={() => handleDeclineBet(bet.id)}
-                          className="flex-1 py-2.5 rounded-xl text-sm font-bold" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-                          ✕ Rechazar
-                        </motion.button>
-                      </div>
-                    )}
-                    {isPending && isCreator && (
-                      <div className="rounded-xl p-2.5 text-center" style={{ backgroundColor: 'rgba(245,158,11,0.08)' }}>
-                        <p className="text-xs" style={{ color: '#f59e0b' }}>Esperando que {bet.challenger?.username} acepte...</p>
-                      </div>
-                    )}
-                    {isActive && (isCreator || isChallenger) && (
-                      <div>
-                        <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>¿Quién ganó?</p>
-                        <div className="flex gap-2">
-                          {[
-                            { id: bet.creator_id, name: isCreator ? 'Yo' : bet.creator?.username, avatar: bet.creator?.avatar_url },
-                            { id: bet.challenger_id, name: isChallenger ? 'Yo' : bet.challenger?.username, avatar: bet.challenger?.avatar_url },
-                          ].map(player => (
-                            <motion.button key={player.id} whileTap={{ scale: 0.97 }}
-                              onClick={() => handleResolveBet(bet.id, player.id)}
-                              disabled={resolvingBet === bet.id}
-                              className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                              style={{ backgroundColor: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
-                              <Avatar url={player.avatar} username={player.name} size="sm" />
-                              {resolvingBet === bet.id ? '...' : player.name}
-                            </motion.button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {isResolved && (
-                      <div className="rounded-xl p-2.5 text-center" style={{ backgroundColor: iWon ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)' }}>
-                        <p className="text-xs font-bold" style={{ color: iWon ? '#10b981' : '#ef4444' }}>
-                          {iWon ? `+${bet.amount}🪙 ganadas` : `-${bet.amount}🪙 perdidas`} · Ganó {bet.winner?.username}
-                        </p>
-                      </div>
-                    )}
-                  </motion.div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Modal crear apuesta */}
-          <AnimatePresence>
-            {showCreateBet && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
-                onClick={() => { setShowCreateBet(false); setBetTarget(null); setBetAmount(''); setBetDescription('') }}>
-                <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-                  onClick={e => e.stopPropagation()}
-                  className="rounded-t-3xl w-full max-w-lg overflow-y-auto"
-                  style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh', paddingBottom: '100px' }}>
-                  <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setShowCreateBet(false); setBetTarget(null); setBetAmount(''); setBetDescription('') }} className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cancelar</motion.button>
-                    <h2 className="text-base font-bold">🎰 Nueva apuesta</h2>
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={handleCreateBet}
-                      disabled={!betTarget || !betAmount || !betDescription.trim() || creatingBet || parseInt(betAmount) > betBalance}
-                      className="px-4 py-2 rounded-full text-sm font-bold"
-                      style={{ backgroundColor: betTarget && betAmount && betDescription.trim() ? '#8b5cf6' : 'var(--bg-input)', color: betTarget && betAmount && betDescription.trim() ? '#fff' : 'var(--text-hint)' }}>
-                      {creatingBet ? '...' : 'Retar'}
-                    </motion.button>
-                  </div>
-                  <div className="px-5 pt-4 space-y-4">
-                    <div>
-                      <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>¿A quién retas?</p>
-                      <div className="flex gap-2 overflow-x-auto pb-2">
-                        {otherMembers.map(member => (
-                          <motion.button key={member.id} whileTap={{ scale: 0.93 }} onClick={() => setBetTarget(betTarget?.id === member.id ? null : member)}
-                            className="flex-shrink-0 flex flex-col items-center gap-1 p-2 rounded-2xl min-w-16"
-                            style={{ backgroundColor: betTarget?.id === member.id ? 'rgba(139,92,246,0.15)' : 'var(--bg-input)', border: betTarget?.id === member.id ? '2px solid #8b5cf6' : '2px solid transparent' }}>
-                            <Avatar url={member.avatar_url} username={member.username} size="sm" />
-                            <p className="text-xs font-medium truncate w-14 text-center" style={{ color: betTarget?.id === member.id ? '#a78bfa' : 'var(--text-muted)' }}>{member.username}</p>
-                            {betTarget?.id === member.id && <span className="text-xs text-purple-400">✓</span>}
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>¿Sobre qué apostáis?</p>
-                      <input type="text" value={betDescription} onChange={e => setBetDescription(e.target.value)}
-                        placeholder="ej: El que beba más esta noche gana" maxLength={120} autoFocus
-                        className="w-full rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                        style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Cantidad en juego</p>
-                        <p className="text-xs" style={{ color: '#a78bfa' }}>Saldo: {betBalance}🪙</p>
-                      </div>
-                      <div className="relative mb-2">
-                        <input type="number" value={betAmount} onChange={e => setBetAmount(e.target.value)}
-                          placeholder="0" min="1" max={betBalance}
-                          className="w-full rounded-xl px-4 py-3 text-lg font-bold outline-none focus:ring-2 focus:ring-purple-500 pr-10"
-                          style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }} />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lg">🪙</span>
-                      </div>
-                      <div className="flex gap-2">
-                        {[50, 100, 250, 500].filter(v => v <= betBalance).map(v => (
-                          <motion.button key={v} whileTap={{ scale: 0.9 }} onClick={() => setBetAmount(String(v))}
-                            className="flex-1 text-xs py-1.5 rounded-lg font-medium"
-                            style={{ backgroundColor: parseInt(betAmount) === v ? '#8b5cf6' : 'var(--bg-input)', color: parseInt(betAmount) === v ? '#fff' : 'var(--text-muted)' }}>{v}</motion.button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rounded-xl px-4 py-3 flex items-center gap-2" style={{ backgroundColor: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
-                      <span className="text-sm">⚠️</span>
-                      <p className="text-xs" style={{ color: '#a78bfa' }}>Ambos debéis acordar el ganador. El que pierde paga al instante.</p>
-                    </div>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       )}
 

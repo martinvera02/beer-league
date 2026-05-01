@@ -437,6 +437,18 @@ export default function Market() {
       setBalance(prev => prev - selectedPowerup.cost)
       setLastPowerupTime(new Date().toISOString())
       setBuyResult(data)
+      // Notificar al objetivo si es un powerup de ataque
+      if (targetUser && ['freeze', 'sabotage', 'sniper'].includes(selectedPowerup.effect_type)) {
+        const emoji = selectedPowerup.effect_type === 'freeze' ? '🧊' : selectedPowerup.effect_type === 'sabotage' ? '💣' : '🎯'
+        await supabase.from('notifications').insert({
+          user_id: targetUser.id,
+          type: 'powerup_received',
+          title: `${emoji} Te han aplicado un ${selectedPowerup.name}`,
+          body: `Alguien de tu liga te ha atacado con ${selectedPowerup.name}. ¡Prepárate!`,
+          read: false,
+          sent_push: false,
+        })
+      }
       setTimeout(() => {
         setBuyResult(null); setSelectedPowerup(null)
         setTargetUser(null); setTurboDrink(null); setResetDrink(null)
