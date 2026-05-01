@@ -599,6 +599,16 @@ export default function Social() {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setFollowing(prev => [...prev, profileId]); soundSuccess()
+      // Notificar al usuario seguido
+      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+      await supabase.from('notifications').insert({
+        user_id: profileId,
+        type: 'new_follower',
+        title: '👤 Nuevo seguidor',
+        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
+        read: false,
+        sent_push: false,
+      })
     }
   }
 
