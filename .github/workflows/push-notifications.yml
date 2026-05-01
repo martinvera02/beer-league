@@ -1,0 +1,115 @@
+name: Send Push Notifications
+
+on:
+  schedule:
+    - cron: '* * * * *'   # Cada minuto
+  workflow_dispatch:
+
+jobs:
+  send-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install web-push
+        run: npm install web-push
+
+      - name: Send pending push notifications
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+        run: |
+          node << 'EOF'
+          const webpush = require('web-push')
+
+          webpush.setVapidDetails(
+            process.env.VAPID_SUBJECT || 'mailto:admin@beerleague.app',
+            process.env.VAPID_PUBLIC_KEY,
+            process.env.VAPID_PRIVATE_KEY
+          )
+
+          const SUPABASE_URL = process.env.SUPABASE_URL
+          const KEY = process.env.SUPABASE_SERVICE_KEY
+          const headers = {
+            'apikey': KEY,
+            'Authorization': `Bearer ${KEY}`,
+            'Content-Type': 'application/json',
+          }
+
+          async function fetchJson(url, opts = {}) {
+            const res = await fetch(url, { headers, ...opts })
+            return res.json()
+          }
+
+          async function main() {
+            // Obtener notificaciones no enviadas (sin sent_at o sent_push = false)
+            const notifications = await fetchJson(
+              `${SUPABASE_URL}/rest/v1/notifications?read=eq.false&sent_push=eq.false&select=*,profiles(id)&limit=50`
+            )
+
+            if (!Array.isArray(notifications) || notifications.length === 0) {
+              console.log('Sin notificaciones pendientes')
+              return
+            }
+
+            console.log(`Procesando ${notifications.length} notificaciones`)
+
+            for (const notif of notifications) {
+              // Obtener suscripciones del usuario
+              const subs = await fetchJson(
+                `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${notif.user_id}&select=*`
+              )
+
+              if (!Array.isArray(subs) || subs.length === 0) {
+                // Marcar como enviada aunque no haya suscripción
+                await fetchJson(
+                  `${SUPABASE_URL}/rest/v1/notifications?id=eq.${notif.id}`,
+                  { method: 'PATCH', body: JSON.stringify({ sent_push: true }) }
+                )
+                continue
+              }
+
+              const payload = JSON.stringify({
+                title: notif.title,
+                body: notif.body,
+                tag: notif.type,
+                data: { url: '/', ...(notif.data || {}) },
+              })
+
+              for (const sub of subs) {
+                try {
+                  await webpush.sendNotification(
+                    { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                    payload
+                  )
+                  console.log(`✅ Push enviada a ${notif.user_id}`)
+                } catch (err) {
+                  console.error(`❌ Error enviando a ${sub.endpoint}:`, err.statusCode)
+                  // Si la suscripción expiró (410), eliminarla
+                  if (err.statusCode === 410) {
+                    await fetchJson(
+                      `${SUPABASE_URL}/rest/v1/push_subscriptions?id=eq.${sub.id}`,
+                      { method: 'DELETE' }
+                    )
+                  }
+                }
+              }
+
+              // Marcar notificación como enviada
+              await fetchJson(
+                `${SUPABASE_URL}/rest/v1/notifications?id=eq.${notif.id}`,
+                { method: 'PATCH', body: JSON.stringify({ sent_push: true }) }
+              )
+            }
+
+            console.log('Push notifications procesadas')
+          }
+
+          main().catch(console.error)
+          EOF

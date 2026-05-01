@@ -13,6 +13,7 @@ import Profile from './pages/Profile'
 import ClanWar from './pages/ClanWar'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import PushNotificationBanner from './components/PushNotificationBanner'
 
 function Dashboard() {
   const [currentPage, setCurrentPage] = useState('home')
@@ -33,6 +34,7 @@ function Dashboard() {
 
   return (
     <div>
+      <PushNotificationBanner />
       {renderPage()}
       <Footer />
       <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
