@@ -251,7 +251,7 @@ function JuicioTab({ leagueId, currentUserId, members }) {
     setUploadingProof(drinkId); setAiResult(null)
     const ext = file.name.split('.').pop()
     const path = `disputes/${currentUserId}/${drinkId}_${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
+    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: false })
     if (uploadError) { soundError(); setUploadingProof(null); e.target.value = ''; return }
     const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
     await supabase.from('drinks').update({ proof_image_url: publicUrl }).eq('id', drinkId)
