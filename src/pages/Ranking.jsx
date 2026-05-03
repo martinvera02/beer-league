@@ -202,6 +202,307 @@ function CreatePollModal({ leagueId, userId, onClose, onCreated }) {
   )
 }
 
+
+// ─── MODAL JUZGADO ────────────────────────────────────────────────────────────
+function JuzgadoModal({ dispute, drink, currentUserId, leagueId, members, onClose, onResolved }) {
+  const [votes, setVotes] = useState([])
+  const [myVote, setMyVote] = useState(null)
+  const [voting, setVoting] = useState(false)
+  const [resolved, setResolved] = useState(false)
+  const [resolutionResult, setResolutionResult] = useState(null)
+
+  useEffect(() => {
+    fetchVotes()
+    // Realtime: escuchar nuevos votos
+    const channel = supabase.channel(`dispute:${dispute.id}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'dispute_votes',
+        filter: `dispute_id=eq.${dispute.id}`
+      }, () => fetchVotes())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [dispute.id])
+
+  const fetchVotes = async () => {
+    const { data } = await supabase
+      .from('dispute_votes')
+      .select('*, profiles(username, avatar_url)')
+      .eq('dispute_id', dispute.id)
+    setVotes(data || [])
+    const mine = (data || []).find(v => v.user_id === currentUserId)
+    setMyVote(mine?.vote || null)
+
+    // Intentar resolver si hay votos suficientes
+    const total = (data || []).length
+    if (total >= 2) {
+      const { data: result } = await supabase.rpc('resolve_dispute_by_votes', { p_dispute_id: dispute.id })
+      if (result?.resolved) {
+        setResolved(true)
+        setResolutionResult(result)
+        soundSuccess()
+        setTimeout(() => { onResolved(); onClose() }, 3000)
+      }
+    }
+  }
+
+  const handleVote = async (vote) => {
+    if (voting || myVote || currentUserId === drink?.user_id) return
+    setVoting(true)
+    const { error } = await supabase.from('dispute_votes').insert({
+      dispute_id: dispute.id,
+      user_id: currentUserId,
+      vote,
+    })
+    if (!error) { soundSuccess(); await fetchVotes() }
+    else soundError()
+    setVoting(false)
+  }
+
+  const totalVotes = votes.length
+  const fakeVotes = votes.filter(v => v.vote === 'fake').length
+  const realVotes = votes.filter(v => v.vote === 'real').length
+  const fakePct = totalVotes > 0 ? Math.round((fakeVotes / totalVotes) * 100) : 0
+  const realPct = totalVotes > 0 ? Math.round((realVotes / totalVotes) * 100) : 0
+  const isAccused = currentUserId === drink?.user_id
+  const alreadyVoted = !!myVote
+  const formatTimeLeft = (expiresAt) => {
+    const diff = new Date(expiresAt) - new Date()
+    if (diff <= 0) return 'Expirado'
+    const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000)
+    return `${h}h ${m}m`
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}>
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+        onClick={e => e.stopPropagation()}
+        className="rounded-t-3xl w-full max-w-lg overflow-hidden"
+        style={{ backgroundColor: '#0d0d1a', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Header juzgado */}
+        <div className="relative overflow-hidden flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #1a0a0a, #2d0a0a, #1a0a0a)', borderBottom: '1px solid rgba(220,38,38,0.3)' }}>
+          {/* Partículas */}
+          {[
+            { top: '20%', left: '5%', size: 2, delay: 0 },
+            { top: '60%', left: '90%', size: 3, delay: 0.5 },
+            { top: '80%', left: '15%', size: 2, delay: 1 },
+            { top: '30%', left: '80%', size: 2, delay: 0.3 },
+          ].map((p, i) => (
+            <motion.div key={i} className="absolute rounded-full bg-red-500"
+              style={{ top: p.top, left: p.left, width: p.size, height: p.size }}
+              animate={{ opacity: [0.2, 1, 0.2] }}
+              transition={{ duration: 2, repeat: Infinity, delay: p.delay }} />
+          ))}
+          <div className="px-5 pt-5 pb-4 relative">
+            <div className="flex items-center justify-between mb-3">
+              <motion.button whileTap={{ scale: 0.9 }} onClick={onClose}
+                className="text-xs px-3 py-1.5 rounded-xl font-medium"
+                style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
+                ✕ Cerrar
+              </motion.button>
+              <div className="flex items-center gap-2">
+                <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+                  className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-xs font-bold text-red-400">EN VIVO · {totalVotes} voto{totalVotes !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+            <div className="text-center">
+              <motion.div className="text-5xl mb-2"
+                animate={{ rotate: [-3, 3, -3] }} transition={{ duration: 2, repeat: Infinity }}>
+                ⚖️
+              </motion.div>
+              <h2 className="text-xl font-black text-white mb-0.5">EL JUZGADO</h2>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {dispute.status === 'pending' ? `Expira en ${formatTimeLeft(dispute.expires_at)}` : 'Caso cerrado'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" style={{ paddingBottom: 32 }}>
+
+          {/* El acusado */}
+          <div className="rounded-2xl p-4 text-center"
+            style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <p className="text-xs font-bold text-red-400 mb-2 tracking-widest">⚠️ ACUSADO</p>
+            <div className="flex items-center justify-center gap-3">
+              {drink?.profiles?.avatar_url
+                ? <img src={drink.profiles.avatar_url} className="w-12 h-12 rounded-full object-cover border-2 border-red-500" alt="" />
+                : <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl border-2 border-red-500" style={{ backgroundColor: 'rgba(239,68,68,0.15)' }}>🍺</div>
+              }
+              <div className="text-left">
+                <p className="font-black text-white">{drink?.profiles?.username}</p>
+                <p className="text-xs text-red-400">{drink?.drink_types?.emoji} {drink?.drink_types?.name} · {drink?.points} pts</p>
+              </div>
+            </div>
+            {drink?.proof_image_url && (
+              <a href={drink.proof_image_url} target="_blank" rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
+                style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+                📷 Ver prueba aportada
+              </a>
+            )}
+          </div>
+
+          {/* Resultado si resuelto */}
+          <AnimatePresence>
+            {resolved && resolutionResult && (
+              <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
+                className="rounded-2xl p-4 text-center"
+                style={{
+                  background: resolutionResult.result === 'forfeited'
+                    ? 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.05))'
+                    : 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05))',
+                  border: `2px solid ${resolutionResult.result === 'forfeited' ? '#ef4444' : '#10b981'}`,
+                }}>
+                <motion.div className="text-5xl mb-2"
+                  animate={{ scale: [1, 1.2, 1], rotate: [0, -10, 10, 0] }}
+                  transition={{ duration: 0.6 }}>
+                  {resolutionResult.result === 'forfeited' ? '🔨' : '✅'}
+                </motion.div>
+                <p className="font-black text-lg" style={{ color: resolutionResult.result === 'forfeited' ? '#ef4444' : '#10b981' }}>
+                  {resolutionResult.result === 'forfeited' ? '¡CULPABLE! Consumición anulada' : '¡INOCENTE! Consumición válida'}
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  {resolutionResult.fake_pct}% votó en contra · {resolutionResult.total_votes} votos totales
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Marcador de votos en tiempo real */}
+          {!resolved && (
+            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+                <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>MARCADOR</p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Se resuelve con ≥65% de mayoría</p>
+              </div>
+
+              {/* Barra de votos */}
+              <div className="px-4 pb-2">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-black text-emerald-400 w-8">{realPct}%</span>
+                  <div className="flex-1 h-6 rounded-full overflow-hidden flex" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                    <motion.div className="h-full flex items-center justify-end pr-2"
+                      style={{ backgroundColor: '#10b981', minWidth: realVotes > 0 ? 8 : 0 }}
+                      animate={{ width: `${realPct}%` }} transition={{ duration: 0.6, type: 'spring' }}>
+                      {realPct >= 20 && <span className="text-xs font-black text-white">{realVotes}</span>}
+                    </motion.div>
+                    <motion.div className="h-full flex items-center justify-start pl-2"
+                      style={{ backgroundColor: '#ef4444', minWidth: fakeVotes > 0 ? 8 : 0 }}
+                      animate={{ width: `${fakePct}%` }} transition={{ duration: 0.6, type: 'spring' }}>
+                      {fakePct >= 20 && <span className="text-xs font-black text-white">{fakeVotes}</span>}
+                    </motion.div>
+                  </div>
+                  <span className="text-xs font-black text-red-400 w-8 text-right">{fakePct}%</span>
+                </div>
+                <div className="flex justify-between text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  <span>✅ Real ({realVotes})</span>
+                  <span>❌ Falso ({fakeVotes})</span>
+                </div>
+
+                {/* Umbral */}
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
+                  <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+                    style={{ backgroundColor: fakePct >= 65 ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)', color: fakePct >= 65 ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
+                    {fakePct >= 65 ? '🔨 Umbral alcanzado' : `Falta ${65 - fakePct}% para anular`}
+                  </span>
+                  <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
+                </div>
+              </div>
+
+              {/* Votos individuales */}
+              {votes.length > 0 && (
+                <div className="px-4 pb-3">
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {votes.map(v => (
+                      <motion.div key={v.id} initial={{ scale: 0 }} animate={{ scale: 1 }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+                        style={{
+                          backgroundColor: v.vote === 'fake' ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)',
+                          border: `1px solid ${v.vote === 'fake' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+                        }}>
+                        {v.profiles?.avatar_url
+                          ? <img src={v.profiles.avatar_url} className="w-4 h-4 rounded-full object-cover" alt="" />
+                          : <span>🍺</span>}
+                        <span style={{ color: v.vote === 'fake' ? '#ef4444' : '#10b981' }}>
+                          {v.profiles?.username?.split(' ')[0]} {v.vote === 'fake' ? '❌' : '✅'}
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Botones de voto */}
+          {!resolved && !isAccused && dispute.status === 'pending' && (
+            <div>
+              {alreadyVoted ? (
+                <div className="rounded-2xl p-4 text-center"
+                  style={{ backgroundColor: myVote === 'real' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${myVote === 'real' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                  <p className="text-sm font-bold" style={{ color: myVote === 'real' ? '#10b981' : '#ef4444' }}>
+                    {myVote === 'real' ? '✅ Has votado: Real' : '❌ Has votado: Falso'}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Esperando más votos...</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs text-center mb-3 font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    ¿ES REAL ESTA CONSUMICIÓN?
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <motion.button whileTap={{ scale: 0.96 }} onClick={() => handleVote('real')} disabled={voting}
+                      className="py-4 rounded-2xl font-black text-base relative overflow-hidden"
+                      style={{ background: 'linear-gradient(135deg, #059669, #10b981)', color: '#fff' }}>
+                      <motion.div className="absolute inset-0"
+                        style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent)' }}
+                        animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
+                      <span className="relative">✅ REAL</span>
+                    </motion.button>
+                    <motion.button whileTap={{ scale: 0.96 }} onClick={() => handleVote('fake')} disabled={voting}
+                      className="py-4 rounded-2xl font-black text-base relative overflow-hidden"
+                      style={{ background: 'linear-gradient(135deg, #b91c1c, #ef4444)', color: '#fff' }}>
+                      <motion.div className="absolute inset-0"
+                        style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent)' }}
+                        animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'linear', repeatDelay: 0.5 }} />
+                      <span className="relative">❌ FALSO</span>
+                    </motion.button>
+                  </div>
+                  <p className="text-xs text-center mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    Si ≥65% vota FALSO, la consumición se anula
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isAccused && dispute.status === 'pending' && !resolved && (
+            <div className="rounded-2xl p-4 text-center"
+              style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <motion.div className="text-3xl mb-2" animate={{ rotate: [-5, 5, -5] }} transition={{ duration: 1.5, repeat: Infinity }}>
+                😰
+              </motion.div>
+              <p className="font-bold text-amber-400">Estás siendo juzgado</p>
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Los miembros de la liga están votando sobre tu consumición
+              </p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── PESTAÑA JUICIO ───────────────────────────────────────────────────────────
 function JuicioTab({ leagueId, currentUserId, members }) {
   const [recentDrinks, setRecentDrinks] = useState([])
@@ -211,6 +512,8 @@ function JuicioTab({ leagueId, currentUserId, members }) {
   const [disputing, setDisputing] = useState(null)
   const [uploadingProof, setUploadingProof] = useState(null)
   const [aiResult, setAiResult] = useState(null)
+  const [activeDispute, setActiveDispute] = useState(null)
+  const [activeDrink, setActiveDrink] = useState(null)
   const proofInputRef = useRef(null)
   const [activeProofDrinkId, setActiveProofDrinkId] = useState(null)
 
@@ -251,24 +554,17 @@ function JuicioTab({ leagueId, currentUserId, members }) {
     setUploadingProof(drinkId); setAiResult(null)
     const ext = file.name.split('.').pop()
     const path = `disputes/${currentUserId}/${drinkId}_${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: true })
+    const { error: uploadError } = await supabase.storage.from('chat-images').upload(path, file, { upsert: false })
     if (uploadError) { soundError(); setUploadingProof(null); e.target.value = ''; return }
     const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path)
     await supabase.from('drinks').update({ proof_image_url: publicUrl }).eq('id', drinkId)
     let aiValid = false, aiReason = 'No se pudo analizar la imagen'
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 200,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'url', url: publicUrl } },
-            { type: 'text', text: 'Analiza esta imagen y determina si muestra una bebida (alcohólica o no alcohólica) de forma clara y verosímil, como en un bar, restaurante, en mano, o sobre una mesa en un contexto real de consumo. No es válida si parece imagen de internet, catálogo, producto en tienda sin contexto de consumo, o no se ve ninguna bebida. Responde ÚNICAMENTE con JSON sin texto adicional: {"valid": true, "reason": "explicación breve en español de máximo 20 palabras"}' }
-          ]}]
-        })
-      })
-      const data = await response.json()
-      const parsed = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g, '').trim())
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-drink-proof`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: publicUrl }) }
+      )
+      const parsed = await response.json()
       aiValid = parsed.valid === true; aiReason = parsed.reason || aiReason
     } catch { aiReason = 'Error al analizar — intenta de nuevo' }
     if (aiValid) {
@@ -278,6 +574,11 @@ function JuicioTab({ leagueId, currentUserId, members }) {
     } else soundError()
     setAiResult({ drinkId, valid: aiValid, reason: aiReason })
     setUploadingProof(null); e.target.value = ''; fetchAll()
+  }
+
+  const openJuzgado = (dispute, drink) => {
+    setActiveDispute(dispute)
+    setActiveDrink(drink)
   }
 
   const getDisputeForDrink = (drinkId) => disputes.find(d => d.drink_id === drinkId)
@@ -305,6 +606,22 @@ function JuicioTab({ leagueId, currentUserId, members }) {
 
   return (
     <div className="space-y-4">
+
+      {/* Modal juzgado */}
+      <AnimatePresence>
+        {activeDispute && activeDrink && (
+          <JuzgadoModal
+            dispute={activeDispute}
+            drink={activeDrink}
+            currentUserId={currentUserId}
+            leagueId={leagueId}
+            members={members}
+            onClose={() => { setActiveDispute(null); setActiveDrink(null) }}
+            onResolved={() => { fetchAll(); setActiveDispute(null); setActiveDrink(null) }}
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {aiResult && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -314,18 +631,20 @@ function JuicioTab({ leagueId, currentUserId, members }) {
               <div className="flex-1">
                 <p className={`font-bold text-sm ${aiResult.valid ? 'text-emerald-400' : 'text-red-400'}`}>{aiResult.valid ? '✅ Foto verificada por IA' : '❌ Foto rechazada por IA'}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>{aiResult.reason}</p>
-                {!aiResult.valid && <p className="text-xs mt-1.5 font-medium" style={{ color: '#f59e0b' }}>Puedes intentarlo con otra foto mientras no expire el tiempo</p>}
+                {!aiResult.valid && <p className="text-xs mt-1.5 font-medium" style={{ color: '#f59e0b' }}>Los miembros pueden votar en El Juzgado</p>}
               </div>
               <motion.button whileTap={{ scale: 0.9 }} onClick={() => setAiResult(null)} className="text-xs px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>✕</motion.button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Mis consumiciones impugnadas */}
       {myDisputes.length > 0 && (
         <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.3)' }}>
           <div className="px-4 pt-4 pb-2">
             <p className="font-bold text-red-400 flex items-center gap-2">⚠️ Tienes consumiciones impugnadas</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sube una foto como prueba. La IA la analizará automáticamente. Tienes 3 horas o perderás los puntos.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sube una foto o espera el veredicto del juzgado. Tienes 3 horas.</p>
           </div>
           {myDisputes.map(dispute => {
             const drink = recentDrinks.find(d => d.id === dispute.drink_id)
@@ -338,12 +657,20 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                     <p className="text-xs" style={{ color: '#ef4444' }}>⏱ {formatTimeLeft(dispute.expires_at)} para responder</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Impugnada por {dispute.disputed_by_profile?.username}</p>
                   </div>
-                  <motion.button whileTap={{ scale: 0.95 }}
-                    onClick={() => { setActiveProofDrinkId(drink?.id); proofInputRef.current?.click() }}
-                    disabled={uploadingProof === drink?.id}
-                    className="px-3 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0" style={{ backgroundColor: '#ef4444' }}>
-                    {uploadingProof === drink?.id ? '🤖 Analizando...' : '📷 Subir prueba'}
-                  </motion.button>
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <motion.button whileTap={{ scale: 0.95 }}
+                      onClick={() => { setActiveProofDrinkId(drink?.id); proofInputRef.current?.click() }}
+                      disabled={uploadingProof === drink?.id}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-white" style={{ backgroundColor: '#ef4444' }}>
+                      {uploadingProof === drink?.id ? '🤖 Analizando...' : '📷 Foto'}
+                    </motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }}
+                      onClick={() => openJuzgado(dispute, drink)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold"
+                      style={{ backgroundColor: 'rgba(220,38,38,0.15)', color: '#ef4444', border: '1px solid rgba(220,38,38,0.3)' }}>
+                      ⚖️ Juicio
+                    </motion.button>
+                  </div>
                 </div>
               </div>
             )
@@ -351,6 +678,7 @@ function JuicioTab({ leagueId, currentUserId, members }) {
           <input ref={proofInputRef} type="file" accept="image/*" onChange={e => activeProofDrinkId && handleUploadProof(e, activeProofDrinkId)} className="hidden" />
         </div>
       )}
+
       <p className="text-sm font-bold" style={{ color: 'var(--text-muted)' }}>Últimas 24h · {recentDrinks.length} consumiciones</p>
       {recentDrinks.length === 0 ? (
         <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}><div className="text-4xl mb-2">🍺</div><p className="text-sm">Sin consumiciones recientes</p></div>
@@ -376,20 +704,32 @@ function JuicioTab({ leagueId, currentUserId, members }) {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="font-bold text-sm truncate">{isMe ? 'Tú' : drink.profiles?.username}</p>
                       {isForfeited && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>❌ Anulada</span>}
-                      {isProven && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✅ Verificada por IA</span>}
-                      {isDisputed && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>⚠️ En revisión</span>}
+                      {isProven && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✅ Verificada</span>}
+                      {isDisputed && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>⚠️ En juicio</span>}
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{drink.drink_types?.name} · {isForfeited ? <span style={{ color: '#ef4444' }}>0 pts</span> : `${drink.points} pts`} · {formatAgo(drink.consumed_at)}</p>
                     {dispute && <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Impugnada por {dispute.disputed_by_profile?.username}{dispute.status === 'pending' && ` · expira en ${formatTimeLeft(dispute.expires_at)}`}</p>}
                     {drink.proof_image_url && <a href={drink.proof_image_url} target="_blank" rel="noreferrer" className="text-xs font-medium mt-1 inline-flex items-center gap-1" style={{ color: '#10b981' }}>📷 Ver prueba</a>}
                   </div>
-                  {!isMe && !alreadyDisputed && !isDisputed && !isForfeited && !isProven && (
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDispute(drink)} disabled={disputing === drink.id}
-                      className="px-3 py-2 rounded-xl text-xs font-bold flex-shrink-0" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
-                      {disputing === drink.id ? '...' : '⚖️ Impugnar'}
-                    </motion.button>
-                  )}
-                  {alreadyDisputed && !isMe && <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>Impugnada ✓</span>}
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {/* Botón impugnar */}
+                    {!isMe && !alreadyDisputed && !isDisputed && !isForfeited && !isProven && (
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleDispute(drink)} disabled={disputing === drink.id}
+                        className="px-3 py-2 rounded-xl text-xs font-bold" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        {disputing === drink.id ? '...' : '⚖️ Impugnar'}
+                      </motion.button>
+                    )}
+                    {/* Botón entrar al juicio si está en disputa */}
+                    {isDisputed && dispute && (
+                      <motion.button whileTap={{ scale: 0.9 }}
+                        onClick={() => openJuzgado(dispute, drink)}
+                        className="px-3 py-2 rounded-xl text-xs font-bold"
+                        style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                        🔴 Ver juicio
+                      </motion.button>
+                    )}
+                    {alreadyDisputed && !isMe && !isDisputed && <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>Impugnada ✓</span>}
+                  </div>
                 </div>
               </motion.div>
             )
