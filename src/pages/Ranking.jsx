@@ -796,8 +796,8 @@ function AdminTab({ selectedLeague, members, myRole, onMsg, onRefreshRanking }) 
   const manageableMembers = members.filter(m => {
     if (m.id === user.id || m.role === 'owner') return false
     if (myRole === 'admin' && m.role === 'admin') return false
-    return true
-  })
+  return true
+})
 
   const roleLabel = { owner: '👑 Creador', admin: '⚡ Admin', member: 'Miembro' }
   const roleBadgeStyle = {
