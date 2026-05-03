@@ -502,8 +502,6 @@ export default function ClanWar() {
         )}
       </AnimatePresence>
 
-// NUEVA SECCIÓN VISUAL — reemplaza el bloque {tab === 'war' && ...} completo
-
 {tab === 'war' && (
   <div className="max-w-md mx-auto">
     {!activeWar ? (
