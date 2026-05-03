@@ -27,6 +27,9 @@ const isOperacionBarbacoa = () => {
   return madrid.getDate() === 9 && madrid.getMonth() === 4
 }
 
+const CUBATA_NORMAL_ID = 2
+const CUBATA_CAMARADA_ID = 13
+
 // ─── Dígito animado individual ────────────────────────────────────────────────
 function CountdownDigit({ value }) {
   return (
@@ -84,10 +87,10 @@ export default function AddDrink() {
   const [result, setResult] = useState(null)
   const [activePowerups, setActivePowerups] = useState([])
   const [balance, setBalance] = useState(0)
+  const [badgeEarned, setBadgeEarned] = useState(false)
 
   const isMartes = isMartesEnMadrid()
   const isBarbacoa = isOperacionBarbacoa()
-  // Barbacoa tiene prioridad sobre Martes Macarra
   const isEventActive = isBarbacoa || isMartes
 
   const [countdown, setCountdown] = useState('')
@@ -139,7 +142,15 @@ export default function AddDrink() {
       supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
     ])
 
-    setDrinkTypes(drinks || [])
+    // El 9 de Mayo: ocultar cubata normal y mostrar Cubata del Camarada
+    // El resto de días: ocultar Cubata del Camarada
+    const filteredDrinks = (drinks || []).filter(d => {
+      if (isBarbacoa && d.id === CUBATA_NORMAL_ID) return false
+      if (!isBarbacoa && d.id === CUBATA_CAMARADA_ID) return false
+      return true
+    })
+
+    setDrinkTypes(filteredDrinks)
     setLeagues(members?.map(m => m.league_id) || [])
     setSeasonId(season?.id || null)
     setActivePowerups(powerups || [])
@@ -200,11 +211,20 @@ export default function AddDrink() {
       return
     }
 
+    // Medalla Operación Barbacoa — se gana al anotar cualquier consumición el 9 de Mayo
+    if (isBarbacoa) {
+      const { error: badgeError } = await supabase.from('achievements').insert({
+        user_id: user.id,
+        achievement_id: 'operacion_barbacoa_2026',
+      })
+      if (!badgeError) setBadgeEarned(true)
+    }
+
     setResult(data)
     setSuccess(true)
     soundSuccess()
     await fetchData()
-    setTimeout(() => { setSuccess(false); setResult(null) }, 4000)
+    setTimeout(() => { setSuccess(false); setResult(null); setBadgeEarned(false) }, 5000)
     setLoading(false)
     setSelectedDrink(null)
   }
@@ -224,7 +244,6 @@ export default function AddDrink() {
     }
   }
 
-  // Colores del evento activo
   const eventGradient = isBarbacoa
     ? 'linear-gradient(135deg, #8B0000, #B22222, #8B0000)'
     : 'linear-gradient(135deg, #7c3aed, #dc2626)'
@@ -256,84 +275,62 @@ export default function AddDrink() {
               exit={{ opacity: 0, y: -20, scale: 0.93 }}
               transition={{ type: 'spring', stiffness: 300, damping: 25 }}
               className="rounded-2xl mb-4 relative overflow-hidden"
-              style={{
-                background: eventGradient,
-                border: '2px solid #FFD700',
-                boxShadow: eventGlow,
-              }}>
+              style={{ background: eventGradient, border: '2px solid #FFD700', boxShadow: eventGlow }}>
 
-              {/* Brillo animado */}
               <motion.div className="absolute inset-0 pointer-events-none"
                 style={{ background: 'linear-gradient(90deg, transparent, rgba(255,215,0,0.08), transparent)' }}
                 animate={{ x: ['-100%', '200%'] }}
                 transition={{ duration: 3, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }} />
 
-              {/* Borde dorado superior */}
               <div style={{ height: 3, background: 'linear-gradient(90deg, transparent, #FFD700, #FFA500, #FFD700, transparent)' }} />
 
               <div className="flex items-stretch">
-                {/* Logo izquierdo */}
                 <div className="flex-shrink-0 flex items-center justify-center p-3"
                   style={{ background: 'rgba(0,0,0,0.25)', borderRight: '1px solid rgba(255,215,0,0.3)' }}>
-                  <motion.img
-                    src="/operacion-barbacoa.png"
-                    alt="Operación Barbacoa"
-                    className="object-contain"
-                    style={{ width: 72, height: 72 }}
-                    animate={{ scale: [1, 1.04, 1] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                  />
+                  <motion.img src="/operacion-barbacoa.png" alt="Operación Barbacoa"
+                    className="object-contain" style={{ width: 72, height: 72 }}
+                    animate={{ scale: [1, 1.04, 1] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }} />
                 </div>
 
-                {/* Contenido derecho */}
                 <div className="flex-1 p-4">
-                  {/* Título estilo propaganda */}
                   <div className="flex items-center gap-2 mb-1">
-                    <motion.div
-                      animate={{ opacity: [1, 0.4, 1] }}
-                      transition={{ duration: 1.2, repeat: Infinity }}
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: '#FFD700' }} />
+                    <motion.div animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }}
+                      className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FFD700' }} />
                     <p className="font-black text-base tracking-widest uppercase"
                       style={{ color: '#FFD700', textShadow: '0 0 12px rgba(255,215,0,0.5)', fontFamily: 'serif', letterSpacing: '0.15em' }}>
                       Operación Barbacoa
                     </p>
                   </div>
-
-                  {/* Subtítulo */}
                   <p className="text-xs mb-2 font-medium" style={{ color: 'rgba(255,220,100,0.85)' }}>
                     🍖 Día de la Victoria · 9 de Mayo
                   </p>
-
-                  {/* Tags */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <motion.span
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
+                    <motion.span animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
                       className="text-xs font-black px-2.5 py-1 rounded-full"
                       style={{ background: '#FFD700', color: '#8B0000', letterSpacing: '0.05em' }}>
                       ✕2 PUNTOS
                     </motion.span>
                     <span className="text-xs font-medium px-2 py-1 rounded-full"
                       style={{ background: 'rgba(255,215,0,0.15)', color: 'rgba(255,215,0,0.9)', border: '1px solid rgba(255,215,0,0.3)' }}>
-                      🔥 Todo el día
+                      🥃 Cubata del Camarada
+                    </span>
+                    <span className="text-xs font-medium px-2 py-1 rounded-full"
+                      style={{ background: 'rgba(255,215,0,0.15)', color: 'rgba(255,215,0,0.9)', border: '1px solid rgba(255,215,0,0.3)' }}>
+                      🎖️ Medalla exclusiva
                     </span>
                   </div>
-
-                  {/* Cita propaganda */}
                   <p className="text-xs mt-2 italic" style={{ color: 'rgba(255,200,100,0.6)' }}>
                     "¡Trabajadores de todas las ligas, bebed unidos!"
                   </p>
                 </div>
               </div>
 
-              {/* Borde dorado inferior */}
               <div style={{ height: 3, background: 'linear-gradient(90deg, transparent, #FFD700, #FFA500, #FFD700, transparent)' }} />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ── BANNER MARTES MACARRA (solo si no es Barbacoa) ── */}
+        {/* ── BANNER MARTES MACARRA ── */}
         <AnimatePresence>
           {isMartes && !isBarbacoa && (
             <motion.div
@@ -341,11 +338,7 @@ export default function AddDrink() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -16, scale: 0.95 }}
               className="rounded-2xl p-4 mb-4 relative overflow-hidden"
-              style={{
-                background: 'linear-gradient(135deg, #7c3aed, #dc2626)',
-                border: '2px solid rgba(255,255,255,0.2)',
-                boxShadow: '0 0 30px rgba(124,58,237,0.4)',
-              }}>
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #dc2626)', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 0 30px rgba(124,58,237,0.4)' }}>
               <motion.div className="absolute inset-0"
                 style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)' }}
                 animate={{ x: ['-100%', '200%'] }}
@@ -363,19 +356,13 @@ export default function AddDrink() {
               <div className="flex items-start gap-3 relative">
                 <motion.div className="text-4xl flex-shrink-0 mt-0.5"
                   animate={{ rotate: [-5, 5, -5], scale: [1, 1.1, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}>
-                  😈
-                </motion.div>
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}>😈</motion.div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <motion.p className="text-white font-black text-lg tracking-tight">
-                      MARTES MACARRA
-                    </motion.p>
+                    <motion.p className="text-white font-black text-lg tracking-tight">MARTES MACARRA</motion.p>
                     <motion.span animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 1, repeat: Infinity }}
                       className="text-xs font-black px-2 py-0.5 rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
-                      x2
-                    </motion.span>
+                      style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>x2</motion.span>
                   </div>
                   <p className="text-white/70 text-xs mb-1">¡Doble de puntos y monedas! 🍺🍺</p>
                   <CountdownDisplay countdown={countdown} />
@@ -463,6 +450,7 @@ export default function AddDrink() {
             const isGamble = effectivePoints === '?'
             const isSelected = selectedDrink === drink.id
             const trend = getMarketTrend(drink.id)
+            const isCamarada = drink.id === CUBATA_CAMARADA_ID
 
             const price = drinkMarket[drink.id] || 100
             const mktMult = Math.max(0.5, Math.min(2.0, price / 100))
@@ -476,7 +464,7 @@ export default function AddDrink() {
                 className={`rounded-2xl p-5 text-center transition-all relative ${isSelected ? 'shadow-lg' : ''}`}
                 style={isSelected
                   ? { background: isBarbacoa ? eventGradient : isMartes ? 'linear-gradient(135deg, #7c3aed, #dc2626)' : '#f59e0b', color: '#fff', border: isBarbacoa ? '2px solid #FFD700' : 'none' }
-                  : { backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+                  : { backgroundColor: isCamarada ? 'rgba(139,0,0,0.15)' : 'var(--bg-card)', color: 'var(--text-primary)', border: isCamarada ? '1px solid rgba(255,215,0,0.4)' : 'none' }}>
 
                 {/* Badge evento */}
                 {isEventActive && (
@@ -486,16 +474,27 @@ export default function AddDrink() {
                   </div>
                 )}
 
-                {trend.icon && (
+                {/* Badge especial Cubata del Camarada */}
+                {isCamarada && !isSelected && (
+                  <div className="absolute top-1.5 right-1.5 text-xs font-black px-1.5 py-0.5 rounded-full"
+                    style={{ background: '#FFD700', color: '#8B0000' }}>
+                    ★
+                  </div>
+                )}
+
+                {trend.icon && !isCamarada && (
                   <div className="absolute top-2 right-2 text-xs">{trend.icon}</div>
                 )}
 
                 <motion.div className="text-4xl mb-2"
-                  animate={isSelected ? { scale: [1, 1.3, 1] } : {}}
-                  transition={{ duration: 0.3 }}>
+                  animate={isSelected ? { scale: [1, 1.3, 1] } : isCamarada ? { rotate: [-3, 3, -3] } : {}}
+                  transition={{ duration: isCamarada ? 2 : 0.3, repeat: isCamarada ? Infinity : 0 }}>
                   {drink.emoji}
                 </motion.div>
                 <div className="font-semibold text-sm">{drink.name}</div>
+                {isCamarada && !isSelected && (
+                  <p className="text-xs mt-0.5 font-bold" style={{ color: '#FFD700' }}>Exclusivo hoy</p>
+                )}
 
                 <div className="mt-1">
                   {isGamble ? (
@@ -649,6 +648,27 @@ export default function AddDrink() {
                 style={{ color: inDebt ? '#ef4444' : isBarbacoa ? '#FFD700' : result.martes_macarra ? '#a78bfa' : '#f59e0b' }}>
                 {inDebt ? `${result.coins}🪙 → reduciendo deuda` : `+${result.coins}🪙`}
               </motion.p>
+
+              {/* Medalla ganada */}
+              <AnimatePresence>
+                {badgeEarned && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.5, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ delay: 0.5, type: 'spring', stiffness: 300, damping: 20 }}
+                    className="mt-3 rounded-xl px-4 py-2.5 flex items-center justify-center gap-2"
+                    style={{ background: 'rgba(255,215,0,0.15)', border: '1px solid rgba(255,215,0,0.4)' }}>
+                    <motion.span className="text-2xl"
+                      animate={{ rotate: [-10, 10, -10], scale: [1, 1.2, 1] }}
+                      transition={{ duration: 1, repeat: Infinity }}>🎖️</motion.span>
+                    <div className="text-left">
+                      <p className="text-xs font-black" style={{ color: '#FFD700' }}>¡Medalla desbloqueada!</p>
+                      <p className="text-xs" style={{ color: 'rgba(255,215,0,0.7)' }}>Veterano de la Barbacoa 2026</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <p className="text-xs mt-2" style={{ color: 'var(--text-hint)' }}>
                 Anotado en {leagues.length} {leagues.length === 1 ? 'liga' : 'ligas'}
               </p>
