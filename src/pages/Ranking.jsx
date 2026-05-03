@@ -282,7 +282,7 @@ function JuzgadoModal({ dispute, drink, currentUserId, leagueId, members, onClos
         transition={{ type: 'spring', stiffness: 350, damping: 35 }}
         onClick={e => e.stopPropagation()}
         className="rounded-t-3xl w-full max-w-lg overflow-hidden"
-        style={{ backgroundColor: '#0d0d1a', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+        style={{ backgroundColor: '#0d0d1a', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header juzgado */}
         <div className="relative overflow-hidden flex-shrink-0"
@@ -325,7 +325,7 @@ function JuzgadoModal({ dispute, drink, currentUserId, leagueId, members, onClos
           </div>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" style={{ paddingBottom: 32 }}>
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4" style={{ paddingBottom: 100 }}>
 
           {/* El acusado */}
           <div className="rounded-2xl p-4 text-center"
