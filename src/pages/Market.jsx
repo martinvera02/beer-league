@@ -5,40 +5,36 @@ import { useAuth } from '../context/AuthContext'
 import { fadeIn, staggerItem } from '../lib/animations'
 import { soundSuccess, soundError } from '../lib/sounds'
 
+
 // ─── TICKER ESTILO BLOOMBERG ──────────────────────────────────────────────────
 function MarketTicker({ drinkMarket }) {
   if (!drinkMarket || drinkMarket.length === 0) return null
-
   const items = drinkMarket.map(d => {
     const mult = Math.max(0.5, Math.min(2.0, d.price / 100))
     const isUp = d.history?.length > 1 ? d.price >= d.history[0]?.price : true
     const pct = d.history?.length > 1
-      ? Math.abs(((d.price - d.history[0].price) / d.history[0].price) * 100).toFixed(1)
-      : '0.0'
+      ? Math.abs(((d.price - d.history[0].price) / d.history[0].price) * 100).toFixed(1) : '0.0'
     return { emoji: d.drink_types?.emoji, name: d.drink_types?.name, mult, isUp, pct }
   })
-
   const doubled = [...items, ...items, ...items]
   const duration = items.length * 5
-
   return (
-    <div className="overflow-hidden border-b" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)' }}>
-      <motion.div
-        className="flex items-center gap-0 py-2 whitespace-nowrap"
+    <div className="overflow-hidden" style={{ backgroundColor: '#050508', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
+      <motion.div className="flex items-center gap-0 py-1.5 whitespace-nowrap"
         style={{ width: 'max-content' }}
         animate={{ x: ['0%', '-33.333%'] }}
         transition={{ duration, repeat: Infinity, ease: 'linear' }}>
         {doubled.map((item, i) => (
-          <div key={i} className="flex items-center gap-1.5 px-4 flex-shrink-0">
-            <span className="text-base">{item.emoji}</span>
-            <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{item.name}</span>
-            <span className="text-xs font-black ml-0.5" style={{ color: item.mult > 1 ? '#10b981' : item.mult < 1 ? '#ef4444' : '#9ca3af' }}>
+          <div key={i} className="flex items-center gap-2 px-4 flex-shrink-0">
+            <span className="text-sm">{item.emoji}</span>
+            <span className="text-xs font-black tracking-wide" style={{ color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>{item.name?.toUpperCase()}</span>
+            <span className="text-xs font-black" style={{ color: item.mult > 1 ? '#10b981' : item.mult < 1 ? '#ef4444' : '#6b7280', fontFamily: 'monospace' }}>
               x{item.mult.toFixed(2)}
             </span>
-            <span className="text-xs font-bold" style={{ color: item.isUp ? '#10b981' : '#ef4444' }}>
+            <span className="text-xs font-bold" style={{ color: item.isUp ? '#10b981' : '#ef4444', fontFamily: 'monospace' }}>
               {item.isUp ? '▲' : '▼'}{item.pct}%
             </span>
-            <span className="text-xs ml-2" style={{ color: 'var(--border)' }}>|</span>
+            <span className="text-xs opacity-20 ml-1">|</span>
           </div>
         ))}
       </motion.div>
@@ -46,22 +42,36 @@ function MarketTicker({ drinkMarket }) {
   )
 }
 
-function SparkChart({ history, width = 60, height = 28 }) {
-  if (!history || history.length < 2) return null
+function SparkChart({ history, width = 80, height = 36 }) {
+  if (!history || history.length < 2) return (
+    <div style={{ width, height }} className="flex items-center justify-center">
+      <div className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>—</div>
+    </div>
+  )
   const prices = history.map(h => h.price)
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
   const points = prices.map((p, i) => {
     const x = (i / (prices.length - 1)) * width
-    const y = height - ((p - min) / range) * height
+    const y = height - 4 - ((p - min) / range) * (height - 8)
     return `${x},${y}`
   }).join(' ')
   const isUp = prices[prices.length - 1] >= prices[0]
+  const lineColor = isUp ? '#10b981' : '#ef4444'
+  const lastX = (prices.length - 1) / (prices.length - 1) * width
+  const lastY = height - 4 - ((prices[prices.length - 1] - min) / range) * (height - 8)
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <polyline points={points} fill="none" stroke={isUp ? '#10b981' : '#ef4444'}
-        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <defs>
+        <linearGradient id={`sg-${isUp}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`0,${height} ${points} ${width},${height}`} fill={`url(#sg-${isUp})`} />
+      <polyline points={points} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastX} cy={lastY} r="2.5" fill={lineColor} />
     </svg>
   )
 }
@@ -69,20 +79,17 @@ function SparkChart({ history, width = 60, height = 28 }) {
 function DetailChart({ history, width = 320, height = 150 }) {
   const svgRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
-
   if (!history || history.length < 2) return (
     <div className="flex items-center justify-center" style={{ height }}>
       <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Sin historial suficiente</p>
     </div>
   )
-
   const prices = history.map(h => h.price)
   const multipliers = prices.map(p => Math.max(0.5, Math.min(2.0, p / 100)))
   const min = Math.min(...multipliers)
   const max = Math.max(...multipliers)
   const range = max - min || 0.1
   const pad = 28
-
   const toX = (i) => pad + (i / (multipliers.length - 1)) * (width - pad * 2)
   const toY = (m) => pad + (height - pad * 2) - ((m - min) / range) * (height - pad * 2)
   const points = multipliers.map((m, i) => `${toX(i)},${toY(m)}`).join(' ')
@@ -91,66 +98,53 @@ function DetailChart({ history, width = 320, height = 150 }) {
   const isUp = current >= multipliers[0]
   const lineColor = isUp ? '#10b981' : '#ef4444'
   const pct = (((current - multipliers[0]) / multipliers[0]) * 100).toFixed(1)
-
   const handlePointer = (clientX) => {
     if (!svgRef.current) return
     const rect = svgRef.current.getBoundingClientRect()
     const scaleX = width / rect.width
     const mouseX = (clientX - rect.left) * scaleX
     let closestIdx = 0, closestDist = Infinity
-    multipliers.forEach((_, i) => {
-      const dist = Math.abs(toX(i) - mouseX)
-      if (dist < closestDist) { closestDist = dist; closestIdx = i }
-    })
+    multipliers.forEach((_, i) => { const dist = Math.abs(toX(i) - mouseX); if (dist < closestDist) { closestDist = dist; closestIdx = i } })
     setTooltip({ x: toX(closestIdx), y: toY(multipliers[closestIdx]), point: history[closestIdx], idx: closestIdx, mult: multipliers[closestIdx] })
   }
-
-  const formatTime = (ts) => {
-    if (!ts) return ''
-    return new Date(ts).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-  }
-
+  const formatTime = (ts) => { if (!ts) return ''; return new Date(ts).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }
   return (
     <div>
-      <div className="flex items-end gap-3 mb-2">
+      <div className="flex items-end gap-3 mb-3">
         <div>
-          <p className="text-xs mb-0.5" style={{ color: 'var(--text-hint)' }}>Multiplicador actual</p>
-          <p className="text-3xl font-bold" style={{ color: current > 1 ? '#10b981' : current < 1 ? '#ef4444' : 'var(--text-primary)' }}>
+          <p className="text-xs mb-0.5" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>MULTIPLICADOR</p>
+          <p className="text-3xl font-black" style={{ color: current > 1 ? '#10b981' : current < 1 ? '#ef4444' : 'rgba(255,255,255,0.9)', fontFamily: 'monospace' }}>
             x{current.toFixed(2)}
           </p>
         </div>
-        <span className={`text-sm font-semibold mb-1 ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
+        <span className={`text-sm font-black mb-1 ${isUp ? 'text-emerald-400' : 'text-red-400'}`} style={{ fontFamily: 'monospace' }}>
           {isUp ? '▲' : '▼'} {Math.abs(pct)}%
         </span>
       </div>
       <div style={{ position: 'relative' }}>
         <svg ref={svgRef} width="100%" viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none" style={{ cursor: 'crosshair', display: 'block' }}
-          onMouseMove={e => handlePointer(e.clientX)}
-          onMouseLeave={() => setTooltip(null)}
-          onTouchMove={e => { e.preventDefault(); handlePointer(e.touches[0].clientX) }}
-          onTouchEnd={() => setTooltip(null)}>
+          onMouseMove={e => handlePointer(e.clientX)} onMouseLeave={() => setTooltip(null)}
+          onTouchMove={e => { e.preventDefault(); handlePointer(e.touches[0].clientX) }} onTouchEnd={() => setTooltip(null)}>
           <defs>
             <linearGradient id="area-grad-d" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={lineColor} stopOpacity="0.25" />
+              <stop offset="0%" stopColor={lineColor} stopOpacity="0.2" />
               <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
             </linearGradient>
           </defs>
           {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
-            <line key={i} x1={pad} y1={pad + (height - pad * 2) * t}
-              x2={width - pad} y2={pad + (height - pad * 2) * t}
-              stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3 3" />
+            <line key={i} x1={pad} y1={pad + (height - pad * 2) * t} x2={width - pad} y2={pad + (height - pad * 2) * t}
+              stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" strokeDasharray="3 3" />
           ))}
           <polygon points={areaPoints} fill="url(#area-grad-d)" />
-          <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">x{max.toFixed(2)}</text>
-          <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="var(--text-hint)">x{min.toFixed(2)}</text>
+          <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <text x={pad - 4} y={pad + 4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace">x{max.toFixed(2)}</text>
+          <text x={pad - 4} y={height - pad + 4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.3)" fontFamily="monospace">x{min.toFixed(2)}</text>
           <circle cx={toX(multipliers.length - 1)} cy={toY(current)} r="4" fill={lineColor} />
           {tooltip && (
             <>
-              <line x1={tooltip.x} y1={pad} x2={tooltip.x} y2={height - pad}
-                stroke="rgba(255,255,255,0.25)" strokeWidth="1" strokeDasharray="3 2" />
-              <circle cx={tooltip.x} cy={tooltip.y} r="5" fill={lineColor} stroke="white" strokeWidth="1.5" />
+              <line x1={tooltip.x} y1={pad} x2={tooltip.x} y2={height - pad} stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="3 2" />
+              <circle cx={tooltip.x} cy={tooltip.y} r="5" fill={lineColor} stroke="rgba(0,0,0,0.5)" strokeWidth="1.5" />
             </>
           )}
         </svg>
@@ -163,12 +157,12 @@ function DetailChart({ history, width = 320, height = 150 }) {
             transform: tooltip.idx <= multipliers.length * 0.65 ? 'translateX(-50%)' : 'none',
           }}>
             <div className="rounded-xl px-3 py-2 shadow-xl text-xs whitespace-nowrap"
-              style={{ backgroundColor: 'var(--bg-card)', border: `1px solid ${lineColor}`, color: 'var(--text-primary)' }}>
-              <p className="font-bold" style={{ color: lineColor }}>x{tooltip.mult.toFixed(3)}</p>
+              style={{ backgroundColor: '#0a0a12', border: `1px solid ${lineColor}40`, color: 'rgba(255,255,255,0.9)' }}>
+              <p className="font-black" style={{ color: lineColor, fontFamily: 'monospace' }}>x{tooltip.mult.toFixed(3)}</p>
               {tooltip.point.moved_by_username
                 ? <p className="font-medium mt-0.5">{tooltip.point.direction === 'long' ? '▲' : '▼'} {tooltip.point.moved_by_username}</p>
-                : <p style={{ color: 'var(--text-hint)' }}>Fluctuación auto</p>}
-              <p className="mt-0.5" style={{ color: 'var(--text-hint)', fontSize: 9 }}>{formatTime(tooltip.point.recorded_at)}</p>
+                : <p style={{ color: 'rgba(255,255,255,0.4)' }}>Fluctuación auto</p>}
+              <p className="mt-0.5" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9 }}>{formatTime(tooltip.point.recorded_at)}</p>
             </div>
           </div>
         )}
@@ -177,6 +171,7 @@ function DetailChart({ history, width = 320, height = 150 }) {
   )
 }
 
+// NUEVA PESTAÑA COTIZACIÓN — reemplaza {tab === 'market' && (...)}
 export default function Market() {
   const { user } = useAuth()
   const [tab, setTab] = useState('market')
@@ -437,18 +432,6 @@ export default function Market() {
       setBalance(prev => prev - selectedPowerup.cost)
       setLastPowerupTime(new Date().toISOString())
       setBuyResult(data)
-      // Notificar al objetivo si es un powerup de ataque
-      if (targetUser && ['freeze', 'sabotage', 'sniper'].includes(selectedPowerup.effect_type)) {
-        const emoji = selectedPowerup.effect_type === 'freeze' ? '🧊' : selectedPowerup.effect_type === 'sabotage' ? '💣' : '🎯'
-        await supabase.from('notifications').insert({
-          user_id: targetUser.id,
-          type: 'powerup_received',
-          title: `${emoji} Te han aplicado un ${selectedPowerup.name}`,
-          body: `Alguien de tu liga te ha atacado con ${selectedPowerup.name}. ¡Prepárate!`,
-          read: false,
-          sent_push: false,
-        })
-      }
       setTimeout(() => {
         setBuyResult(null); setSelectedPowerup(null)
         setTargetUser(null); setTurboDrink(null); setResetDrink(null)
@@ -612,104 +595,173 @@ export default function Market() {
       <MarketTicker drinkMarket={drinkMarket} />
 
       {/* ── COTIZACIÓN ── */}
-      {tab === 'market' && (
-        <div className="px-4 pt-4 max-w-md mx-auto">
-          <div className="rounded-2xl p-3 mb-4 flex items-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-            <div className="text-center flex-1">
-              <p className="text-xs font-bold text-red-400">x0.5</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Mínimo</p>
-            </div>
-            <div className="text-center flex-1 border-x" style={{ borderColor: 'var(--border)' }}>
-              <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>x1.0</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Base</p>
-            </div>
-            <div className="text-center flex-1 border-r" style={{ borderColor: 'var(--border)' }}>
-              <p className="text-xs font-bold text-emerald-400">x2.0</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Máximo</p>
-            </div>
-            <div className="text-center flex-1">
-              <p className={`text-xs font-bold ${opsRemaining > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                {opsRemaining}/3
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Ops hoy</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {drinkMarket.map((drink) => {
-              const multiplier = getMultiplier(drink.price)
-              const basePoints = drink.drink_types?.points || 0
-              const effectivePoints = Math.round(basePoints * multiplier * 10) / 10
-              const effectiveCoins = Math.floor(effectivePoints * 10)
-              const isUp = drink.history?.length > 1 ? drink.price >= drink.history[0]?.price : true
-              const pct = drink.history?.length > 1
-                ? (((drink.price - drink.history[0].price) / drink.history[0].price) * 100).toFixed(1) : '0.0'
-              const barPct = ((multiplier - 0.5) / 1.5) * 100
-              const barColor = multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : '#9ca3af'
-              return (
-                <motion.button key={drink.id} variants={staggerItem} initial="initial" animate="animate"
-                  whileTap={{ scale: 0.98 }} onClick={() => openDrinkDetail(drink)}
-                  className="w-full rounded-2xl p-4 text-left" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ backgroundColor: 'var(--bg-input)' }}>{drink.drink_types?.emoji}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm">{drink.drink_types?.name}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Vol: {drink.volume?.toLocaleString()}🪙</p>
-                    </div>
-                    <SparkChart history={drink.history} width={60} height={28} />
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-xs font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isUp ? '▲' : '▼'} {Math.abs(pct)}%
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>x0.5</span>
-                      <span className="text-sm font-bold"
-                        style={{ color: multiplier > 1.1 ? '#10b981' : multiplier < 0.9 ? '#ef4444' : 'var(--text-primary)' }}>
-                        x{multiplier.toFixed(2)}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>x2.0</span>
-                    </div>
-                    <div className="w-full rounded-full h-2" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <motion.div initial={{ width: 0 }} animate={{ width: `${barPct}%` }}
-                        transition={{ duration: 0.5, ease: 'easeOut' }}
-                        className="h-2 rounded-full" style={{ backgroundColor: barColor }} />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Pts base</p>
-                        <p className="text-sm font-medium">{basePoints}pts</p>
-                      </div>
-                      <span style={{ color: 'var(--text-hint)' }}>→</span>
-                      <div>
-                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Pts ahora</p>
-                        <p className="text-sm font-bold"
-                          style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : 'var(--text-primary)' }}>
-                          {effectivePoints}pts
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Monedas ahora</p>
-                      <p className="text-sm font-bold"
-                        style={{ color: multiplier > 1 ? '#10b981' : multiplier < 1 ? '#ef4444' : '#f59e0b' }}>
-                        +{effectiveCoins}🪙
-                      </p>
-                    </div>
-                  </div>
-                </motion.button>
-              )
-            })}
+{tab === 'market' && (
+  <div className="max-w-md mx-auto">
+    {/* ── Panel de estado del mercado ── */}
+    <div className="px-4 pt-4 pb-3"
+      style={{ background: 'linear-gradient(180deg, #07070f 0%, transparent 100%)' }}>
+      <div className="flex items-center gap-3 mb-3">
+        {/* Estado mercado */}
+        <div className="flex-1 rounded-xl px-3 py-2.5 flex items-center gap-2"
+          style={{ backgroundColor: marketOpen ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${marketOpen ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+          <motion.div className="w-2 h-2 rounded-full flex-shrink-0"
+            animate={marketOpen ? { opacity: [1, 0.3, 1] } : {}} transition={{ repeat: Infinity, duration: 1.2 }}
+            style={{ backgroundColor: marketOpen ? '#10b981' : '#ef4444' }} />
+          <div>
+            <p className="text-xs font-black" style={{ color: marketOpen ? '#10b981' : '#ef4444', fontFamily: 'monospace' }}>
+              {marketOpen ? 'ABIERTO' : 'CERRADO'}
+            </p>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9 }}>
+              {marketOpen ? 'cierra 02:00h' : 'abre 22:00h'}
+            </p>
           </div>
         </div>
-      )}
 
-      {/* ── TIENDA ── */}
+        {/* Ops restantes */}
+        <div className="rounded-xl px-3 py-2.5 text-center"
+          style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
+          <p className="text-xs font-black" style={{ color: opsRemaining > 0 ? '#f59e0b' : '#ef4444', fontFamily: 'monospace' }}>
+            {opsRemaining}/3
+          </p>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9 }}>OPS HOY</p>
+        </div>
+
+        {/* Next tick */}
+        <div className="rounded-xl px-3 py-2.5 text-center"
+          style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)' }}>
+          <p className="text-xs font-black text-indigo-400" style={{ fontFamily: 'monospace' }}>{nextTick}</p>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9 }}>PRÓX. TICK</p>
+        </div>
+      </div>
+
+      {/* Rango de multiplicadores */}
+      <div className="rounded-xl px-3 py-2 flex items-center gap-2"
+        style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <span className="text-xs font-black text-red-400" style={{ fontFamily: 'monospace' }}>x0.50</span>
+        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'linear-gradient(90deg, #ef4444, #6b7280, #10b981)' }} />
+        <span className="text-xs font-black text-emerald-400" style={{ fontFamily: 'monospace' }}>x2.00</span>
+      </div>
+    </div>
+
+    {/* ── Grid de cotizaciones ── */}
+    <div className="px-4 pb-8 space-y-2">
+      {drinkMarket.map((drink, idx) => {
+        const multiplier = getMultiplier(drink.price)
+        const basePoints = drink.drink_types?.points || 0
+        const effectivePoints = Math.round(basePoints * multiplier * 10) / 10
+        const effectiveCoins = Math.floor(effectivePoints * 10)
+        const isUp = drink.history?.length > 1 ? drink.price >= drink.history[0]?.price : true
+        const pct = drink.history?.length > 1
+          ? (((drink.price - drink.history[0].price) / drink.history[0].price) * 100).toFixed(1) : '0.0'
+        const barPct = ((multiplier - 0.5) / 1.5) * 100
+        const isHot = multiplier >= 1.5
+        const isCold = multiplier <= 0.6
+        const barColor = multiplier > 1.15 ? '#10b981' : multiplier < 0.85 ? '#ef4444' : '#6b7280'
+        const accentColor = multiplier > 1.15 ? 'rgba(16,185,129,0.15)' : multiplier < 0.85 ? 'rgba(239,68,68,0.15)' : 'rgba(107,114,128,0.1)'
+        const borderColor = multiplier > 1.15 ? 'rgba(16,185,129,0.2)' : multiplier < 0.85 ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)'
+
+        return (
+          <motion.button key={drink.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.04 }}
+            whileTap={{ scale: 0.985 }}
+            onClick={() => openDrinkDetail(drink)}
+            className="w-full rounded-2xl overflow-hidden text-left relative"
+            style={{ backgroundColor: '#0a0a12', border: `1px solid ${borderColor}` }}>
+
+            {/* Fondo sutil de color según estado */}
+            <div className="absolute inset-0 opacity-30" style={{ background: `linear-gradient(135deg, ${accentColor}, transparent 60%)` }} />
+
+            {/* Badge HOT/COLD */}
+            {(isHot || isCold) && (
+              <motion.div
+                animate={{ opacity: [0.7, 1, 0.7] }} transition={{ duration: 1.5, repeat: Infinity }}
+                className="absolute top-2 right-2 text-xs font-black px-2 py-0.5 rounded-full z-10"
+                style={{ backgroundColor: isHot ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: isHot ? '#10b981' : '#ef4444', fontSize: 9 }}>
+                {isHot ? '🔥 HOT' : '❄️ COLD'}
+              </motion.div>
+            )}
+
+            <div className="relative p-3.5">
+              <div className="flex items-start gap-3 mb-3">
+                {/* Emoji + nombre */}
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                  {drink.drink_types?.emoji}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black tracking-wide" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                    {drink.drink_types?.name?.toUpperCase()}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs font-black" style={{ color: barColor, fontFamily: 'monospace' }}>
+                      x{multiplier.toFixed(2)}
+                    </span>
+                    <span className="text-xs font-bold" style={{ color: isUp ? '#10b981' : '#ef4444', fontFamily: 'monospace' }}>
+                      {isUp ? '▲' : '▼'}{Math.abs(pct)}%
+                    </span>
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace' }}>
+                      vol:{drink.volume?.toLocaleString() || '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sparkline */}
+                <div className="flex-shrink-0">
+                  <SparkChart history={drink.history} width={80} height={36} />
+                </div>
+              </div>
+
+              {/* Barra de multiplicador */}
+              <div className="mb-3">
+                <div className="w-full rounded-full overflow-hidden h-2 relative"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                  {/* Marca central x1.0 */}
+                  <div className="absolute top-0 bottom-0 w-px opacity-30"
+                    style={{ left: '33.33%', backgroundColor: '#fff' }} />
+                  <motion.div className="h-full rounded-full"
+                    style={{ background: `linear-gradient(90deg, ${barColor}80, ${barColor})` }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${barPct}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut' }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 9, fontFamily: 'monospace' }}>x0.5</span>
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 9, fontFamily: 'monospace' }}>x1.0</span>
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)', fontSize: 9, fontFamily: 'monospace' }}>x2.0</span>
+                </div>
+              </div>
+
+              {/* Stats inferiores */}
+              <div className="flex items-center justify-between pt-2.5 border-t"
+                style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'monospace' }}>BASE</p>
+                    <p className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>{basePoints}pts</p>
+                  </div>
+                  <span style={{ color: 'rgba(255,255,255,0.2)' }}>→</span>
+                  <div>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'monospace' }}>AHORA</p>
+                    <p className="text-xs font-black" style={{ color: barColor, fontFamily: 'monospace' }}>{effectivePoints}pts</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'monospace' }}>MONEDAS</p>
+                  <motion.p className="text-sm font-black" style={{ color: barColor, fontFamily: 'monospace' }}
+                    key={effectiveCoins} initial={{ scale: 1.2 }} animate={{ scale: 1 }} transition={{ duration: 0.3 }}>
+                    +{effectiveCoins}🪙
+                  </motion.p>
+                </div>
+              </div>
+            </div>
+          </motion.button>
+        )
+      })}
+    </div>
+  </div>
+)}
       {tab === 'powerups' && (
         <div className="px-4 pt-4 max-w-md mx-auto">
           {powerupCooldown > 0 && (
