@@ -334,15 +334,15 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
                   className="text-xs font-black px-2.5 py-1 rounded-full" style={{ backgroundColor: '#dc2626', color: '#fff' }}>
-                  ⚔️ GUERRA 2.0
+                  ⚔️ GUERRA 3.0
                 </motion.span>
                 <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
                   className="text-xs font-black px-2.5 py-1 rounded-full" style={{ backgroundColor: '#f59e0b', color: '#000' }}>
-                  🗡️ ROLES
+                  🎯 BATALLAS
                 </motion.span>
                 <motion.span animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
                   className="text-xs font-black px-2.5 py-1 rounded-full" style={{ backgroundColor: '#6366f1', color: '#fff' }}>
-                  ⚡ EVENTOS
+                  👑 CAPITÁN
                 </motion.span>
               </div>
 
@@ -370,9 +370,8 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
               {/* Roles preview */}
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {[
-                  { emoji: '🗡️', label: 'Atacante', desc: 'x2 pts guerra', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
-                  { emoji: '🛡️', label: 'Defensor', desc: 'Reduce daño', color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
-                  { emoji: '🕵️', label: 'Espía',    desc: 'Ve rivales', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+                  { emoji: '🕵️', label: 'Espía',    desc: 'Ve el progreso rival en tiempo real', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+                  { emoji: '💣', label: 'Saboteador', desc: 'Congela a un rival una vez', color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
                 ].map((role, i) => (
                   <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 + i * 0.1 }}
                     className="rounded-xl p-2.5 text-center" style={{ backgroundColor: role.bg, border: `1px solid ${role.color}30` }}>
