@@ -544,9 +544,17 @@ function JuicioTab({ leagueId, currentUserId, members }) {
     if (disputing) return
     setDisputing(drink.id)
     const { error } = await supabase.from('drink_disputes').insert({ drink_id: drink.id, league_id: leagueId, disputed_by: currentUserId })
-    if (!error) { await supabase.from('drinks').update({ dispute_status: 'disputed' }).eq('id', drink.id); soundSuccess() }
-    else soundError()
-    setDisputing(null); fetchAll()
+    if (!error) {
+      await supabase.from('drinks').update({ dispute_status: 'disputed' }).eq('id', drink.id)
+      soundSuccess()
+      await fetchAll()
+      // Abrir el juzgado automáticamente
+      const { data: newDispute } = await supabase.from('drink_disputes')
+        .select('*, disputed_by_profile:profiles!drink_disputes_disputed_by_fkey(username, avatar_url)')
+        .eq('drink_id', drink.id).eq('status', 'pending').single()
+      if (newDispute) openJuzgado(newDispute, drink)
+    } else soundError()
+    setDisputing(null)
   }
 
   const handleUploadProof = async (e, drinkId) => {
@@ -644,7 +652,7 @@ function JuicioTab({ leagueId, currentUserId, members }) {
         <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.3)' }}>
           <div className="px-4 pt-4 pb-2">
             <p className="font-bold text-red-400 flex items-center gap-2">⚠️ Tienes consumiciones impugnadas</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sube una foto o espera el veredicto del juzgado. Tienes 3 horas.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>El juicio ya está en marcha. Puedes subir una foto como prueba opcional. Si ≥65% de la liga vota en tu contra, perderás los puntos.</p>
           </div>
           {myDisputes.map(dispute => {
             const drink = recentDrinks.find(d => d.id === dispute.drink_id)
@@ -1840,8 +1848,8 @@ export default function Ranking({ selectedLeague, setSelectedLeague }) {
           <div className="rounded-2xl p-4 mb-4 flex items-start gap-3" style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
             <span className="text-2xl flex-shrink-0">⚖️</span>
             <div>
-              <p className="font-bold text-sm text-red-400">Sistema de verificación con IA</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Cualquier miembro puede impugnar una consumición. El acusado tiene 3 horas para subir una foto. La IA la analiza automáticamente y decide si es válida.</p>
+              <p className="font-bold text-sm text-red-400">⚖️ Sistema de juicio por votación</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Cualquier miembro puede impugnar una consumición. El juicio empieza automáticamente — la liga vota si es real o falsa. El acusado puede subir una foto como prueba. Si ≥65% vota en contra, se anula.</p>
             </div>
           </div>
           <JuicioTab leagueId={selectedLeague.id} currentUserId={user.id} members={members} />
