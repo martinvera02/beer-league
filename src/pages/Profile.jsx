@@ -250,8 +250,14 @@ export default function Profile() {
 
   const [unlockedIds, setUnlockedIds] = useState(new Set())
   const [newlyUnlocked, setNewlyUnlocked] = useState([])
+  const [unlockedIds, setUnlockedIds] = useState(new Set())
+  const [newlyUnlocked, setNewlyUnlocked] = useState([])
   const [loadingAchievements, setLoadingAchievements] = useState(false)
-
+  const [globalRank, setGlobalRank] = useState(null)
+  const [globalPoints, setGlobalPoints] = useState(null)
+  const [totalGlobalPlayers, setTotalGlobalPlayers] = useState(null)
+  const [warStats, setWarStats] = useState(null)
+  const [walletBalance, setWalletBalance] = useState(0)
   const fileInputRef = useRef(null)
   const PAGE_SIZE = 20
 
@@ -262,6 +268,40 @@ export default function Profile() {
     if (section === 'achievements') fetchAndCheckAchievements()
   }, [section])
 
+
+  const fetchGlobalStats = async () => {
+    const [
+      { data: wallet },
+      { data: allRankings },
+    ] = await Promise.all([
+      supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
+      supabase.from('global_rankings').select('user_id, total_points').order('total_points', { ascending: false }),
+    ])
+    setWalletBalance(wallet?.balance || 0)
+    if (allRankings) {
+      setTotalGlobalPlayers(allRankings.length)
+      const myIdx = allRankings.findIndex(r => r.user_id === user.id)
+      if (myIdx !== -1) {
+        setGlobalRank(myIdx + 1)
+        setGlobalPoints(Math.round(allRankings[myIdx].total_points * 10) / 10)
+      }
+    }
+    // Stats de guerra
+    const { data: warParticipations } = await supabase
+      .from('clan_war_participants')
+      .select('war_id, league_id, clan_wars(winner_league_id, status, clan_war_battles(winner_league_id))')
+      .eq('user_id', user.id)
+    if (warParticipations) {
+      const finished = warParticipations.filter(p => p.clan_wars?.status === 'finished')
+      const won = finished.filter(p => p.clan_wars?.winner_league_id === p.league_id)
+      const battlesWon = finished.reduce((sum, p) => {
+        const myBattles = (p.clan_wars?.clan_war_battles || []).filter(b => b.winner_league_id === p.league_id)
+        return sum + myBattles.length
+      }, 0)
+      setWarStats({ wars_played: finished.length, wars_won: won.length, battles_won: battlesWon })
+    }
+  }
+
   const fetchProfile = async () => {
     const [
       { data: profileData },
@@ -270,7 +310,7 @@ export default function Profile() {
       { count: fwingCount },
     ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id).eq('is_adjustment', false),
+      supabase.from('drinks').select('drink_group_id, points, drink_types(name, emoji)').eq('user_id', user.id),
       // ✅ NUEVO: contar seguidores y seguidos
       supabase.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', user.id),
       supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', user.id),
@@ -298,13 +338,14 @@ export default function Profile() {
       setStats({ total, count: unique.length, byType })
     }
     setLoading(false)
+    fetchGlobalStats()
   }
 
   const fetchHistory = async (page) => {
     setLoadingHistory(true)
     const { data } = await supabase.from('drinks')
       .select('id, drink_group_id, points, consumed_at, drink_types(name, emoji), seasons(active), leagues(name)')
-      .eq('user_id', user.id).eq('is_adjustment', false).order('consumed_at', { ascending: false })
+      .eq('user_id', user.id).order('consumed_at', { ascending: false })
     if (!data) { setLoadingHistory(false); return }
     const grouped = {}
     data.forEach(d => {
@@ -400,7 +441,6 @@ export default function Profile() {
     switch (type) {
       case 'powerup':  return { bg: 'rgba(239,68,68,0.1)',  color: '#ef4444', icon: '⚡' }
       case 'transfer': return { bg: 'rgba(16,185,129,0.1)', color: '#10b981', icon: '💸' }
-      case 'follow':   return { bg: 'rgba(99,102,241,0.1)', color: '#818cf8', icon: '👤' }
       default:         return { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b', icon: '🔔' }
     }
   }
@@ -463,98 +503,251 @@ export default function Profile() {
         </AnimatePresence>
 
         {/* ── PERFIL ── */}
+        {/* ── PERFIL ── */}
         {section === 'profile' && (
           <motion.div {...fadeIn} key="profile">
-            <div className="rounded-2xl p-6 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <div className="relative inline-block mb-3">
-                {profile?.avatar_url
-                  ? <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-amber-500" />
-                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
-                  className="absolute bottom-0 right-0 bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
-                  {uploadingAvatar ? '⏳' : '📷'}
-                </motion.button>
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+
+            {/* ── BANNER + AVATAR ── */}
+            <div className="rounded-3xl overflow-hidden mb-4 relative"
+              style={{ backgroundColor: 'var(--bg-card)' }}>
+              {/* Portada */}
+              <div className="h-24 relative overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #1a0a2e, #0f0a1f, #0a1020)' }}>
+                {/* Estrellas */}
+                {[
+                  { top: '15%', left: '8%', size: 2 }, { top: '40%', left: '85%', size: 3 },
+                  { top: '70%', left: '20%', size: 2 }, { top: '25%', left: '60%', size: 2 },
+                  { top: '65%', left: '70%', size: 2 }, { top: '80%', left: '45%', size: 3 },
+                ].map((s, i) => (
+                  <motion.div key={i} className="absolute rounded-full bg-white"
+                    style={{ top: s.top, left: s.left, width: s.size, height: s.size, opacity: 0.4 }}
+                    animate={{ opacity: [0.2, 0.7, 0.2] }}
+                    transition={{ duration: 2 + i * 0.5, repeat: Infinity, delay: i * 0.3 }} />
+                ))}
+                {/* Ranking badge */}
+                {globalRank && (
+                  <div className="absolute top-3 right-3">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                      style={{ backgroundColor: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                      <span className="text-xs">{globalRank <= 3 ? ['🥇','🥈','🥉'][globalRank-1] : '🏆'}</span>
+                      <span className="text-xs font-black text-amber-400">#{globalRank} Global</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-xl font-bold">{profile?.username}</p>
-              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
 
-              {/* ✅ NUEVO: Seguidores y seguidos */}
-              <div className="flex justify-center gap-6 py-3 border-t border-b mb-3"
-                style={{ borderColor: 'var(--border)' }}>
-                <div className="text-center">
-                  <p className="text-xl font-bold text-amber-400">{followersCount}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>seguidores</p>
+              {/* Avatar + info */}
+              <div className="px-5 pb-5">
+                <div className="flex items-end gap-4 -mt-10 mb-3">
+                  <div className="relative flex-shrink-0">
+                    {profile?.avatar_url
+                      ? <img src={profile.avatar_url} alt="Avatar"
+                          className="w-20 h-20 rounded-2xl object-cover border-4"
+                          style={{ borderColor: 'var(--bg-card)' }} />
+                      : <div className="w-20 h-20 rounded-2xl border-4 flex items-center justify-center text-3xl"
+                          style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--bg-card)' }}>🍺</div>}
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingAvatar}
+                      className="absolute -bottom-1 -right-1 w-7 h-7 rounded-xl flex items-center justify-center text-xs text-white"
+                      style={{ backgroundColor: '#f59e0b' }}>
+                      {uploadingAvatar ? '⏳' : '📷'}
+                    </motion.button>
+                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                  </div>
+                  <div className="flex-1 min-w-0 pt-10">
+                    <p className="text-lg font-black truncate" style={{ color: 'var(--text-primary)' }}>{profile?.username}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-hint)' }}>{user.email}</p>
+                  </div>
                 </div>
-                <div className="w-px" style={{ backgroundColor: 'var(--border)' }} />
-                <div className="text-center">
-                  <p className="text-xl font-bold text-amber-400">{followingCount}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>siguiendo</p>
-                </div>
-              </div>
 
-              {unlockedCount > 0 && (
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-sm">🏅</span>
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{unlockedCount}/{totalCount} logros</span>
-                </div>
-              )}
-            </div>
-
-            {stats && (
-              <>
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* Stats rápidos */}
+                <div className="grid grid-cols-4 gap-2 mb-4">
                   {[
-                    { label: 'Consumiciones', value: stats.count },
-                    // ✅ FIX: usar formatPts para evitar decimales sucios
-                    { label: 'Puntos totales', value: formatPts(stats.total) },
-                  ].map(stat => (
-                    <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate"
-                      className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                      <p className="text-3xl font-bold text-amber-400">{stat.value}</p>
-                      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{stat.label}</p>
-                    </motion.div>
+                    { label: 'Consumiciones', value: stats?.count || 0, color: '#f59e0b' },
+                    { label: 'Puntos', value: stats ? formatPts(stats.total) : 0, color: '#f59e0b' },
+                    { label: 'Seguidores', value: followersCount, color: '#818cf8' },
+                    { label: 'Monedas', value: walletBalance?.toLocaleString() || 0, color: '#10b981' },
+                  ].map(s => (
+                    <div key={s.label} className="rounded-xl p-2 text-center"
+                      style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <p className="text-sm font-black" style={{ color: s.color }}>{s.value}</p>
+                      <p style={{ color: 'var(--text-hint)', fontSize: 9 }} className="font-medium mt-0.5 leading-tight">{s.label}</p>
+                    </div>
                   ))}
                 </div>
 
-                <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--text-muted)' }}>Desglose por bebida</p>
-                  {Object.entries(stats.byType).length === 0
-                    ? <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Aún no has anotado nada</p>
-                    : <div className="space-y-2">
-                        {Object.entries(stats.byType).sort(([, a], [, b]) => b.count - a.count).map(([name, { count, emoji }]) => (
-                          <div key={name} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl">{emoji}</span>
-                              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-1.5 rounded-full bg-amber-500 opacity-60" style={{ width: `${Math.round((count / stats.count) * 80)}px` }} />
-                              <span className="text-amber-400 font-bold text-sm">{count}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>}
+                {/* Seguidores / siguiendo */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>{followersCount}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>seguidores</span>
+                  </div>
+                  <div className="w-1 h-1 rounded-full" style={{ backgroundColor: 'var(--border)' }} />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>{followingCount}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>siguiendo</span>
+                  </div>
+                  <div className="w-1 h-1 rounded-full" style={{ backgroundColor: 'var(--border)' }} />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black text-amber-400">{unlockedCount}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-hint)' }}>logros</span>
+                  </div>
                 </div>
+              </div>
+            </div>
 
-                <div className="flex gap-2">
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('history')}
-                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
-                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                    🍺 Historial →
-                  </motion.button>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('achievements')}
-                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
-                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                    🏅 Logros →
-                  </motion.button>
+            {/* ── RANKING GLOBAL ── */}
+            {globalRank && (
+              <div className="rounded-2xl p-4 mb-4 relative overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))', border: '1px solid rgba(245,158,11,0.25)' }}>
+                <motion.div className="absolute inset-0"
+                  style={{ background: 'linear-gradient(90deg,transparent,rgba(245,158,11,0.05),transparent)' }}
+                  animate={{ x: ['-100%', '200%'] }} transition={{ duration: 3, repeat: Infinity, ease: 'linear', repeatDelay: 2 }} />
+                <div className="relative flex items-center gap-4">
+                  <motion.div className="text-5xl" animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                    {globalRank === 1 ? '🥇' : globalRank === 2 ? '🥈' : globalRank === 3 ? '🥉' : '🏆'}
+                  </motion.div>
+                  <div className="flex-1">
+                    <p className="text-xs font-black" style={{ color: 'rgba(245,158,11,0.7)' }}>RANKING GLOBAL</p>
+                    <p className="text-3xl font-black text-amber-400">#{globalRank}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-hint)' }}>de {totalGlobalPlayers} jugadores</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Puntos totales</p>
+                    <p className="text-xl font-black text-amber-400">{globalPoints}</p>
+                  </div>
                 </div>
-              </>
+              </div>
             )}
+
+            {/* ── STATS DE GUERRA ── */}
+            {warStats && (warStats.wars_played > 0) && (
+              <div className="rounded-2xl overflow-hidden mb-4"
+                style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                <div className="px-4 py-2.5 border-b flex items-center gap-2"
+                  style={{ borderColor: 'rgba(220,38,38,0.15)', backgroundColor: 'rgba(220,38,38,0.06)' }}>
+                  <span className="text-sm">⚔️</span>
+                  <p className="text-xs font-black text-red-400">HISTORIAL DE GUERRA</p>
+                </div>
+                <div className="grid grid-cols-3 gap-0 divide-x"
+                  style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  {[
+                    { label: 'Guerras', value: warStats.wars_played, color: 'var(--text-primary)' },
+                    { label: 'Victorias', value: warStats.wars_won, color: '#10b981' },
+                    { label: 'Batallas', value: warStats.battles_won, color: '#f59e0b' },
+                  ].map((s, i) => (
+                    <div key={i} className="py-3 text-center" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                      <p className="text-xl font-black" style={{ color: s.color }}>{s.value}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {warStats.wars_played > 0 && (
+                  <div className="px-4 py-2.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Ratio de victorias</span>
+                      <span className="text-xs font-black text-red-400">
+                        {Math.round((warStats.wars_won / warStats.wars_played) * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                      <motion.div className="h-full rounded-full"
+                        style={{ background: 'linear-gradient(90deg, #7f1d1d, #ef4444)' }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(warStats.wars_won / warStats.wars_played) * 100}%` }}
+                        transition={{ duration: 0.8, ease: 'easeOut' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── MEDALLAS RECIENTES ── */}
+            {unlockedCount > 0 && (
+              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-bold">🏅 Logros</p>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => setSection('achievements')}
+                    className="text-xs font-bold text-amber-400">Ver todos →</motion.button>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{unlockedCount} de {totalCount} desbloqueados</p>
+                  <p className="text-xs font-bold text-amber-400">{Math.round((unlockedCount/totalCount)*100)}%</p>
+                </div>
+                <div className="w-full h-1.5 rounded-full overflow-hidden mb-3" style={{ backgroundColor: 'var(--bg-input)' }}>
+                  <motion.div className="h-full rounded-full bg-amber-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(unlockedCount / totalCount) * 100}%` }}
+                    transition={{ duration: 0.8 }} />
+                </div>
+                {/* Últimas medallas desbloqueadas */}
+                <div className="flex flex-wrap gap-2">
+                  {ACHIEVEMENTS.filter(a => unlockedIds.has(a.id)).slice(-8).map(a => (
+                    <div key={a.id} title={a.name}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                      style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                      {a.emoji}
+                    </div>
+                  ))}
+                  {unlockedCount < totalCount && (
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black"
+                      style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
+                      +{totalCount - unlockedCount}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── BEBIDA FAVORITA ── */}
+            {stats && Object.keys(stats.byType).length > 0 && (
+              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                <p className="text-sm font-bold mb-3">🍺 Desglose por bebida</p>
+                <div className="space-y-2">
+                  {Object.entries(stats.byType).sort(([, a], [, b]) => b.count - a.count).map(([name, { count, emoji }]) => (
+                    <div key={name} className="flex items-center gap-3">
+                      <span className="text-xl w-7 flex-shrink-0">{emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>{name}</span>
+                          <span className="text-xs font-black text-amber-400 flex-shrink-0 ml-2">{count}</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
+                          <motion.div className="h-full rounded-full bg-amber-500"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.round((count / stats.count) * 100)}%` }}
+                            transition={{ duration: 0.6, ease: 'easeOut' }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── ACCESOS RÁPIDOS ── */}
+            <div className="grid grid-cols-2 gap-3">
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('history')}
+                className="rounded-2xl p-4 flex items-center gap-3"
+                style={{ backgroundColor: 'var(--bg-card)' }}>
+                <span className="text-2xl">🍺</span>
+                <div className="text-left">
+                  <p className="text-sm font-bold">Historial</p>
+                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{stats?.count || 0} consumiciones</p>
+                </div>
+              </motion.button>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('achievements')}
+                className="rounded-2xl p-4 flex items-center gap-3"
+                style={{ backgroundColor: 'var(--bg-card)' }}>
+                <span className="text-2xl">🏅</span>
+                <div className="text-left">
+                  <p className="text-sm font-bold">Logros</p>
+                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{unlockedCount}/{totalCount} obtenidos</p>
+                </div>
+              </motion.button>
+            </div>
           </motion.div>
         )}
-
-        {/* ── HISTORIAL ── */}
         {section === 'history' && (
           <motion.div {...fadeIn} key="history">
             {stats && (
