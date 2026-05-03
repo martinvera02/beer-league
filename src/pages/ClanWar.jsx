@@ -5,24 +5,16 @@ import { useAuth } from '../context/AuthContext'
 import { staggerItem } from '../lib/animations'
 import { soundSuccess, soundError } from '../lib/sounds'
 
-const REWARD_COINS = 1000
-
-const ROLE_INFO = {
-  attacker: { emoji: '🗡️', label: 'Atacante', desc: 'Tus consumiciones suman x2 puntos de guerra', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.4)' },
-  defender: { emoji: '🛡️', label: 'Defensor', desc: 'Reduces los puntos que el rival puede robarte', color: '#6366f1', bg: 'rgba(99,102,241,0.15)', border: 'rgba(99,102,241,0.4)' },
-  spy:      { emoji: '🕵️', label: 'Espía',    desc: 'Ves las misiones rivales · x0.5 puntos de guerra', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.4)' },
-}
-
-const MISSION_LABELS = {
-  drink_count:    { emoji: '🍺', label: 'Consumiciones totales' },
-  unique_members: { emoji: '👥', label: 'Miembros activos' },
-  night_drink:    { emoji: '🌙', label: 'Consumiciones nocturnas (22h-4h)' },
+const BATTLE_TYPES = {
+  drink_count:    { emoji: '🍺', label: 'Consumiciones totales', desc: 'Sumar X consumiciones entre todo el equipo' },
+  unique_members: { emoji: '👥', label: 'Miembros activos',      desc: 'X miembros distintos deben beber' },
+  total_points:   { emoji: '⭐', label: 'Puntos totales',        desc: 'Sumar X puntos entre todo el equipo' },
+  night_drinks:   { emoji: '🌙', label: 'Consumiciones nocturnas', desc: 'X consumiciones entre las 22h y las 4h' },
 }
 
 function Confetti() {
-  const pieces = Array.from({ length: 24 }, (_, i) => ({
-    x: Math.random() * 100,
-    delay: Math.random() * 0.6,
+  const pieces = Array.from({ length: 28 }, (_, i) => ({
+    x: Math.random() * 100, delay: Math.random() * 0.6,
     color: ['#ef4444','#f59e0b','#6366f1','#10b981','#ec4899','#fff'][i % 6],
     size: 6 + Math.random() * 8,
   }))
@@ -39,28 +31,21 @@ function Confetti() {
   )
 }
 
-// ─── PANTALLA RESULTADO DE GUERRA ─────────────────────────────────────────────
 function WarResult({ war, myLeagueId, onDismiss }) {
   const isChallenger = myLeagueId === war.challenger_league_id
-  const myPoints = (isChallenger ? war.challenger_war_points : war.defender_war_points || 0) +
-                   (isChallenger ? war.challenger_missions_points : war.defender_missions_points || 0)
-  const enemyPoints = (isChallenger ? war.defender_war_points : war.challenger_war_points || 0) +
-                      (isChallenger ? war.defender_missions_points : war.challenger_missions_points || 0)
+  const myWins = isChallenger ? war.challenger_war_points : war.defender_war_points
+  const enemyWins = isChallenger ? war.defender_war_points : war.challenger_war_points
   const myName = isChallenger ? war.challenger?.name : war.defender?.name
   const enemyName = isChallenger ? war.defender?.name : war.challenger?.name
-  const won = myPoints > enemyPoints
-  const draw = myPoints === enemyPoints
+  const won = myWins > enemyWins
+  const draw = myWins === enemyWins
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 pb-24"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       {won && <Confetti />}
-
       <motion.div initial={{ opacity: 0, scale: 0.8, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-        className="w-full max-w-sm">
-
-        {/* Resultado principal */}
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }} className="w-full max-w-sm">
         <div className="text-center mb-8">
           <motion.div className="text-7xl mb-4"
             animate={won ? { rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] } : { scale: [1, 0.95, 1] }}
@@ -78,15 +63,12 @@ function WarResult({ war, myLeagueId, onDismiss }) {
           </motion.p>
         </div>
 
-        {/* Marcador final */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
           className="rounded-2xl p-5 mb-4"
           style={{
-            background: won
-              ? 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(245,158,11,0.05))'
-              : draw
-                ? 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(99,102,241,0.05))'
-                : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))',
+            background: won ? 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(245,158,11,0.05))'
+              : draw ? 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(99,102,241,0.05))'
+              : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))',
             border: `2px solid ${won ? 'rgba(245,158,11,0.5)' : draw ? 'rgba(99,102,241,0.4)' : 'rgba(239,68,68,0.3)'}`,
           }}>
           <p className="text-xs font-bold text-center mb-4" style={{ color: 'var(--text-muted)' }}>RESULTADO FINAL</p>
@@ -94,37 +76,35 @@ function WarResult({ war, myLeagueId, onDismiss }) {
             <div className="flex-1 text-center">
               <p className="font-black text-sm mb-1 truncate">{myName}</p>
               <motion.p initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.7, type: 'spring' }}
-                className="text-4xl font-black"
-                style={{ color: won ? '#f59e0b' : draw ? '#818cf8' : 'var(--text-primary)' }}>
-                {myPoints}
+                className="text-5xl font-black" style={{ color: won ? '#f59e0b' : draw ? '#818cf8' : 'var(--text-primary)' }}>
+                {myWins}
               </motion.p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>batallas ganadas</p>
               {won && <p className="text-xs mt-1 text-amber-400 font-bold">👑 GANADOR</p>}
             </div>
             <div className="text-2xl font-black mx-4 flex-shrink-0" style={{ color: 'var(--text-hint)' }}>VS</div>
             <div className="flex-1 text-center">
               <p className="font-black text-sm mb-1 truncate">{enemyName}</p>
               <motion.p initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.8, type: 'spring' }}
-                className="text-4xl font-black"
-                style={{ color: !won && !draw ? '#ef4444' : 'var(--text-muted)' }}>
-                {enemyPoints}
+                className="text-5xl font-black" style={{ color: !won && !draw ? '#ef4444' : 'var(--text-muted)' }}>
+                {enemyWins}
               </motion.p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>batallas ganadas</p>
               {!won && !draw && <p className="text-xs mt-1 text-red-400 font-bold">👑 GANADOR</p>}
             </div>
           </div>
         </motion.div>
 
-        {/* Premio */}
         {won && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}
             className="rounded-2xl p-4 mb-4 text-center"
             style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
             <p className="text-sm font-bold text-amber-400">🎁 Premio de victoria</p>
-            <p className="text-2xl font-black text-amber-400 mt-1">+{REWARD_COINS.toLocaleString()}🪙</p>
+            <p className="text-2xl font-black text-amber-400 mt-1">+{(war.reward_coins || 1000).toLocaleString()}🪙</p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Para cada miembro del equipo ganador</p>
           </motion.div>
         )}
 
-        {/* Botón nueva guerra */}
         <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }}
           whileTap={{ scale: 0.97 }} onClick={onDismiss}
           className="w-full py-4 rounded-2xl font-bold text-white"
@@ -142,27 +122,38 @@ export default function ClanWar() {
   const [myLeagues, setMyLeagues] = useState([])
   const [myRole, setMyRole] = useState({})
   const [activeWar, setActiveWar] = useState(null)
-  const [finishedWar, setFinishedWar] = useState(null) // ← guerra terminada
-  const [myParticipation, setMyParticipation] = useState(null)
+  const [finishedWar, setFinishedWar] = useState(null)
+  const [battles, setBattles] = useState([])
   const [participants, setParticipants] = useState([])
-  const [missions, setMissions] = useState([])
-  const [enemyMissions, setEnemyMissions] = useState([])
-  const [events, setEvents] = useState([])
+  const [myParticipation, setMyParticipation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [msg, setMsg] = useState(null)
   const [allLeagues, setAllLeagues] = useState([])
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  // Declarar guerra
   const [selectedChallenger, setSelectedChallenger] = useState(null)
   const [selectedDefender, setSelectedDefender] = useState(null)
+  const [warDuration, setWarDuration] = useState(3)
+  const [warReward, setWarReward] = useState(1000)
+  const [battleConfigs, setBattleConfigs] = useState([
+    { type: 'drink_count', challengerTarget: 50, defenderTarget: 50, description: '' },
+    { type: 'unique_members', challengerTarget: 5, defenderTarget: 5, description: '' },
+    { type: 'night_drinks', challengerTarget: 10, defenderTarget: 10, description: '' },
+  ])
   const [challenging, setChallenging] = useState(false)
   const [accepting, setAccepting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
-  const [selectingRole, setSelectingRole] = useState(false)
-  const [generatingEvent, setGeneratingEvent] = useState(false)
+
+  // Roles
   const [showRoleModal, setShowRoleModal] = useState(false)
-  const [showConfetti, setShowConfetti] = useState(false)
-  const [lastEventCheck, setLastEventCheck] = useState(null)
+  const [assigningRole, setAssigningRole] = useState(false)
+  const [selectedMemberForRole, setSelectedMemberForRole] = useState(null)
+
+  // Espía
+  const [enemyProgress, setEnemyProgress] = useState(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -173,21 +164,22 @@ export default function ClanWar() {
     else setRefreshing(true)
 
     const { data: leagueData } = await supabase
-      .from('league_members').select('league_id, role, leagues(id, name, invite_code)').eq('user_id', user.id)
+      .from('league_members').select('league_id, role, leagues(id, name)').eq('user_id', user.id)
     const leagues = leagueData?.map(d => ({ ...d.leagues, myRole: d.role })) || []
     setMyLeagues(leagues)
     const roles = {}; leagues.forEach(l => { roles[l.id] = l.myRole }); setMyRole(roles)
     const leagueIds = leagues.map(l => l.id)
 
     if (leagueIds.length > 0) {
-      // Buscar guerra activa o pendiente
+      // Actualizar progreso de batallas
+      await supabase.rpc('update_war_battle_progress')
+
       const { data: warData } = await supabase
         .from('clan_wars').select(`*, challenger:leagues!clan_wars_challenger_league_id_fkey(id,name), defender:leagues!clan_wars_defender_league_id_fkey(id,name)`)
         .in('status', ['pending', 'active'])
         .or(leagueIds.map(id => `challenger_league_id.eq.${id},defender_league_id.eq.${id}`).join(','))
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
 
-      // Buscar guerra terminada reciente (últimas 48h)
       const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
       const { data: finishedData } = await supabase
         .from('clan_wars').select(`*, challenger:leagues!clan_wars_challenger_league_id_fkey(id,name), defender:leagues!clan_wars_defender_league_id_fkey(id,name)`)
@@ -196,55 +188,56 @@ export default function ClanWar() {
         .gte('ends_at', since48h)
         .order('ends_at', { ascending: false }).limit(1).maybeSingle()
 
-        const seenWarId = localStorage.getItem('beer_league_seen_war')
-        const unseenFinished = (finishedData && String(finishedData.id) !== seenWarId)
-          ? finishedData
-          : null
-        setFinishedWar(unseenFinished)
+      const seenWarId = localStorage.getItem('beer_league_seen_war')
+      setFinishedWar(finishedData && String(finishedData.id) !== seenWarId ? finishedData : null)
 
       if (warData) {
-        // Auto-cerrar si ends_at ya pasó
+        // Auto-resolver si terminó
         if (warData.status === 'active' && warData.ends_at && new Date(warData.ends_at) < new Date()) {
-          await supabase.rpc('reward_war_winner')
-          await supabase.from('clan_wars').update({ status: 'finished' }).eq('id', warData.id)
+          await supabase.rpc('resolve_clan_war', { p_war_id: warData.id })
           setActiveWar(null)
-          // Recargar finished
           const { data: newFinished } = await supabase
             .from('clan_wars').select(`*, challenger:leagues!clan_wars_challenger_league_id_fkey(id,name), defender:leagues!clan_wars_defender_league_id_fkey(id,name)`)
             .eq('id', warData.id).single()
           setFinishedWar(newFinished)
         } else {
           setActiveWar(warData)
-          const { data: part } = await supabase.from('clan_war_participants').select('*').eq('war_id', warData.id).eq('user_id', user.id).maybeSingle()
-          setMyParticipation(part)
-          const { data: parts } = await supabase.from('clan_war_participants').select('*, profiles(id, username, avatar_url)').eq('war_id', warData.id)
+
+          // Batallas
+          const { data: battlesData } = await supabase
+            .from('clan_war_battles').select('*').eq('war_id', warData.id).order('day')
+          setBattles(battlesData || [])
+
+          // Participantes
+          const { data: parts } = await supabase
+            .from('clan_war_participants').select('*, profiles(id, username, avatar_url)')
+            .eq('war_id', warData.id)
           setParticipants(parts || [])
 
-          const myLeagueId = part?.league_id
-          if (myLeagueId && warData.status === 'active') {
-            const today = warData.started_at ? Math.min(3, Math.floor((Date.now() - new Date(warData.started_at).getTime()) / 86400000) + 1) : 1
-            const { data: myMissions } = await supabase.from('war_missions').select('*').eq('war_id', warData.id).eq('league_id', myLeagueId).eq('day', today)
-            setMissions(myMissions || [])
+          const myPart = parts?.find(p => p.user_id === user.id)
+          setMyParticipation(myPart || null)
 
-            if (part?.role === 'spy') {
-              const enemyLeagueId = myLeagueId === warData.challenger_league_id ? warData.defender_league_id : warData.challenger_league_id
-              const { data: eMissions } = await supabase.from('war_missions').select('*').eq('war_id', warData.id).eq('league_id', enemyLeagueId).eq('day', today)
-              setEnemyMissions(eMissions || [])
-            } else { setEnemyMissions([]) }
-
-            const { data: lastEvent } = await supabase.from('war_events').select('created_at').eq('war_id', warData.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-            const hoursSinceEvent = lastEvent ? (Date.now() - new Date(lastEvent.created_at).getTime()) / 3600000 : 99
-            setLastEventCheck(hoursSinceEvent)
-            if (hoursSinceEvent > 12) {
-              await supabase.rpc('generate_war_event', { p_war_id: warData.id, p_challenger_id: warData.challenger_league_id, p_defender_id: warData.defender_league_id })
+          // Si es espía, cargar progreso rival
+          if (myPart?.role === 'spy') {
+            const myLeagueId = myPart.league_id
+            const enemyLeagueId = myLeagueId === warData.challenger_league_id
+              ? warData.defender_league_id : warData.challenger_league_id
+            const today = getCurrentDay(warData)
+            const todayBattle = battlesData?.find(b => b.day === today)
+            if (todayBattle) {
+              setEnemyProgress({
+                current: myLeagueId === warData.challenger_league_id
+                  ? todayBattle.defender_current : todayBattle.challenger_current,
+                target: myLeagueId === warData.challenger_league_id
+                  ? todayBattle.defender_target : todayBattle.challenger_target,
+              })
             }
+          } else {
+            setEnemyProgress(null)
           }
-
-          const { data: eventsData } = await supabase.from('war_events').select('*, leagues(name)').eq('war_id', warData.id).eq('active', true).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
-          setEvents(eventsData || [])
         }
       } else {
-        setActiveWar(null); setMyParticipation(null); setParticipants([]); setMissions([]); setEnemyMissions([]); setEvents([])
+        setActiveWar(null); setBattles([]); setParticipants([]); setMyParticipation(null); setEnemyProgress(null)
       }
     }
 
@@ -253,33 +246,93 @@ export default function ClanWar() {
     setLoading(false); setRefreshing(false)
   }
 
+  const getCurrentDay = (war) => {
+    if (!war?.started_at) return 1
+    const elapsed = (Date.now() - new Date(war.started_at).getTime()) / 86400000
+    return Math.min(war.duration_days || 3, Math.max(1, Math.ceil(elapsed)))
+  }
+
   const handleChallenge = async () => {
     if (!selectedChallenger || !selectedDefender) return
     setChallenging(true)
-    const { data: war, error } = await supabase.from('clan_wars')
-      .insert({ challenger_league_id: selectedChallenger.id, defender_league_id: selectedDefender.id }).select().single()
-    if (error) { soundError(); showMsg(false, 'Error al crear la guerra') }
-    else { soundSuccess(); showMsg(true, `⚔️ ¡Guerra declarada a ${selectedDefender.name}! Esperando aceptación...`); setSelectedChallenger(null); setSelectedDefender(null); setTab('war'); fetchData() }
+
+    // Obtener capitán del challenger
+    const { data: captainId } = await supabase.rpc('get_war_captain', { p_league_id: selectedChallenger.id })
+
+    const { data: war, error } = await supabase.from('clan_wars').insert({
+      challenger_league_id: selectedChallenger.id,
+      defender_league_id: selectedDefender.id,
+      duration_days: warDuration,
+      reward_coins: warReward,
+      captain_challenger_id: captainId,
+    }).select().single()
+
+    if (error || !war) { soundError(); showMsg(false, 'Error al declarar la guerra'); setChallenging(false); return }
+
+    // Crear batallas configuradas
+    const battlesToInsert = battleConfigs.slice(0, warDuration).map((bc, i) => ({
+      war_id: war.id,
+      day: i + 1,
+      battle_type: bc.type,
+      challenger_target: bc.challengerTarget,
+      defender_target: bc.defenderTarget,
+      description: bc.description || BATTLE_TYPES[bc.type]?.label,
+    }))
+    await supabase.from('clan_war_battles').insert(battlesToInsert)
+
+    soundSuccess()
+    showMsg(true, `⚔️ ¡Guerra declarada a ${selectedDefender.name}! Esperando aceptación...`)
+    setSelectedChallenger(null); setSelectedDefender(null)
+    setTab('war'); fetchData()
     setChallenging(false)
   }
 
   const handleAcceptWar = async () => {
     if (!activeWar) return
     setAccepting(true)
-    await supabase.from('clan_wars').update({ status: 'active', started_at: new Date().toISOString(), ends_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() }).eq('id', activeWar.id)
+
+    const captainDefender = await supabase.rpc('get_war_captain', { p_league_id: activeWar.defender_league_id })
+
+    await supabase.from('clan_wars').update({
+      status: 'active',
+      started_at: new Date().toISOString(),
+      ends_at: new Date(Date.now() + (activeWar.duration_days || 3) * 24 * 60 * 60 * 1000).toISOString(),
+      captain_defender_id: captainDefender.data,
+    }).eq('id', activeWar.id)
+
+    // Inscribir participantes
     const [{ data: challengerMembers }, { data: defenderMembers }] = await Promise.all([
       supabase.from('league_members').select('user_id').eq('league_id', activeWar.challenger_league_id),
       supabase.from('league_members').select('user_id').eq('league_id', activeWar.defender_league_id),
     ])
+
     const allParticipants = [
-      ...(challengerMembers || []).map(m => ({ war_id: activeWar.id, user_id: m.user_id, league_id: activeWar.challenger_league_id, role: 'attacker', role_chosen: false })),
-      ...(defenderMembers || []).map(m => ({ war_id: activeWar.id, user_id: m.user_id, league_id: activeWar.defender_league_id, role: 'attacker', role_chosen: false })),
+      ...(challengerMembers || []).map(m => ({
+        war_id: activeWar.id, user_id: m.user_id, league_id: activeWar.challenger_league_id,
+        role: null, is_captain: m.user_id === activeWar.captain_challenger_id,
+      })),
+      ...(defenderMembers || []).map(m => ({
+        war_id: activeWar.id, user_id: m.user_id, league_id: activeWar.defender_league_id,
+        role: null, is_captain: m.user_id === captainDefender.data,
+      })),
     ]
     await supabase.from('clan_war_participants').upsert(allParticipants, { onConflict: 'war_id,user_id' })
-    await supabase.rpc('generate_war_missions', { p_war_id: activeWar.id, p_challenger_id: activeWar.challenger_league_id, p_defender_id: activeWar.defender_league_id })
-    await supabase.rpc('generate_war_event', { p_war_id: activeWar.id, p_challenger_id: activeWar.challenger_league_id, p_defender_id: activeWar.defender_league_id })
-    soundSuccess(); showMsg(true, '⚔️ ¡Guerra iniciada! Elige tu rol para empezar.')
-    setAccepting(false); await fetchData(); setShowRoleModal(true)
+
+    soundSuccess(); showMsg(true, '⚔️ ¡Guerra iniciada! El capitán debe asignar roles.')
+    setAccepting(false); fetchData()
+  }
+
+  const handleAssignRole = async (userId, role) => {
+    if (!activeWar) return
+    setAssigningRole(true)
+    await supabase.from('clan_war_participants')
+      .update({ role })
+      .eq('war_id', activeWar.id)
+      .eq('user_id', userId)
+    soundSuccess()
+    setSelectedMemberForRole(null)
+    fetchData(true)
+    setAssigningRole(false)
   }
 
   const handleCancelWar = async () => {
@@ -291,27 +344,9 @@ export default function ClanWar() {
     setCancelling(false); setShowCancelConfirm(false)
   }
 
-  const handleSelectRole = async (role) => {
-    if (!activeWar || !myParticipation) return
-    setSelectingRole(true)
-    await supabase.from('clan_war_participants').update({ role, role_chosen: true }).eq('war_id', activeWar.id).eq('user_id', user.id)
-    soundSuccess()
-    setShowConfetti(true)
-    setTimeout(() => setShowConfetti(false), 2000)
-    showMsg(true, `${ROLE_INFO[role].emoji} ¡Rol elegido: ${ROLE_INFO[role].label}!`)
-    setSelectingRole(false); setShowRoleModal(false); fetchData(true)
+  const updateBattleConfig = (index, field, value) => {
+    setBattleConfigs(prev => prev.map((bc, i) => i === index ? { ...bc, [field]: value } : bc))
   }
-
-  const handleGenerateEvent = async () => {
-    if (!activeWar || generatingEvent || events.length >= 3) return
-    setGeneratingEvent(true)
-    const { data, error } = await supabase.rpc('generate_war_event', { p_war_id: activeWar.id, p_challenger_id: activeWar.challenger_league_id, p_defender_id: activeWar.defender_league_id })
-    if (error) { soundError(); showMsg(false, 'Error al generar evento') }
-    else { soundSuccess(); showMsg(true, data?.description || '⚡ Nuevo evento activado'); fetchData(true) }
-    setGeneratingEvent(false)
-  }
-
-  const handleRefresh = async () => { if (refreshing) return; await fetchData(true) }
 
   const formatTimeLeft = (endsAt) => {
     if (!endsAt) return '—'
@@ -323,44 +358,32 @@ export default function ClanWar() {
 
   const myLeagueId = myParticipation?.league_id
   const isChallenger = myLeagueId === activeWar?.challenger_league_id
-  const myWarPoints = isChallenger ? activeWar?.challenger_war_points : activeWar?.defender_war_points
-  const enemyWarPoints = isChallenger ? activeWar?.defender_war_points : activeWar?.challenger_war_points
-  const myMissionsPoints = isChallenger ? activeWar?.challenger_missions_points : activeWar?.defender_missions_points
-  const enemyMissionsPoints = isChallenger ? activeWar?.defender_missions_points : activeWar?.challenger_missions_points
-  const myTotalPoints = (myWarPoints || 0) + (myMissionsPoints || 0)
-  const enemyTotalPoints = (enemyWarPoints || 0) + (enemyMissionsPoints || 0)
   const myLeagueName = isChallenger ? activeWar?.challenger?.name : activeWar?.defender?.name
   const enemyLeagueName = isChallenger ? activeWar?.defender?.name : activeWar?.challenger?.name
-  const isDefenderOwner = myRole[activeWar?.defender_league_id] === 'owner' || myRole[activeWar?.defender_league_id] === 'admin'
-  const isChallengerOwner = myRole[activeWar?.challenger_league_id] === 'owner' || myRole[activeWar?.challenger_league_id] === 'admin'
-  const canManageLeagues = myLeagues.some(l => myRole[l.id] === 'owner' || myRole[l.id] === 'admin')
-  const currentRole = myParticipation?.role || 'attacker'
-  const roleInfo = ROLE_INFO[currentRole]
-  const roleChosen = myParticipation?.role_chosen === true
-  const today = activeWar?.started_at ? Math.min(3, Math.floor((Date.now() - new Date(activeWar.started_at).getTime()) / 86400000) + 1) : 1
-  const hoursToNextDay = activeWar?.started_at ? 24 - ((Date.now() - new Date(activeWar.started_at).getTime()) / 3600000) % 24 : 0
-
+  const today = activeWar ? getCurrentDay(activeWar) : 1
+  const todayBattle = battles.find(b => b.day === today)
+  const myLeagueIdForResult = myLeagues.find(l => l.id === finishedWar?.challenger_league_id)?.id ||
+    myLeagues.find(l => l.id === finishedWar?.defender_league_id)?.id
   const myTeam = participants.filter(p => p.league_id === myLeagueId)
-  const enemyTeam = participants.filter(p => p.league_id !== myLeagueId)
-  const roleCount = (team) => {
-    const counts = { attacker: 0, defender: 0, spy: 0 }
-    team.forEach(p => { counts[p.role || 'attacker']++ }); return counts
-  }
-  const myRoleCounts = roleCount(myTeam)
-  const enemyRoleCounts = roleCount(enemyTeam)
-  const pendingRoles = myTeam.filter(p => !p.role_chosen).length
+  const iAmCaptain = myParticipation?.is_captain === true
+  const isDefenderAdmin = myRole[activeWar?.defender_league_id] === 'owner' || myRole[activeWar?.defender_league_id] === 'admin'
+  const isChallengerAdmin = myRole[activeWar?.challenger_league_id] === 'owner' || myRole[activeWar?.challenger_league_id] === 'admin'
+  const canManageLeagues = myLeagues.some(l => myRole[l.id] === 'owner' || myRole[l.id] === 'admin')
+  const mySpy = myTeam.find(p => p.role === 'spy')
+  const mySaboteur = myTeam.find(p => p.role === 'saboteur')
 
-  // Liga del usuario para mostrar resultado
-  const myLeagueIdForResult = myLeagues.length > 0
-    ? (finishedWar
-        ? (myLeagues.find(l => l.id === finishedWar.challenger_league_id)?.id ||
-           myLeagues.find(l => l.id === finishedWar.defender_league_id)?.id)
-        : null)
-    : null
+  const getTodayProgress = (battle) => {
+    if (!battle) return { myPct: 0, myCurrent: 0, myTarget: 0 }
+    const myCurrent = isChallenger ? battle.challenger_current : battle.defender_current
+    const myTarget = isChallenger ? battle.challenger_target : battle.defender_target
+    const myPct = Math.min(100, Math.round((myCurrent / myTarget) * 100))
+    return { myPct, myCurrent, myTarget }
+  }
 
   const Avatar = ({ url, username, size = 'sm' }) => {
     const dim = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10'
-    return url ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
+    return url
+      ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
       : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-sm`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
   }
 
@@ -370,48 +393,40 @@ export default function ClanWar() {
     </div>
   )
 
-  // ── Mostrar resultado si hay guerra terminada y no hay guerra activa ──
   if (finishedWar && !activeWar && tab === 'war' && myLeagueIdForResult) {
     return (
-      <WarResult
-        war={finishedWar}
-        myLeagueId={myLeagueIdForResult}
-        onDismiss={() => {
-          localStorage.setItem('beer_league_seen_war', String(finishedWar.id))
-          setFinishedWar(null)
-        }}
-      />
+      <WarResult war={finishedWar} myLeagueId={myLeagueIdForResult}
+        onDismiss={() => { localStorage.setItem('beer_league_seen_war', String(finishedWar.id)); setFinishedWar(null) }} />
     )
   }
 
   return (
     <div className="min-h-screen pb-24 transition-colors duration-300" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
-
       {showConfetti && <Confetti />}
 
       {/* Header */}
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-bold">⚔️ Guerra de Clanes</h1>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={handleRefresh} disabled={refreshing}
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => fetchData(true)} disabled={refreshing}
             className="p-2 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>
             <motion.span animate={refreshing ? { rotate: 360 } : {}} transition={{ duration: 1, repeat: refreshing ? Infinity : 0, ease: 'linear' }} className="block text-sm">🔄</motion.span>
           </motion.button>
         </div>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Roles · Misiones · Eventos en tiempo real</p>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Batallas colectivas · Roles estratégicos</p>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {[{ id: 'war', label: '⚔️ Guerra' }, { id: 'challenge', label: '🏴 Declarar' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className="relative flex-1 py-2 rounded-lg text-sm font-medium transition-colors z-10"
               style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
-              {tab === t.id && <motion.div layoutId="war-tab" className="absolute inset-0 rounded-lg" style={{ zIndex: -1, backgroundColor: '#dc2626' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
+              {tab === t.id && <motion.div layoutId="war-tab" className="absolute inset-0 rounded-lg"
+                style={{ zIndex: -1, backgroundColor: '#dc2626' }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
               {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Msg */}
       <AnimatePresence>
         {msg && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -431,214 +446,198 @@ export default function ClanWar() {
               <p className="font-bold text-lg">Sin guerra activa</p>
               <p className="text-sm mt-2" style={{ color: 'var(--text-hint)' }}>Declara una guerra desde la pestaña 🏴</p>
               {canManageLeagues && (
-                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('challenge')} className="mt-6 px-6 py-3 rounded-2xl font-bold text-white" style={{ backgroundColor: '#dc2626' }}>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('challenge')}
+                  className="mt-6 px-6 py-3 rounded-2xl font-bold text-white" style={{ backgroundColor: '#dc2626' }}>
                   🏴 Declarar guerra
                 </motion.button>
               )}
             </div>
           ) : (
             <>
-              {/* Aviso rol pendiente */}
-              <AnimatePresence>
-                {activeWar.status === 'active' && myParticipation && !roleChosen && (
-                  <motion.div initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
-                    className="rounded-2xl p-4 mb-4 flex items-center gap-3 cursor-pointer"
-                    style={{ backgroundColor: 'rgba(239,68,68,0.12)', border: '2px solid rgba(239,68,68,0.5)' }}
-                    onClick={() => setShowRoleModal(true)}>
-                    <motion.span className="text-2xl flex-shrink-0" animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1, repeat: Infinity }}>⚠️</motion.span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-black text-sm text-red-400">¡Elige tu rol de guerra!</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Ahora eres Atacante por defecto. Toca para elegir tu estrategia.</p>
-                    </div>
-                    <motion.span animate={{ x: [0, 4, 0] }} transition={{ duration: 1, repeat: Infinity }} className="text-red-400 text-lg flex-shrink-0">›</motion.span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Día de guerra */}
-              {activeWar.status === 'active' && (
-                <div className="rounded-2xl p-3 mb-4 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <div className="flex gap-1.5">
-                    {[1, 2, 3].map(d => (
-                      <div key={d} className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black"
-                        style={{
-                          backgroundColor: d < today ? 'rgba(16,185,129,0.2)' : d === today ? '#dc2626' : 'var(--bg-input)',
-                          color: d < today ? '#10b981' : d === today ? '#fff' : 'var(--text-hint)',
-                          border: d === today ? '2px solid #ef4444' : '2px solid transparent',
-                        }}>
-                        {d < today ? '✓' : `D${d}`}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold">Día {today} de 3</p>
-                    <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                      {today < 3 ? `Nuevas misiones en ${Math.floor(hoursToNextDay)}h` : `Acaba en ${formatTimeLeft(activeWar.ends_at)}`}
-                    </p>
-                  </div>
-                  <span className="text-xs px-2 py-1 rounded-lg font-bold text-red-400" style={{ backgroundColor: 'rgba(220,38,38,0.1)' }}>
-                    {formatTimeLeft(activeWar.ends_at)}
-                  </span>
+              {/* Estado pendiente */}
+              {activeWar.status === 'pending' && (
+                <div className="rounded-2xl p-4 mb-4 text-center"
+                  style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+                  <p className="text-sm font-bold text-amber-400 mb-1">⏳ Guerra pendiente de aceptación</p>
+                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                    {activeWar.challenger?.name} ha declarado la guerra a {activeWar.defender?.name}
+                  </p>
                 </div>
               )}
 
-              {/* Marcador */}
+              {/* Marcador principal */}
               <div className="rounded-2xl p-4 mb-4" style={{
-                background: activeWar.status === 'pending'
-                  ? 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05))'
-                  : 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.05))',
-                border: `1px solid ${activeWar.status === 'pending' ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)'}`,
+                background: 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.05))',
+                border: '1px solid rgba(220,38,38,0.3)',
               }}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-1">
                   <span className={`text-xs font-bold px-2 py-1 rounded-full ${activeWar.status === 'pending' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {activeWar.status === 'pending' ? '⏳ Pendiente' : '⚔️ En curso'}
+                    {activeWar.status === 'pending' ? '⏳ Pendiente' : `⚔️ Día ${today}/${activeWar.duration_days || 3}`}
                   </span>
+                  {activeWar.status === 'active' && (
+                    <span className="text-xs font-bold text-red-400">{formatTimeLeft(activeWar.ends_at)}</span>
+                  )}
                 </div>
-                <div className="flex items-center justify-between mb-3">
+
+                <div className="flex items-center justify-between mt-3">
                   <div className="flex-1 text-center">
-                    <p className="font-black text-sm truncate mb-1">{myLeagueName || activeWar.challenger?.name}</p>
+                    <p className="font-black text-sm truncate mb-2">{activeWar.challenger?.name}</p>
                     {activeWar.status === 'active' && (
                       <>
-                        <motion.p key={myTotalPoints} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-3xl font-black text-red-400">{myTotalPoints}</motion.p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{myWarPoints} + {myMissionsPoints}🎯</p>
+                        <p className="text-4xl font-black text-red-400">{activeWar.challenger_war_points || 0}</p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>batallas ganadas</p>
                       </>
                     )}
                   </div>
-                  <div className="text-xl font-black mx-4 flex-shrink-0" style={{ color: 'var(--text-hint)' }}>VS</div>
+                  <div className="text-2xl font-black mx-4" style={{ color: 'var(--text-hint)' }}>VS</div>
                   <div className="flex-1 text-center">
-                    <p className="font-black text-sm truncate mb-1">{enemyLeagueName || activeWar.defender?.name}</p>
+                    <p className="font-black text-sm truncate mb-2">{activeWar.defender?.name}</p>
                     {activeWar.status === 'active' && (
                       <>
-                        <motion.p key={enemyTotalPoints} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-3xl font-black text-indigo-400">{enemyTotalPoints}</motion.p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{enemyWarPoints} + {enemyMissionsPoints}🎯</p>
+                        <p className="text-4xl font-black text-indigo-400">{activeWar.defender_war_points || 0}</p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>batallas ganadas</p>
                       </>
                     )}
                   </div>
                 </div>
-                {activeWar.status === 'active' && myTotalPoints + enemyTotalPoints > 0 && (
-                  <div>
-                    <div className="w-full h-3 rounded-full overflow-hidden flex" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      <motion.div className="h-full bg-red-500" animate={{ width: `${(myTotalPoints / (myTotalPoints + enemyTotalPoints)) * 100}%` }} transition={{ duration: 0.8, type: 'spring' }} />
-                      <motion.div className="h-full bg-indigo-500" animate={{ width: `${(enemyTotalPoints / (myTotalPoints + enemyTotalPoints)) * 100}%` }} transition={{ duration: 0.8, type: 'spring' }} />
-                    </div>
-                    <div className="flex justify-between text-xs mt-1 font-bold">
-                      <span className="text-red-400">{myLeagueName}</span>
-                      <span className="text-indigo-400">{enemyLeagueName}</span>
+
+                {activeWar.status === 'active' && (
+                  <div className="mt-3">
+                    <div className="w-full h-2.5 rounded-full overflow-hidden flex" style={{ backgroundColor: 'var(--bg-input)' }}>
+                      {(() => {
+                        const total = (activeWar.challenger_war_points || 0) + (activeWar.defender_war_points || 0)
+                        if (total === 0) return <div className="h-full w-full" style={{ backgroundColor: 'var(--bg-input)' }} />
+                        return <>
+                          <motion.div className="h-full bg-red-500"
+                            animate={{ width: `${((activeWar.challenger_war_points || 0) / total) * 100}%` }}
+                            transition={{ duration: 0.8, type: 'spring' }} />
+                          <motion.div className="h-full bg-indigo-500"
+                            animate={{ width: `${((activeWar.defender_war_points || 0) / total) * 100}%` }}
+                            transition={{ duration: 0.8, type: 'spring' }} />
+                        </>
+                      })()}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Aceptar / Cancelar */}
-              {activeWar.status === 'pending' && isDefenderOwner && (
+              {/* Botones pendiente */}
+              {activeWar.status === 'pending' && isDefenderAdmin && (
                 <motion.button whileTap={{ scale: 0.97 }} onClick={handleAcceptWar} disabled={accepting}
                   className="w-full py-4 rounded-2xl font-bold text-white mb-3" style={{ backgroundColor: '#dc2626' }}>
                   {accepting ? 'Iniciando guerra...' : '⚔️ Aceptar la guerra'}
                 </motion.button>
               )}
-              {activeWar.status === 'pending' && isChallengerOwner && !isDefenderOwner && (
+              {activeWar.status === 'pending' && isChallengerAdmin && !isDefenderAdmin && (
                 <div className="mb-4 space-y-3">
-                  <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <p className="text-sm text-amber-400 font-medium">⏳ Esperando que {activeWar.defender?.name} acepte...</p>
-                  </div>
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCancelConfirm(true)}
-                    className="w-full py-3 rounded-2xl font-bold text-sm border" style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+                    className="w-full py-3 rounded-2xl font-bold text-sm border"
+                    style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
                     🚫 Cancelar declaración
                   </motion.button>
                 </div>
               )}
 
-              {/* Mi rol */}
-              {activeWar.status === 'active' && myParticipation && (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowRoleModal(true)}
-                  className="w-full rounded-2xl p-4 mb-4 flex items-center gap-3"
-                  style={{ backgroundColor: roleInfo.bg, border: `2px solid ${roleChosen ? roleInfo.border : 'rgba(239,68,68,0.5)'}` }}>
-                  <span className="text-3xl">{roleInfo.emoji}</span>
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-black text-sm" style={{ color: roleInfo.color }}>Tu rol: {roleInfo.label}</p>
-                      {roleChosen
-                        ? <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981' }}>✓ Elegido</span>
-                        : <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>Por defecto</span>}
+              {/* Batalla del día */}
+              {activeWar.status === 'active' && todayBattle && (
+                <div className="mb-4">
+                  <p className="text-sm font-bold mb-2">🎯 Batalla de hoy — Día {today}</p>
+                  <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xl">{BATTLE_TYPES[todayBattle.battle_type]?.emoji}</span>
+                      <div>
+                        <p className="font-bold text-sm">{todayBattle.description || BATTLE_TYPES[todayBattle.battle_type]?.label}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{BATTLE_TYPES[todayBattle.battle_type]?.desc}</p>
+                      </div>
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{roleInfo.desc}</p>
-                  </div>
-                  <span className="text-xs px-2 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>Cambiar</span>
-                </motion.button>
-              )}
 
-              {/* Resumen roles */}
-              {activeWar.status === 'active' && myTeam.length > 0 && (
-                <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-bold">🧩 Composición de equipos</p>
-                    {pendingRoles > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>{pendingRoles} sin elegir</span>
+                    {/* Mi progreso */}
+                    {(() => {
+                      const { myPct, myCurrent, myTarget } = getTodayProgress(todayBattle)
+                      const completed = isChallenger ? todayBattle.challenger_completed_at : todayBattle.defender_completed_at
+                      const won = todayBattle.winner_league_id === myLeagueId
+                      const lost = todayBattle.winner_league_id && todayBattle.winner_league_id !== myLeagueId
+                      return (
+                        <div className="mb-3">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-bold" style={{ color: 'var(--text-muted)' }}>Tu equipo · {myLeagueName}</span>
+                            <span className="font-black" style={{ color: won ? '#10b981' : '#ef4444' }}>
+                              {myCurrent}/{myTarget} {won ? '✅' : ''}
+                            </span>
+                          </div>
+                          <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
+                            <motion.div className="h-full rounded-full"
+                              style={{ backgroundColor: won ? '#10b981' : '#ef4444' }}
+                              animate={{ width: `${myPct}%` }} transition={{ duration: 0.6, type: 'spring' }} />
+                          </div>
+                          {won && !lost && <p className="text-xs mt-1 font-bold text-emerald-400">🏆 ¡Batalla ganada!</p>}
+                        </div>
+                      )
+                    })()}
+
+                    {/* Progreso rival (espía) */}
+                    {enemyProgress && (
+                      <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs">🕵️</span>
+                          <span className="text-xs font-bold" style={{ color: '#f59e0b' }}>Progreso rival (solo visible para el espía)</span>
+                        </div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span style={{ color: 'var(--text-hint)' }}>{enemyLeagueName}</span>
+                          <span className="font-black" style={{ color: '#f59e0b' }}>{enemyProgress.current}/{enemyProgress.target}</span>
+                        </div>
+                        <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
+                          <motion.div className="h-full rounded-full bg-amber-500"
+                            animate={{ width: `${Math.min(100, Math.round((enemyProgress.current / enemyProgress.target) * 100))}%` }}
+                            transition={{ duration: 0.6 }} />
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[{ name: myLeagueName, counts: myRoleCounts, color: '#ef4444' }, { name: enemyLeagueName, counts: enemyRoleCounts, color: '#6366f1' }].map((team, ti) => (
-                      <div key={ti} className="rounded-xl p-3" style={{ backgroundColor: 'var(--bg-input)' }}>
-                        <p className="text-xs font-bold truncate mb-2" style={{ color: ti === 0 ? '#ef4444' : '#818cf8' }}>{team.name}</p>
-                        {Object.entries(ROLE_INFO).map(([role, info]) => (
-                          <div key={role} className="flex items-center justify-between text-xs mb-1">
-                            <span style={{ color: 'var(--text-hint)' }}>{info.emoji} {info.label}</span>
-                            <span className="font-bold" style={{ color: team.counts[role] > 0 ? info.color : 'var(--text-hint)' }}>{team.counts[role]}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 
-              {/* Misiones */}
-              {activeWar.status === 'active' && missions.length > 0 && (
+              {/* Historial de batallas */}
+              {activeWar.status === 'active' && battles.length > 0 && (
                 <div className="mb-4">
-                  <p className="text-sm font-bold mb-2">📋 Misiones — Día {today}</p>
+                  <p className="text-sm font-bold mb-2">📅 Batallas</p>
                   <div className="space-y-2">
-                    {missions.map(m => {
-                      const info = MISSION_LABELS[m.mission_type] || { emoji: '🎯', label: m.mission_type }
-                      const pct = Math.min(100, Math.round((m.current_value / m.target_value) * 100))
+                    {battles.map(battle => {
+                      const isToday = battle.day === today
+                      const won = battle.winner_league_id === myLeagueId
+                      const lost = battle.winner_league_id && battle.winner_league_id !== myLeagueId
+                      const pending = !battle.winner_league_id
                       return (
-                        <motion.div key={m.id} layout className="rounded-2xl p-3"
-                          style={{ backgroundColor: 'var(--bg-card)', border: m.completed ? '1px solid rgba(16,185,129,0.35)' : '1px solid transparent' }}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2"><span>{info.emoji}</span><p className="text-sm font-medium">{info.label}</p></div>
-                            {m.completed
-                              ? <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-xs font-black text-emerald-400">✅ +{m.bonus_points}pts</motion.span>
-                              : <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>{m.current_value}/{m.target_value}</span>}
+                        <div key={battle.id} className="rounded-2xl p-3 flex items-center gap-3"
+                          style={{
+                            backgroundColor: 'var(--bg-card)',
+                            border: isToday ? '2px solid rgba(220,38,38,0.4)' : '2px solid transparent',
+                            opacity: battle.day > today ? 0.5 : 1,
+                          }}>
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                            style={{ backgroundColor: isToday ? 'rgba(220,38,38,0.15)' : 'var(--bg-input)' }}>
+                            {pending && battle.day <= today ? '⚔️' : won ? '✅' : lost ? '❌' : '🔒'}
                           </div>
-                          <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
-                            <motion.div className={`h-full rounded-full ${m.completed ? 'bg-emerald-500' : 'bg-red-500'}`} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, type: 'spring' }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold">Día {battle.day}</p>
+                              {isToday && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold text-red-400" style={{ backgroundColor: 'rgba(220,38,38,0.1)' }}>HOY</span>}
+                            </div>
+                            <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                              {BATTLE_TYPES[battle.battle_type]?.emoji} {battle.description || BATTLE_TYPES[battle.battle_type]?.label}
+                            </p>
                           </div>
-                        </motion.div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Misiones rivales (espía) */}
-              {activeWar.status === 'active' && currentRole === 'spy' && enemyMissions.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <p className="text-sm font-bold">🕵️ Misiones rivales</p>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>Solo visible para espías</span>
-                  </div>
-                  <div className="space-y-2">
-                    {enemyMissions.map(m => {
-                      const info = MISSION_LABELS[m.mission_type] || { emoji: '🎯', label: m.mission_type }
-                      const pct = Math.min(100, Math.round((m.current_value / m.target_value) * 100))
-                      return (
-                        <div key={m.id} className="rounded-2xl p-3" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(245,158,11,0.15)', opacity: 0.85 }}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2"><span>{info.emoji}</span><p className="text-sm font-medium">{info.label}</p></div>
-                            <span className="text-xs font-bold" style={{ color: 'var(--text-hint)' }}>{m.current_value}/{m.target_value}</span>
-                          </div>
-                          <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
-                            <motion.div className="h-full rounded-full bg-amber-500" animate={{ width: `${pct}%` }} transition={{ duration: 0.6 }} />
-                          </div>
+                          {battle.day <= today && (
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-xs font-bold" style={{ color: won ? '#10b981' : lost ? '#ef4444' : 'var(--text-hint)' }}>
+                                {won ? '🏆 Victoria' : lost ? '💀 Derrota' : '⏳ En curso'}
+                              </p>
+                              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                                {isChallenger ? battle.challenger_current : battle.defender_current}/
+                                {isChallenger ? battle.challenger_target : battle.defender_target}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -646,77 +645,60 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* Eventos */}
-              {activeWar.status === 'active' && (
+              {/* Roles del equipo */}
+              {activeWar.status === 'active' && myTeam.length > 0 && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold">⚡ Eventos activos</p>
-                      {lastEventCheck > 12 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>Auto-generado</span>}
+                    <p className="text-sm font-bold">🧩 Tu equipo · {myLeagueName}</p>
+                    {iAmCaptain && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+                        style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                        👑 Capitán
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Info roles */}
+                  <div className="rounded-2xl p-3 mb-3 space-y-1.5" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                    <p className="text-xs font-bold mb-1" style={{ color: '#818cf8' }}>Roles especiales (máx. 1 de cada)</p>
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm">🕵️</span>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Espía</span> — Ve el progreso del equipo rival en tiempo real</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {events.length >= 3 && <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Máx. 3 activos</span>}
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={handleGenerateEvent}
-                        disabled={generatingEvent || events.length >= 3}
-                        className="text-xs px-3 py-1.5 rounded-xl font-bold"
-                        style={{
-                          backgroundColor: events.length >= 3 ? 'var(--bg-input)' : 'rgba(245,158,11,0.12)',
-                          color: events.length >= 3 ? 'var(--text-hint)' : '#f59e0b',
-                          border: `1px solid ${events.length >= 3 ? 'transparent' : 'rgba(245,158,11,0.2)'}`,
-                          opacity: events.length >= 3 ? 0.5 : 1,
-                        }}>
-                        {generatingEvent ? '...' : events.length >= 3 ? '🔒 Lleno' : '🎲 Generar'}
-                      </motion.button>
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm">💣</span>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Saboteador</span> — Puede congelar a un miembro rival una vez durante la guerra</p>
                     </div>
                   </div>
-                  {events.length === 0 ? (
-                    <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                      <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Sin eventos activos</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {events.map(ev => (
-                        <motion.div key={ev.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                          className="rounded-2xl p-3 flex items-start gap-3"
-                          style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                          <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }} className="text-xl flex-shrink-0">⚡</motion.span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{ev.description}</p>
-                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{ev.leagues?.name} · Expira en {formatTimeLeft(ev.expires_at)}</p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {/* Participantes */}
-              {activeWar.status === 'active' && participants.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm font-bold mb-2">👥 Participantes</p>
                   <div className="space-y-2">
-                    {participants.filter(p => p.profiles).map(p => {
+                    {myTeam.filter(p => p.profiles).map(p => {
                       const isMe = p.user_id === user.id
-                      const rInfo = ROLE_INFO[p.role || 'attacker']
-                      const isMyTeam = p.league_id === myLeagueId
+                      const roleEmoji = p.role === 'spy' ? '🕵️' : p.role === 'saboteur' ? '💣' : '⚔️'
+                      const roleLabel = p.role === 'spy' ? 'Espía' : p.role === 'saboteur' ? 'Saboteador' : 'Combatiente'
                       return (
                         <motion.div key={p.id} variants={staggerItem} initial="initial" animate="animate"
                           className="rounded-2xl p-3 flex items-center gap-3"
-                          style={{ backgroundColor: 'var(--bg-card)', border: isMe ? `2px solid ${rInfo.color}` : '2px solid transparent' }}>
-                          <Avatar url={p.profiles?.avatar_url} username={p.profiles?.username} size="md" />
+                          style={{ backgroundColor: 'var(--bg-card)', border: p.is_captain ? '2px solid rgba(245,158,11,0.4)' : '2px solid transparent' }}>
+                          <Avatar url={p.profiles?.avatar_url} username={p.profiles?.username} size="sm" />
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm">{p.profiles?.username} {isMe && '(tú)'}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: rInfo.bg, color: rInfo.color }}>{rInfo.emoji} {rInfo.label}</span>
-                              {p.role_chosen
-                                ? <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.1)', color: '#10b981' }}>✓ Listo</span>
-                                : <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>Pendiente</span>}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-bold text-sm truncate">{p.profiles?.username} {isMe && '(tú)'}</p>
+                              {p.is_captain && <span className="text-xs font-bold text-amber-400">👑</span>}
                             </div>
+                            <span className="text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 inline-block"
+                              style={{ backgroundColor: p.role === 'spy' ? 'rgba(245,158,11,0.12)' : p.role === 'saboteur' ? 'rgba(239,68,68,0.12)' : 'rgba(99,102,241,0.12)', color: p.role === 'spy' ? '#f59e0b' : p.role === 'saboteur' ? '#ef4444' : '#818cf8' }}>
+                              {roleEmoji} {roleLabel}
+                            </span>
                           </div>
-                          <span className="text-xs px-2 py-1 rounded-full flex-shrink-0" style={{ backgroundColor: isMyTeam ? 'rgba(220,38,38,0.1)' : 'rgba(99,102,241,0.1)', color: isMyTeam ? '#ef4444' : '#818cf8' }}>
-                            {isMyTeam ? '⚔️' : '🛡️'}
-                          </span>
+                          {iAmCaptain && !isMe && (
+                            <motion.button whileTap={{ scale: 0.9 }}
+                              onClick={() => setSelectedMemberForRole(p)}
+                              className="text-xs px-3 py-1.5 rounded-xl font-bold flex-shrink-0"
+                              style={{ backgroundColor: 'rgba(220,38,38,0.1)', color: '#ef4444' }}>
+                              Rol
+                            </motion.button>
+                          )}
                         </motion.div>
                       )
                     })}
@@ -738,25 +720,7 @@ export default function ClanWar() {
             </div>
           ) : (
             <>
-              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                <p className="text-sm font-bold text-red-400 mb-3">📜 Reglas de guerra 2.0</p>
-                <div className="space-y-2">
-                  {[
-                    { emoji: '🗡️', role: 'Atacante', desc: 'Consumiciones x2 puntos de guerra' },
-                    { emoji: '🛡️', role: 'Defensor', desc: 'Reduce los puntos robables por el rival' },
-                    { emoji: '🕵️', role: 'Espía', desc: 'Ve misiones rivales · x0.5 puntos' },
-                    { emoji: '📋', role: 'Misiones', desc: '2 misiones diarias por liga · puntos extra' },
-                    { emoji: '⚡', role: 'Eventos', desc: 'Aleatorios cada 12h · máx. 3 activos' },
-                    { emoji: '🏆', role: 'Victoria', desc: `Más puntos totales al día 3 · ${REWARD_COINS.toLocaleString()}🪙 por miembro` },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className="text-sm flex-shrink-0">{item.emoji}</span>
-                      <p className="text-xs"><span className="font-bold" style={{ color: 'var(--text-muted)' }}>{item.role}</span> — <span style={{ color: 'var(--text-hint)' }}>{item.desc}</span></p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+              {/* Tu liga */}
               <p className="text-sm font-bold mb-2">⚔️ Tu liga</p>
               <div className="space-y-2 mb-4">
                 {myLeagues.filter(l => myRole[l.id] === 'owner' || myRole[l.id] === 'admin').map(league => (
@@ -771,8 +735,9 @@ export default function ClanWar() {
                 ))}
               </div>
 
+              {/* Liga rival */}
               <p className="text-sm font-bold mb-2">🏴 Liga rival</p>
-              <div className="space-y-2 mb-6">
+              <div className="space-y-2 mb-5">
                 {allLeagues.filter(l => !myLeagues.find(ml => ml.id === l.id)).map(league => (
                   <motion.button key={league.id} whileTap={{ scale: 0.96 }} onClick={() => setSelectedDefender(league)}
                     className="w-full rounded-2xl p-4 text-left"
@@ -783,6 +748,98 @@ export default function ClanWar() {
                     </div>
                   </motion.button>
                 ))}
+              </div>
+
+              {/* Configuración */}
+              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
+                <p className="text-sm font-bold mb-4">⚙️ Configuración de la guerra</p>
+
+                {/* Duración */}
+                <div className="mb-4">
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Duración</p>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map(d => (
+                      <motion.button key={d} whileTap={{ scale: 0.95 }} onClick={() => setWarDuration(d)}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                        style={{ backgroundColor: warDuration === d ? '#dc2626' : 'var(--bg-input)', color: warDuration === d ? '#fff' : 'var(--text-muted)' }}>
+                        {d} {d === 1 ? 'día' : 'días'}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recompensa */}
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Recompensa por miembro ganador</p>
+                    <p className="text-sm font-black text-amber-400">{warReward}🪙</p>
+                  </div>
+                  <input type="range" min="100" max="5000" step="100" value={warReward}
+                    onChange={e => setWarReward(Number(e.target.value))} className="w-full accent-red-600" />
+                  <div className="flex gap-2 mt-2">
+                    {[500, 1000, 2000, 5000].map(v => (
+                      <motion.button key={v} whileTap={{ scale: 0.9 }} onClick={() => setWarReward(v)}
+                        className="flex-1 text-xs py-1.5 rounded-lg font-medium"
+                        style={{ backgroundColor: warReward === v ? '#dc2626' : 'var(--bg-input)', color: warReward === v ? '#fff' : 'var(--text-muted)' }}>
+                        {v}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Batallas por día */}
+                <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>🎯 Batallas ({warDuration} día{warDuration > 1 ? 's' : ''})</p>
+                <div className="space-y-4">
+                  {Array.from({ length: warDuration }, (_, i) => (
+                    <div key={i} className="rounded-xl p-3" style={{ backgroundColor: 'var(--bg-input)' }}>
+                      <p className="text-xs font-bold mb-3" style={{ color: '#ef4444' }}>Día {i + 1}</p>
+
+                      {/* Tipo de batalla */}
+                      <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Tipo de reto</p>
+                      <div className="grid grid-cols-2 gap-1.5 mb-3">
+                        {Object.entries(BATTLE_TYPES).map(([type, info]) => (
+                          <motion.button key={type} whileTap={{ scale: 0.96 }}
+                            onClick={() => updateBattleConfig(i, 'type', type)}
+                            className="rounded-xl p-2 text-left"
+                            style={{ backgroundColor: battleConfigs[i]?.type === type ? 'rgba(220,38,38,0.2)' : 'var(--bg-card)', border: battleConfigs[i]?.type === type ? '2px solid #dc2626' : '2px solid transparent' }}>
+                            <p className="text-sm">{info.emoji}</p>
+                            <p className="text-xs font-medium mt-0.5" style={{ color: battleConfigs[i]?.type === type ? '#ef4444' : 'var(--text-muted)' }}>{info.label}</p>
+                          </motion.button>
+                        ))}
+                      </div>
+
+                      {/* Objetivos por equipo */}
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
+                            Objetivo {selectedChallenger?.name || 'Tu liga'}
+                          </p>
+                          <input type="number" min="1" value={battleConfigs[i]?.challengerTarget || 50}
+                            onChange={e => updateBattleConfig(i, 'challengerTarget', parseInt(e.target.value) || 1)}
+                            className="w-full rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500"
+                            style={{ backgroundColor: 'var(--bg-card)', color: '#ef4444' }} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
+                            Objetivo {selectedDefender?.name || 'Liga rival'}
+                          </p>
+                          <input type="number" min="1" value={battleConfigs[i]?.defenderTarget || 50}
+                            onChange={e => updateBattleConfig(i, 'defenderTarget', parseInt(e.target.value) || 1)}
+                            className="w-full rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                            style={{ backgroundColor: 'var(--bg-card)', color: '#818cf8' }} />
+                        </div>
+                      </div>
+
+                      {/* Descripción opcional */}
+                      <input type="text" placeholder="Descripción opcional..."
+                        value={battleConfigs[i]?.description || ''}
+                        onChange={e => updateBattleConfig(i, 'description', e.target.value)}
+                        maxLength={80}
+                        className="w-full rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-red-500"
+                        style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }} />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <motion.button whileTap={{ scale: 0.97 }} onClick={handleChallenge}
@@ -796,57 +853,55 @@ export default function ClanWar() {
         </div>
       )}
 
-      {/* Modal rol */}
+      {/* Modal asignar rol (capitán) */}
       <AnimatePresence>
-        {showRoleModal && (
+        {selectedMemberForRole && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/75 flex items-end justify-center z-50"
-            onClick={() => { if (roleChosen) setShowRoleModal(false) }}>
+            onClick={() => setSelectedMemberForRole(null)}>
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="rounded-t-3xl w-full max-w-lg overflow-y-auto"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh', paddingBottom: '32px' }}>
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', paddingBottom: '40px' }}>
               <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-black">⚔️ Elige tu rol</h2>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Define tu estrategia · puedes cambiarlo después</p>
+                    <h2 className="text-lg font-black">Asignar rol a {selectedMemberForRole.profiles?.username}</h2>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Solo el capitán puede asignar roles especiales</p>
                   </div>
-                  {roleChosen && (
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowRoleModal(false)}
-                      className="p-2 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
-                  )}
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSelectedMemberForRole(null)}
+                    className="p-2 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
                 </div>
               </div>
               <div className="px-5 pt-4 space-y-3">
-                {Object.entries(ROLE_INFO).map(([role, info]) => (
-                  <motion.button key={role} whileTap={{ scale: 0.97 }} onClick={() => handleSelectRole(role)} disabled={selectingRole}
-                    className="w-full rounded-2xl p-4 text-left relative overflow-hidden"
-                    style={{ backgroundColor: currentRole === role && roleChosen ? info.bg : 'var(--bg-input)', border: currentRole === role && roleChosen ? `2px solid ${info.color}` : '2px solid transparent' }}>
-                    {currentRole === role && roleChosen && (
-                      <motion.div className="absolute inset-0" style={{ background: `linear-gradient(90deg, transparent, ${info.bg}, transparent)` }}
-                        animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'linear', repeatDelay: 2 }} />
-                    )}
-                    <div className="relative flex items-center gap-4">
-                      <span className="text-3xl">{info.emoji}</span>
+                {[
+                  { role: null, emoji: '⚔️', label: 'Combatiente', desc: 'Contribuye normalmente a las batallas colectivas', color: '#818cf8' },
+                  { role: 'spy', emoji: '🕵️', label: 'Espía', desc: 'Ve el progreso del equipo rival en tiempo real', color: '#f59e0b', disabled: mySpy && mySpy.user_id !== selectedMemberForRole.user_id },
+                  { role: 'saboteur', emoji: '💣', label: 'Saboteador', desc: 'Puede congelar a un rival una vez durante la guerra', color: '#ef4444', disabled: mySaboteur && mySaboteur.user_id !== selectedMemberForRole.user_id },
+                ].map(opt => (
+                  <motion.button key={opt.role || 'none'} whileTap={{ scale: 0.97 }}
+                    onClick={() => !opt.disabled && handleAssignRole(selectedMemberForRole.user_id, opt.role)}
+                    disabled={assigningRole || opt.disabled}
+                    className="w-full rounded-2xl p-4 text-left"
+                    style={{
+                      backgroundColor: selectedMemberForRole.role === opt.role ? `${opt.color}20` : 'var(--bg-input)',
+                      border: selectedMemberForRole.role === opt.role ? `2px solid ${opt.color}` : '2px solid transparent',
+                      opacity: opt.disabled ? 0.4 : 1,
+                    }}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{opt.emoji}</span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="font-black text-sm" style={{ color: currentRole === role && roleChosen ? info.color : 'var(--text-primary)' }}>{info.label}</p>
-                          {currentRole === role && roleChosen && <span className="text-xs font-bold" style={{ color: info.color }}>✓ Actual</span>}
+                          <p className="font-bold text-sm" style={{ color: selectedMemberForRole.role === opt.role ? opt.color : 'var(--text-primary)' }}>{opt.label}</p>
+                          {selectedMemberForRole.role === opt.role && <span className="text-xs font-bold" style={{ color: opt.color }}>✓ Actual</span>}
+                          {opt.disabled && <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Ya asignado</span>}
                         </div>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{info.desc}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>{opt.desc}</p>
                       </div>
-                      <motion.span animate={currentRole !== role ? { x: [0, 3, 0] } : {}} transition={{ duration: 1.5, repeat: Infinity }}
-                        style={{ color: currentRole === role && roleChosen ? info.color : 'var(--text-hint)' }} className="text-lg flex-shrink-0">›</motion.span>
                     </div>
                   </motion.button>
                 ))}
-                {!roleChosen && (
-                  <p className="text-xs text-center pt-2" style={{ color: 'var(--text-hint)' }}>
-                    ⚠️ Debes elegir un rol para participar activamente en la guerra
-                  </p>
-                )}
               </div>
             </motion.div>
           </motion.div>
@@ -860,15 +915,20 @@ export default function ClanWar() {
             className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowCancelConfirm(false)}>
             <motion.div initial={{ opacity: 0, scale: 0.85, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
+              onClick={e => e.stopPropagation()} className="rounded-2xl p-6 w-full max-w-sm"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}>
               <div className="text-center mb-5">
                 <div className="text-4xl mb-2">🚫</div>
                 <h2 className="text-xl font-bold">¿Cancelar la guerra?</h2>
                 <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Se retirará la declaración a <strong>{activeWar?.defender?.name}</strong>.</p>
               </div>
               <div className="flex gap-3">
-                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowCancelConfirm(false)} className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Volver</motion.button>
-                <motion.button whileTap={{ scale: 0.96 }} onClick={handleCancelWar} disabled={cancelling} className="flex-1 font-bold py-3 rounded-xl text-white disabled:opacity-50" style={{ backgroundColor: '#ef4444' }}>{cancelling ? 'Cancelando...' : 'Sí, cancelar'}</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowCancelConfirm(false)}
+                  className="flex-1 font-semibold py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}>Volver</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} onClick={handleCancelWar} disabled={cancelling}
+                  className="flex-1 font-bold py-3 rounded-xl text-white disabled:opacity-50" style={{ backgroundColor: '#ef4444' }}>
+                  {cancelling ? 'Cancelando...' : 'Sí, cancelar'}
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>
