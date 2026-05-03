@@ -171,7 +171,6 @@ export default function ClanWar() {
     const leagueIds = leagues.map(l => l.id)
 
     if (leagueIds.length > 0) {
-      // Actualizar progreso de batallas
       await supabase.rpc('update_war_battle_progress')
 
       const { data: warData } = await supabase
@@ -192,7 +191,6 @@ export default function ClanWar() {
       setFinishedWar(finishedData && String(finishedData.id) !== seenWarId ? finishedData : null)
 
       if (warData) {
-        // Auto-resolver si terminó
         if (warData.status === 'active' && warData.ends_at && new Date(warData.ends_at) < new Date()) {
           await supabase.rpc('resolve_clan_war', { p_war_id: warData.id })
           setActiveWar(null)
@@ -203,21 +201,25 @@ export default function ClanWar() {
         } else {
           setActiveWar(warData)
 
-          // Batallas
           const { data: battlesData } = await supabase
             .from('clan_war_battles').select('*').eq('war_id', warData.id).order('day')
           setBattles(battlesData || [])
 
-          // Participantes
           const { data: parts } = await supabase
             .from('clan_war_participants').select('*, profiles(id, username, avatar_url)')
             .eq('war_id', warData.id)
           setParticipants(parts || [])
 
-          const myPart = parts?.find(p => p.user_id === user.id)
+          // FIX: determinar la liga del usuario correctamente
+          // Si el usuario está en la liga challenger → es challenger
+          // Si no → es defender
+          const myLeagueInWar = leagueIds.includes(warData.challenger_league_id)
+            ? warData.challenger_league_id
+            : warData.defender_league_id
+
+          const myPart = parts?.find(p => p.user_id === user.id && p.league_id === myLeagueInWar)
           setMyParticipation(myPart || null)
 
-          // Si es espía, cargar progreso rival
           if (myPart?.role === 'spy') {
             const myLeagueId = myPart.league_id
             const enemyLeagueId = myLeagueId === warData.challenger_league_id
@@ -256,7 +258,6 @@ export default function ClanWar() {
     if (!selectedChallenger || !selectedDefender) return
     setChallenging(true)
 
-    // Obtener capitán del challenger
     const { data: captainId } = await supabase.rpc('get_war_captain', { p_league_id: selectedChallenger.id })
 
     const { data: war, error } = await supabase.from('clan_wars').insert({
@@ -269,7 +270,6 @@ export default function ClanWar() {
 
     if (error || !war) { soundError(); showMsg(false, 'Error al declarar la guerra'); setChallenging(false); return }
 
-    // Crear batallas configuradas
     const battlesToInsert = battleConfigs.slice(0, warDuration).map((bc, i) => ({
       war_id: war.id,
       day: i + 1,
@@ -300,7 +300,6 @@ export default function ClanWar() {
       captain_defender_id: captainDefender.data,
     }).eq('id', activeWar.id)
 
-    // Inscribir participantes
     const [{ data: challengerMembers }, { data: defenderMembers }] = await Promise.all([
       supabase.from('league_members').select('user_id').eq('league_id', activeWar.challenger_league_id),
       supabase.from('league_members').select('user_id').eq('league_id', activeWar.defender_league_id),
@@ -329,6 +328,7 @@ export default function ClanWar() {
       .update({ role })
       .eq('war_id', activeWar.id)
       .eq('user_id', userId)
+      .eq('league_id', myLeagueId)
     soundSuccess()
     setSelectedMemberForRole(null)
     fetchData(true)
@@ -360,11 +360,16 @@ export default function ClanWar() {
   const isChallenger = myLeagueId === activeWar?.challenger_league_id
   const myLeagueName = isChallenger ? activeWar?.challenger?.name : activeWar?.defender?.name
   const enemyLeagueName = isChallenger ? activeWar?.defender?.name : activeWar?.challenger?.name
+  const enemyLeagueId = isChallenger ? activeWar?.defender_league_id : activeWar?.challenger_league_id
   const today = activeWar ? getCurrentDay(activeWar) : 1
   const todayBattle = battles.find(b => b.day === today)
   const myLeagueIdForResult = myLeagues.find(l => l.id === finishedWar?.challenger_league_id)?.id ||
     myLeagues.find(l => l.id === finishedWar?.defender_league_id)?.id
+
+  // Separar participantes por equipo usando league_id explícitamente
   const myTeam = participants.filter(p => p.league_id === myLeagueId)
+  const enemyTeam = participants.filter(p => p.league_id === enemyLeagueId)
+
   const iAmCaptain = myParticipation?.is_captain === true
   const isDefenderAdmin = myRole[activeWar?.defender_league_id] === 'owner' || myRole[activeWar?.defender_league_id] === 'admin'
   const isChallengerAdmin = myRole[activeWar?.challenger_league_id] === 'owner' || myRole[activeWar?.challenger_league_id] === 'admin'
@@ -385,6 +390,66 @@ export default function ClanWar() {
     return url
       ? <img src={url} alt={username} className={`${dim} rounded-full object-cover flex-shrink-0`} />
       : <div className={`${dim} rounded-full flex items-center justify-center flex-shrink-0 text-sm`} style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+  }
+
+  const TeamSection = ({ team, leagueName, isMyTeam }) => {
+    const color = isMyTeam ? '#ef4444' : '#6366f1'
+    const bgColor = isMyTeam ? 'rgba(239,68,68,0.08)' : 'rgba(99,102,241,0.08)'
+    const borderColor = isMyTeam ? 'rgba(239,68,68,0.25)' : 'rgba(99,102,241,0.25)'
+
+    return (
+      <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
+        <div className="px-3 py-2.5 flex items-center gap-2 border-b" style={{ borderColor }}>
+          <span className="text-sm">{isMyTeam ? '⚔️' : '🛡️'}</span>
+          <p className="text-xs font-black" style={{ color }}>{leagueName}</p>
+          {isMyTeam && iAmCaptain && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto"
+              style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+              👑 Tu equipo
+            </span>
+          )}
+          {isMyTeam && !iAmCaptain && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full font-bold ml-auto"
+              style={{ backgroundColor: `${color}20`, color }}>
+              Tu equipo
+            </span>
+          )}
+        </div>
+        <div className="divide-y" style={{ borderColor }}>
+          {team.filter(p => p.profiles).map(p => {
+            const isMe = p.user_id === user.id
+            const roleEmoji = p.role === 'spy' ? '🕵️' : p.role === 'saboteur' ? '💣' : '⚔️'
+            const roleLabel = p.role === 'spy' ? 'Espía' : p.role === 'saboteur' ? 'Saboteador' : 'Combatiente'
+            const roleColor = p.role === 'spy' ? '#f59e0b' : p.role === 'saboteur' ? '#ef4444' : color
+            return (
+              <div key={p.id} className="px-3 py-2.5 flex items-center gap-2.5">
+                <Avatar url={p.profiles?.avatar_url} username={p.profiles?.username} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-sm font-bold truncate">{p.profiles?.username} {isMe && '(tú)'}</p>
+                    {p.is_captain && <span className="text-xs text-amber-400">👑</span>}
+                  </div>
+                  <span className="text-xs" style={{ color: roleColor }}>{roleEmoji} {roleLabel}</span>
+                </div>
+                {isMyTeam && iAmCaptain && !isMe && (
+                  <motion.button whileTap={{ scale: 0.9 }}
+                    onClick={() => setSelectedMemberForRole(p)}
+                    className="text-xs px-2.5 py-1.5 rounded-xl font-bold flex-shrink-0"
+                    style={{ backgroundColor: 'rgba(220,38,38,0.1)', color: '#ef4444' }}>
+                    Rol
+                  </motion.button>
+                )}
+              </div>
+            )
+          })}
+          {team.length === 0 && (
+            <div className="px-3 py-4 text-center">
+              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>Sin participantes</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
   }
 
   if (loading) return (
@@ -454,7 +519,6 @@ export default function ClanWar() {
             </div>
           ) : (
             <>
-              {/* Estado pendiente */}
               {activeWar.status === 'pending' && (
                 <div className="rounded-2xl p-4 mb-4 text-center"
                   style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
@@ -465,7 +529,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* Marcador principal */}
+              {/* Marcador */}
               <div className="rounded-2xl p-4 mb-4" style={{
                 background: 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.05))',
                 border: '1px solid rgba(220,38,38,0.3)',
@@ -478,7 +542,6 @@ export default function ClanWar() {
                     <span className="text-xs font-bold text-red-400">{formatTimeLeft(activeWar.ends_at)}</span>
                   )}
                 </div>
-
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex-1 text-center">
                     <p className="font-black text-sm truncate mb-2">{activeWar.challenger?.name}</p>
@@ -500,7 +563,6 @@ export default function ClanWar() {
                     )}
                   </div>
                 </div>
-
                 {activeWar.status === 'active' && (
                   <div className="mt-3">
                     <div className="w-full h-2.5 rounded-full overflow-hidden flex" style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -529,7 +591,7 @@ export default function ClanWar() {
                 </motion.button>
               )}
               {activeWar.status === 'pending' && isChallengerAdmin && !isDefenderAdmin && (
-                <div className="mb-4 space-y-3">
+                <div className="mb-4">
                   <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCancelConfirm(true)}
                     className="w-full py-3 rounded-2xl font-bold text-sm border"
                     style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
@@ -550,11 +612,8 @@ export default function ClanWar() {
                         <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{BATTLE_TYPES[todayBattle.battle_type]?.desc}</p>
                       </div>
                     </div>
-
-                    {/* Mi progreso */}
                     {(() => {
                       const { myPct, myCurrent, myTarget } = getTodayProgress(todayBattle)
-                      const completed = isChallenger ? todayBattle.challenger_completed_at : todayBattle.defender_completed_at
                       const won = todayBattle.winner_league_id === myLeagueId
                       const lost = todayBattle.winner_league_id && todayBattle.winner_league_id !== myLeagueId
                       return (
@@ -574,8 +633,6 @@ export default function ClanWar() {
                         </div>
                       )
                     })()}
-
-                    {/* Progreso rival (espía) */}
                     {enemyProgress && (
                       <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                         <div className="flex items-center gap-1 mb-1">
@@ -597,7 +654,7 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* Historial de batallas */}
+              {/* Historial batallas */}
               {activeWar.status === 'active' && battles.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm font-bold mb-2">📅 Batallas</p>
@@ -609,11 +666,7 @@ export default function ClanWar() {
                       const pending = !battle.winner_league_id
                       return (
                         <div key={battle.id} className="rounded-2xl p-3 flex items-center gap-3"
-                          style={{
-                            backgroundColor: 'var(--bg-card)',
-                            border: isToday ? '2px solid rgba(220,38,38,0.4)' : '2px solid transparent',
-                            opacity: battle.day > today ? 0.5 : 1,
-                          }}>
+                          style={{ backgroundColor: 'var(--bg-card)', border: isToday ? '2px solid rgba(220,38,38,0.4)' : '2px solid transparent', opacity: battle.day > today ? 0.5 : 1 }}>
                           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
                             style={{ backgroundColor: isToday ? 'rgba(220,38,38,0.15)' : 'var(--bg-input)' }}>
                             {pending && battle.day <= today ? '⚔️' : won ? '✅' : lost ? '❌' : '🔒'}
@@ -645,63 +698,35 @@ export default function ClanWar() {
                 </div>
               )}
 
-              {/* Roles del equipo */}
-              {activeWar.status === 'active' && myTeam.length > 0 && (
+              {/* Equipos */}
+              {activeWar.status === 'active' && participants.length > 0 && (
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-bold">🧩 Tu equipo · {myLeagueName}</p>
+                    <p className="text-sm font-bold">👥 Equipos</p>
                     {iAmCaptain && (
                       <span className="text-xs px-2 py-0.5 rounded-full font-bold"
                         style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
-                        👑 Capitán
+                        👑 Eres el capitán
                       </span>
                     )}
                   </div>
 
                   {/* Info roles */}
                   <div className="rounded-2xl p-3 mb-3 space-y-1.5" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
-                    <p className="text-xs font-bold mb-1" style={{ color: '#818cf8' }}>Roles especiales (máx. 1 de cada)</p>
+                    <p className="text-xs font-bold mb-1" style={{ color: '#818cf8' }}>Roles especiales (máx. 1 de cada por equipo)</p>
                     <div className="flex items-start gap-2">
                       <span className="text-sm">🕵️</span>
                       <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Espía</span> — Ve el progreso del equipo rival en tiempo real</p>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="text-sm">💣</span>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Saboteador</span> — Puede congelar a un miembro rival una vez durante la guerra</p>
+                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Saboteador</span> — Puede congelar a un miembro rival una vez</p>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    {myTeam.filter(p => p.profiles).map(p => {
-                      const isMe = p.user_id === user.id
-                      const roleEmoji = p.role === 'spy' ? '🕵️' : p.role === 'saboteur' ? '💣' : '⚔️'
-                      const roleLabel = p.role === 'spy' ? 'Espía' : p.role === 'saboteur' ? 'Saboteador' : 'Combatiente'
-                      return (
-                        <motion.div key={p.id} variants={staggerItem} initial="initial" animate="animate"
-                          className="rounded-2xl p-3 flex items-center gap-3"
-                          style={{ backgroundColor: 'var(--bg-card)', border: p.is_captain ? '2px solid rgba(245,158,11,0.4)' : '2px solid transparent' }}>
-                          <Avatar url={p.profiles?.avatar_url} username={p.profiles?.username} size="sm" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-bold text-sm truncate">{p.profiles?.username} {isMe && '(tú)'}</p>
-                              {p.is_captain && <span className="text-xs font-bold text-amber-400">👑</span>}
-                            </div>
-                            <span className="text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 inline-block"
-                              style={{ backgroundColor: p.role === 'spy' ? 'rgba(245,158,11,0.12)' : p.role === 'saboteur' ? 'rgba(239,68,68,0.12)' : 'rgba(99,102,241,0.12)', color: p.role === 'spy' ? '#f59e0b' : p.role === 'saboteur' ? '#ef4444' : '#818cf8' }}>
-                              {roleEmoji} {roleLabel}
-                            </span>
-                          </div>
-                          {iAmCaptain && !isMe && (
-                            <motion.button whileTap={{ scale: 0.9 }}
-                              onClick={() => setSelectedMemberForRole(p)}
-                              className="text-xs px-3 py-1.5 rounded-xl font-bold flex-shrink-0"
-                              style={{ backgroundColor: 'rgba(220,38,38,0.1)', color: '#ef4444' }}>
-                              Rol
-                            </motion.button>
-                          )}
-                        </motion.div>
-                      )
-                    })}
+                  <div className="space-y-3">
+                    <TeamSection team={myTeam} leagueName={myLeagueName} isMyTeam={true} />
+                    <TeamSection team={enemyTeam} leagueName={enemyLeagueName} isMyTeam={false} />
                   </div>
                 </div>
               )}
@@ -720,7 +745,6 @@ export default function ClanWar() {
             </div>
           ) : (
             <>
-              {/* Tu liga */}
               <p className="text-sm font-bold mb-2">⚔️ Tu liga</p>
               <div className="space-y-2 mb-4">
                 {myLeagues.filter(l => myRole[l.id] === 'owner' || myRole[l.id] === 'admin').map(league => (
@@ -735,7 +759,6 @@ export default function ClanWar() {
                 ))}
               </div>
 
-              {/* Liga rival */}
               <p className="text-sm font-bold mb-2">🏴 Liga rival</p>
               <div className="space-y-2 mb-5">
                 {allLeagues.filter(l => !myLeagues.find(ml => ml.id === l.id)).map(league => (
@@ -750,11 +773,9 @@ export default function ClanWar() {
                 ))}
               </div>
 
-              {/* Configuración */}
               <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
                 <p className="text-sm font-bold mb-4">⚙️ Configuración de la guerra</p>
 
-                {/* Duración */}
                 <div className="mb-4">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Duración</p>
                   <div className="flex gap-2">
@@ -768,7 +789,6 @@ export default function ClanWar() {
                   </div>
                 </div>
 
-                {/* Recompensa */}
                 <div className="mb-5">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Recompensa por miembro ganador</p>
@@ -787,14 +807,11 @@ export default function ClanWar() {
                   </div>
                 </div>
 
-                {/* Batallas por día */}
                 <p className="text-xs font-bold mb-3" style={{ color: 'var(--text-muted)' }}>🎯 Batallas ({warDuration} día{warDuration > 1 ? 's' : ''})</p>
                 <div className="space-y-4">
                   {Array.from({ length: warDuration }, (_, i) => (
                     <div key={i} className="rounded-xl p-3" style={{ backgroundColor: 'var(--bg-input)' }}>
                       <p className="text-xs font-bold mb-3" style={{ color: '#ef4444' }}>Día {i + 1}</p>
-
-                      {/* Tipo de batalla */}
                       <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Tipo de reto</p>
                       <div className="grid grid-cols-2 gap-1.5 mb-3">
                         {Object.entries(BATTLE_TYPES).map(([type, info]) => (
@@ -807,30 +824,22 @@ export default function ClanWar() {
                           </motion.button>
                         ))}
                       </div>
-
-                      {/* Objetivos por equipo */}
                       <div className="grid grid-cols-2 gap-2 mb-2">
                         <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-                            Objetivo {selectedChallenger?.name || 'Tu liga'}
-                          </p>
+                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Objetivo {selectedChallenger?.name || 'Tu liga'}</p>
                           <input type="number" min="1" value={battleConfigs[i]?.challengerTarget || 50}
                             onChange={e => updateBattleConfig(i, 'challengerTarget', parseInt(e.target.value) || 1)}
                             className="w-full rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500"
                             style={{ backgroundColor: 'var(--bg-card)', color: '#ef4444' }} />
                         </div>
                         <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-                            Objetivo {selectedDefender?.name || 'Liga rival'}
-                          </p>
+                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Objetivo {selectedDefender?.name || 'Liga rival'}</p>
                           <input type="number" min="1" value={battleConfigs[i]?.defenderTarget || 50}
                             onChange={e => updateBattleConfig(i, 'defenderTarget', parseInt(e.target.value) || 1)}
                             className="w-full rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                             style={{ backgroundColor: 'var(--bg-card)', color: '#818cf8' }} />
                         </div>
                       </div>
-
-                      {/* Descripción opcional */}
                       <input type="text" placeholder="Descripción opcional..."
                         value={battleConfigs[i]?.description || ''}
                         onChange={e => updateBattleConfig(i, 'description', e.target.value)}
@@ -853,7 +862,7 @@ export default function ClanWar() {
         </div>
       )}
 
-      {/* Modal asignar rol (capitán) */}
+      {/* Modal asignar rol */}
       <AnimatePresence>
         {selectedMemberForRole && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -863,7 +872,7 @@ export default function ClanWar() {
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="rounded-t-3xl w-full max-w-lg overflow-y-auto"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', paddingBottom: '40px' }}>
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', paddingBottom: '100px' }}>
               <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center justify-between">
                   <div>
