@@ -322,19 +322,18 @@ export default function ClanWar() {
   }
 
   const handleAssignRole = async (userId, role) => {
-  if (!activeWar) return
-  setAssigningRole(true)
-  const { error } = await supabase.from('clan_war_participants')
-    .update({ role })
-    .eq('war_id', activeWar.id)
-    .eq('user_id', userId)
-    .eq('league_id', myLeagueId)
-  if (error) { soundError(); showMsg(false, 'Error al asignar rol') }
-  else { soundSuccess() }
-  setSelectedMemberForRole(null)
-  fetchData(true)
-  setAssigningRole(false)
-}
+    if (!activeWar) return
+    setAssigningRole(true)
+    await supabase.from('clan_war_participants')
+      .update({ role })
+      .eq('war_id', activeWar.id)
+      .eq('user_id', userId)
+      .eq('league_id', myLeagueId)
+    soundSuccess()
+    setSelectedMemberForRole(null)
+    fetchData(true)
+    setAssigningRole(false)
+  }
 
   const handleCancelWar = async () => {
     if (!activeWar) return
@@ -503,238 +502,452 @@ export default function ClanWar() {
         )}
       </AnimatePresence>
 
-      {/* ── GUERRA ── */}
-      {tab === 'war' && (
-        <div className="px-4 pt-4 max-w-md mx-auto">
-          {!activeWar ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <motion.div className="text-6xl mb-4" animate={{ y: [0, -8, 0] }} transition={{ repeat: Infinity, duration: 2 }}>⚔️</motion.div>
-              <p className="font-bold text-lg">Sin guerra activa</p>
-              <p className="text-sm mt-2" style={{ color: 'var(--text-hint)' }}>Declara una guerra desde la pestaña 🏴</p>
-              {canManageLeagues && (
-                <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('challenge')}
-                  className="mt-6 px-6 py-3 rounded-2xl font-bold text-white" style={{ backgroundColor: '#dc2626' }}>
-                  🏴 Declarar guerra
-                </motion.button>
+// NUEVA SECCIÓN VISUAL — reemplaza el bloque {tab === 'war' && ...} completo
+
+{tab === 'war' && (
+  <div className="max-w-md mx-auto">
+    {!activeWar ? (
+      <div className="flex flex-col items-center justify-center py-20 px-4">
+        <motion.div
+          animate={{ y: [0, -12, 0], rotate: [-5, 5, -5] }}
+          transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+          className="text-7xl mb-6">⚔️</motion.div>
+        <p className="font-black text-xl text-center mb-2" style={{ color: 'var(--text-primary)' }}>Sin guerra activa</p>
+        <p className="text-sm text-center mb-8" style={{ color: 'var(--text-hint)' }}>Declara una guerra y lleva a tu liga a la victoria</p>
+        {canManageLeagues && (
+          <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('challenge')}
+            className="px-8 py-4 rounded-2xl font-black text-white text-base relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #7f1d1d, #dc2626)', border: '1px solid rgba(239,68,68,0.4)' }}>
+            <motion.div className="absolute inset-0"
+              style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)' }}
+              animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
+            <span className="relative">🏴 Declarar guerra</span>
+          </motion.button>
+        )}
+      </div>
+    ) : (
+      <>
+        {/* ── CAMPO DE BATALLA ── */}
+        <div className="relative overflow-hidden" style={{ minHeight: 280 }}>
+          {/* Fondo bélico */}
+          <div className="absolute inset-0"
+            style={{ background: 'linear-gradient(180deg, #0a0005 0%, #1a0008 40%, #0d0010 100%)' }} />
+
+          {/* Grid táctico */}
+          <div className="absolute inset-0 opacity-10"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(220,38,38,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(220,38,38,0.5) 1px, transparent 1px)',
+              backgroundSize: '40px 40px',
+            }} />
+
+          {/* Partículas de humo/fuego */}
+          {[
+            { x: '8%', delay: 0, color: '#ef4444' },
+            { x: '20%', delay: 0.8, color: '#f97316' },
+            { x: '75%', delay: 0.4, color: '#6366f1' },
+            { x: '88%', delay: 1.2, color: '#818cf8' },
+            { x: '50%', delay: 0.6, color: '#ef4444' },
+          ].map((p, i) => (
+            <motion.div key={i} className="absolute w-1 h-1 rounded-full"
+              style={{ left: p.x, bottom: '20%', backgroundColor: p.color }}
+              animate={{ y: [-20, -60, -100], opacity: [0.8, 0.4, 0], scale: [1, 2, 0] }}
+              transition={{ duration: 2.5, repeat: Infinity, delay: p.delay, ease: 'easeOut' }} />
+          ))}
+
+          {/* Línea divisoria central — "el frente" */}
+          <div className="absolute top-0 bottom-0 left-1/2 w-px opacity-30"
+            style={{ background: 'linear-gradient(180deg, transparent, #ef4444, #6366f1, transparent)' }} />
+          <motion.div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+            animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
+            transition={{ duration: 2, repeat: Infinity }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-black border-2"
+              style={{ backgroundColor: '#0d0010', borderColor: 'rgba(239,68,68,0.6)', color: '#ef4444' }}>
+              VS
+            </div>
+          </motion.div>
+
+          {/* Contenido del marcador */}
+          <div className="relative z-10 px-4 pt-5 pb-4">
+            {/* Estado + tiempo */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }}
+                  className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-xs font-black tracking-widest text-red-400 uppercase">
+                  {activeWar.status === 'pending' ? 'Pendiente' : `Día ${today}/${activeWar.duration_days || 3}`}
+                </span>
+              </div>
+              {activeWar.status === 'active' && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  <span className="text-xs">⏱</span>
+                  <span className="text-xs font-black text-red-400">{formatTimeLeft(activeWar.ends_at)}</span>
+                </div>
               )}
             </div>
-          ) : (
-            <>
-              {activeWar.status === 'pending' && (
-                <div className="rounded-2xl p-4 mb-4 text-center"
-                  style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
-                  <p className="text-sm font-bold text-amber-400 mb-1">⏳ Guerra pendiente de aceptación</p>
-                  <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
-                    {activeWar.challenger?.name} ha declarado la guerra a {activeWar.defender?.name}
-                  </p>
-                </div>
-              )}
 
-              {/* Marcador */}
-              <div className="rounded-2xl p-4 mb-4" style={{
-                background: 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.05))',
-                border: '1px solid rgba(220,38,38,0.3)',
-              }}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${activeWar.status === 'pending' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {activeWar.status === 'pending' ? '⏳ Pendiente' : `⚔️ Día ${today}/${activeWar.duration_days || 3}`}
-                  </span>
-                  {activeWar.status === 'active' && (
-                    <span className="text-xs font-bold text-red-400">{formatTimeLeft(activeWar.ends_at)}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex-1 text-center">
-                    <p className="font-black text-sm truncate mb-2">{activeWar.challenger?.name}</p>
-                    {activeWar.status === 'active' && (
-                      <>
-                        <p className="text-4xl font-black text-red-400">{activeWar.challenger_war_points || 0}</p>
-                        <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>batallas ganadas</p>
-                      </>
-                    )}
-                  </div>
-                  <div className="text-2xl font-black mx-4" style={{ color: 'var(--text-hint)' }}>VS</div>
-                  <div className="flex-1 text-center">
-                    <p className="font-black text-sm truncate mb-2">{activeWar.defender?.name}</p>
-                    {activeWar.status === 'active' && (
-                      <>
-                        <p className="text-4xl font-black text-indigo-400">{activeWar.defender_war_points || 0}</p>
-                        <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>batallas ganadas</p>
-                      </>
-                    )}
-                  </div>
+            {/* Equipos enfrentados */}
+            <div className="flex items-start justify-between gap-3 mb-5">
+              {/* Equipo izquierdo (challenger) */}
+              <div className="flex-1 text-left">
+                <div className="inline-flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg"
+                  style={{ backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  <span className="text-xs">⚔️</span>
+                  <p className="text-xs font-black text-red-400 truncate max-w-24">{activeWar.challenger?.name}</p>
                 </div>
                 {activeWar.status === 'active' && (
-                  <div className="mt-3">
-                    <div className="w-full h-2.5 rounded-full overflow-hidden flex" style={{ backgroundColor: 'var(--bg-input)' }}>
-                      {(() => {
-                        const total = (activeWar.challenger_war_points || 0) + (activeWar.defender_war_points || 0)
-                        if (total === 0) return <div className="h-full w-full" style={{ backgroundColor: 'var(--bg-input)' }} />
-                        return <>
-                          <motion.div className="h-full bg-red-500"
-                            animate={{ width: `${((activeWar.challenger_war_points || 0) / total) * 100}%` }}
-                            transition={{ duration: 0.8, type: 'spring' }} />
-                          <motion.div className="h-full bg-indigo-500"
-                            animate={{ width: `${((activeWar.defender_war_points || 0) / total) * 100}%` }}
-                            transition={{ duration: 0.8, type: 'spring' }} />
-                        </>
-                      })()}
-                    </div>
-                  </div>
+                  <motion.p key={activeWar.challenger_war_points}
+                    initial={{ scale: 1.4, color: '#fff' }} animate={{ scale: 1, color: '#ef4444' }}
+                    transition={{ duration: 0.4 }}
+                    className="text-5xl font-black leading-none" style={{ color: '#ef4444', fontVariantNumeric: 'tabular-nums' }}>
+                    {activeWar.challenger_war_points || 0}
+                  </motion.p>
                 )}
+                <p className="text-xs mt-1" style={{ color: 'rgba(239,68,68,0.5)' }}>batallas</p>
               </div>
 
-              {/* Botones pendiente */}
-              {activeWar.status === 'pending' && isDefenderAdmin && (
-                <motion.button whileTap={{ scale: 0.97 }} onClick={handleAcceptWar} disabled={accepting}
-                  className="w-full py-4 rounded-2xl font-bold text-white mb-3" style={{ backgroundColor: '#dc2626' }}>
-                  {accepting ? 'Iniciando guerra...' : '⚔️ Aceptar la guerra'}
-                </motion.button>
-              )}
-              {activeWar.status === 'pending' && isChallengerAdmin && !isDefenderAdmin && (
-                <div className="mb-4">
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCancelConfirm(true)}
-                    className="w-full py-3 rounded-2xl font-bold text-sm border"
-                    style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
-                    🚫 Cancelar declaración
-                  </motion.button>
-                </div>
-              )}
+              {/* Espacio central */}
+              <div className="w-12 flex-shrink-0" />
 
-              {/* Batalla del día */}
-              {activeWar.status === 'active' && todayBattle && (
-                <div className="mb-4">
-                  <p className="text-sm font-bold mb-2">🎯 Batalla de hoy — Día {today}</p>
-                  <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xl">{BATTLE_TYPES[todayBattle.battle_type]?.emoji}</span>
-                      <div>
-                        <p className="font-bold text-sm">{todayBattle.description || BATTLE_TYPES[todayBattle.battle_type]?.label}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{BATTLE_TYPES[todayBattle.battle_type]?.desc}</p>
-                      </div>
-                    </div>
-                    {(() => {
-                      const { myPct, myCurrent, myTarget } = getTodayProgress(todayBattle)
-                      const won = todayBattle.winner_league_id === myLeagueId
-                      const lost = todayBattle.winner_league_id && todayBattle.winner_league_id !== myLeagueId
-                      return (
-                        <div className="mb-3">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="font-bold" style={{ color: 'var(--text-muted)' }}>Tu equipo · {myLeagueName}</span>
-                            <span className="font-black" style={{ color: won ? '#10b981' : '#ef4444' }}>
-                              {myCurrent}/{myTarget} {won ? '✅' : ''}
-                            </span>
-                          </div>
-                          <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
-                            <motion.div className="h-full rounded-full"
-                              style={{ backgroundColor: won ? '#10b981' : '#ef4444' }}
-                              animate={{ width: `${myPct}%` }} transition={{ duration: 0.6, type: 'spring' }} />
-                          </div>
-                          {won && !lost && <p className="text-xs mt-1 font-bold text-emerald-400">🏆 ¡Batalla ganada!</p>}
-                        </div>
-                      )
-                    })()}
-                    {enemyProgress && (
-                      <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-xs">🕵️</span>
-                          <span className="text-xs font-bold" style={{ color: '#f59e0b' }}>Progreso rival (solo visible para el espía)</span>
-                        </div>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span style={{ color: 'var(--text-hint)' }}>{enemyLeagueName}</span>
-                          <span className="font-black" style={{ color: '#f59e0b' }}>{enemyProgress.current}/{enemyProgress.target}</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-input)' }}>
-                          <motion.div className="h-full rounded-full bg-amber-500"
-                            animate={{ width: `${Math.min(100, Math.round((enemyProgress.current / enemyProgress.target) * 100))}%` }}
-                            transition={{ duration: 0.6 }} />
-                        </div>
-                      </div>
-                    )}
+              {/* Equipo derecho (defender) */}
+              <div className="flex-1 text-right">
+                <div className="inline-flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg"
+                  style={{ backgroundColor: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)' }}>
+                  <p className="text-xs font-black text-indigo-400 truncate max-w-24">{activeWar.defender?.name}</p>
+                  <span className="text-xs">🛡️</span>
+                </div>
+                {activeWar.status === 'active' && (
+                  <motion.p key={activeWar.defender_war_points}
+                    initial={{ scale: 1.4, color: '#fff' }} animate={{ scale: 1, color: '#818cf8' }}
+                    transition={{ duration: 0.4 }}
+                    className="text-5xl font-black leading-none" style={{ color: '#818cf8', fontVariantNumeric: 'tabular-nums' }}>
+                    {activeWar.defender_war_points || 0}
+                  </motion.p>
+                )}
+                <p className="text-xs mt-1" style={{ color: 'rgba(99,102,241,0.5)' }}>batallas</p>
+              </div>
+            </div>
+
+            {/* Barra de territorio */}
+            {activeWar.status === 'active' && (
+              <div>
+                <div className="flex justify-between text-xs mb-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  <span>⚔️ Territorio</span>
+                  <span>🛡️</span>
+                </div>
+                <div className="w-full h-4 rounded-full overflow-hidden flex relative"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {(() => {
+                    const total = (activeWar.challenger_war_points || 0) + (activeWar.defender_war_points || 0)
+                    const chPct = total === 0 ? 50 : ((activeWar.challenger_war_points || 0) / total) * 100
+                    const dfPct = total === 0 ? 50 : ((activeWar.defender_war_points || 0) / total) * 100
+                    return <>
+                      <motion.div className="h-full"
+                        style={{ background: 'linear-gradient(90deg, #7f1d1d, #ef4444)' }}
+                        animate={{ width: `${chPct}%` }} transition={{ duration: 1, type: 'spring' }} />
+                      <motion.div className="h-full"
+                        style={{ background: 'linear-gradient(90deg, #4338ca, #6366f1)' }}
+                        animate={{ width: `${dfPct}%` }} transition={{ duration: 1, type: 'spring' }} />
+                    </>
+                  })()}
+                  {/* Línea central */}
+                  <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white opacity-20" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── BOTONES PENDIENTE ── */}
+        {activeWar.status === 'pending' && isDefenderAdmin && (
+          <div className="px-4 mt-4">
+            <motion.button whileTap={{ scale: 0.97 }} onClick={handleAcceptWar} disabled={accepting}
+              className="w-full py-4 rounded-2xl font-black text-white relative overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, #7f1d1d, #dc2626)' }}>
+              <motion.div className="absolute inset-0"
+                style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent)' }}
+                animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.5, repeat: Infinity }} />
+              <span className="relative">{accepting ? 'Iniciando...' : '⚔️ ¡Aceptar la guerra!'}</span>
+            </motion.button>
+          </div>
+        )}
+        {activeWar.status === 'pending' && isChallengerAdmin && !isDefenderAdmin && (
+          <div className="px-4 mt-4">
+            <div className="rounded-2xl p-4 mb-3 text-center"
+              style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+              <motion.div animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-2xl mb-1">⏳</motion.div>
+              <p className="text-sm font-bold text-amber-400">Esperando que {activeWar.defender?.name} acepte</p>
+            </div>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowCancelConfirm(true)}
+              className="w-full py-3 rounded-2xl font-bold text-sm border"
+              style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+              🚫 Retirar declaración
+            </motion.button>
+          </div>
+        )}
+
+        {activeWar.status === 'active' && (
+          <div className="px-4 space-y-4 mt-4 pb-8">
+
+            {/* ── MISIÓN DEL DÍA ── */}
+            {todayBattle && (
+              <div className="rounded-2xl overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #0f0005, #1a000a)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                {/* Header misión */}
+                <div className="px-4 py-3 flex items-center gap-2 border-b"
+                  style={{ borderColor: 'rgba(239,68,68,0.15)', background: 'rgba(239,68,68,0.08)' }}>
+                  <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+                    className="text-lg">🎯</motion.span>
+                  <div>
+                    <p className="text-xs font-black text-red-400 tracking-widest uppercase">Misión — Día {today}</p>
+                    <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                      {todayBattle.description || BATTLE_TYPES[todayBattle.battle_type]?.label}
+                    </p>
                   </div>
                 </div>
-              )}
 
-              {/* Historial batallas */}
-              {activeWar.status === 'active' && battles.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm font-bold mb-2">📅 Batallas</p>
-                  <div className="space-y-2">
-                    {battles.map(battle => {
-                      const isToday = battle.day === today
-                      const won = battle.winner_league_id === myLeagueId
-                      const lost = battle.winner_league_id && battle.winner_league_id !== myLeagueId
-                      const pending = !battle.winner_league_id
-                      return (
-                        <div key={battle.id} className="rounded-2xl p-3 flex items-center gap-3"
-                          style={{ backgroundColor: 'var(--bg-card)', border: isToday ? '2px solid rgba(220,38,38,0.4)' : '2px solid transparent', opacity: battle.day > today ? 0.5 : 1 }}>
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                            style={{ backgroundColor: isToday ? 'rgba(220,38,38,0.15)' : 'var(--bg-input)' }}>
-                            {pending && battle.day <= today ? '⚔️' : won ? '✅' : lost ? '❌' : '🔒'}
+                <div className="px-4 py-4">
+                  {(() => {
+                    const { myPct, myCurrent, myTarget } = getTodayProgress(todayBattle)
+                    const won = todayBattle.winner_league_id === myLeagueId
+                    const lost = todayBattle.winner_league_id && todayBattle.winner_league_id !== myLeagueId
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            {myLeagueName}
+                          </span>
+                          <span className="text-sm font-black" style={{ color: won ? '#10b981' : '#ef4444' }}>
+                            {myCurrent} / {myTarget}
+                          </span>
+                        </div>
+                        {/* Barra de asedio */}
+                        <div className="w-full h-5 rounded-full overflow-hidden relative"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <motion.div className="h-full rounded-full flex items-center justify-end pr-2"
+                            style={{ background: won ? 'linear-gradient(90deg, #059669, #10b981)' : 'linear-gradient(90deg, #7f1d1d, #ef4444)' }}
+                            animate={{ width: `${myPct}%` }} transition={{ duration: 0.8, type: 'spring' }}>
+                            {myPct > 15 && (
+                              <span className="text-xs font-black text-white">{myPct}%</span>
+                            )}
+                          </motion.div>
+                          {/* Marcador del objetivo */}
+                          <div className="absolute top-0 bottom-0 right-0 w-0.5 opacity-40"
+                            style={{ backgroundColor: '#fff' }} />
+                        </div>
+
+                        {won && (
+                          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                            className="mt-2 text-center">
+                            <span className="text-xs font-black text-emerald-400">🏆 ¡OBJETIVO COMPLETADO!</span>
+                          </motion.div>
+                        )}
+
+                        {/* Progreso espía */}
+                        {enemyProgress && (
+                          <div className="mt-4 pt-3 border-t" style={{ borderColor: 'rgba(245,158,11,0.15)' }}>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <span className="text-sm">🕵️</span>
+                              <span className="text-xs font-bold text-amber-400">Intel rival — {enemyLeagueName}</span>
+                            </div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Progreso enemigo</span>
+                              <span className="text-xs font-black text-amber-400">{enemyProgress.current}/{enemyProgress.target}</span>
+                            </div>
+                            <div className="w-full h-3 rounded-full overflow-hidden"
+                              style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                              <motion.div className="h-full rounded-full"
+                                style={{ background: 'linear-gradient(90deg, #92400e, #f59e0b)' }}
+                                animate={{ width: `${Math.min(100, Math.round((enemyProgress.current / enemyProgress.target) * 100))}%` }}
+                                transition={{ duration: 0.6 }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ── HISTORIAL DE BATALLAS ── */}
+            {battles.length > 0 && (
+              <div>
+                <p className="text-xs font-black tracking-widest uppercase mb-3"
+                  style={{ color: 'rgba(255,255,255,0.3)' }}>📅 Registro de batallas</p>
+                <div className="space-y-2">
+                  {battles.map(battle => {
+                    const isToday = battle.day === today
+                    const won = battle.winner_league_id === myLeagueId
+                    const lost = battle.winner_league_id && battle.winner_league_id !== myLeagueId
+                    const inProgress = !battle.winner_league_id && battle.day <= today
+                    return (
+                      <motion.div key={battle.id}
+                        className="rounded-xl overflow-hidden"
+                        style={{
+                          background: isToday
+                            ? 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.04))'
+                            : 'rgba(255,255,255,0.03)',
+                          border: isToday ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                          opacity: battle.day > today ? 0.4 : 1,
+                        }}>
+                        <div className="flex items-center gap-3 px-3 py-2.5">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0"
+                            style={{ backgroundColor: won ? 'rgba(16,185,129,0.15)' : lost ? 'rgba(239,68,68,0.15)' : inProgress ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)' }}>
+                            {won ? '🏆' : lost ? '💀' : inProgress ? '⚔️' : '🔒'}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="text-sm font-bold">Día {battle.day}</p>
-                              {isToday && <span className="text-xs px-1.5 py-0.5 rounded-full font-bold text-red-400" style={{ backgroundColor: 'rgba(220,38,38,0.1)' }}>HOY</span>}
+                              <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>Día {battle.day}</span>
+                              {isToday && (
+                                <span className="text-xs px-1.5 py-0.5 rounded font-black text-red-400"
+                                  style={{ backgroundColor: 'rgba(239,68,68,0.15)' }}>HOY</span>
+                              )}
                             </div>
-                            <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
                               {BATTLE_TYPES[battle.battle_type]?.emoji} {battle.description || BATTLE_TYPES[battle.battle_type]?.label}
                             </p>
                           </div>
                           {battle.day <= today && (
                             <div className="text-right flex-shrink-0">
-                              <p className="text-xs font-bold" style={{ color: won ? '#10b981' : lost ? '#ef4444' : 'var(--text-hint)' }}>
-                                {won ? '🏆 Victoria' : lost ? '💀 Derrota' : '⏳ En curso'}
+                              <p className="text-xs font-black"
+                                style={{ color: won ? '#10b981' : lost ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
+                                {won ? 'Victoria' : lost ? 'Derrota' : 'En curso'}
                               </p>
-                              <p className="text-xs" style={{ color: 'var(--text-hint)' }}>
+                              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
                                 {isChallenger ? battle.challenger_current : battle.defender_current}/
                                 {isChallenger ? battle.challenger_target : battle.defender_target}
                               </p>
                             </div>
                           )}
                         </div>
-                      )
-                    })}
-                  </div>
+                      </motion.div>
+                    )
+                  })}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Equipos */}
-              {activeWar.status === 'active' && participants.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-bold">👥 Equipos</p>
-                    {iAmCaptain && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                        style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
-                        👑 Eres el capitán
-                      </span>
-                    )}
-                  </div>
+            {/* ── EQUIPOS ENFRENTADOS ── */}
+            {participants.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-black tracking-widest uppercase"
+                    style={{ color: 'rgba(255,255,255,0.3)' }}>👥 Tropas</p>
+                  {iAmCaptain && (
+                    <span className="text-xs px-2 py-1 rounded-full font-black"
+                      style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
+                      👑 Capitán
+                    </span>
+                  )}
+                </div>
 
-                  {/* Info roles */}
-                  <div className="rounded-2xl p-3 mb-3 space-y-1.5" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
-                    <p className="text-xs font-bold mb-1" style={{ color: '#818cf8' }}>Roles especiales (máx. 1 de cada por equipo)</p>
-                    <div className="flex items-start gap-2">
+                {/* Info roles */}
+                <div className="rounded-xl p-3 mb-3"
+                  style={{ backgroundColor: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-sm">🕵️</span>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Espía</span> — Ve el progreso del equipo rival en tiempo real</p>
+                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Espía — ve intel rival</span>
                     </div>
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-sm">💣</span>
-                      <p className="text-xs" style={{ color: 'var(--text-hint)' }}><span className="font-bold" style={{ color: 'var(--text-muted)' }}>Saboteador</span> — Puede congelar a un miembro rival una vez</p>
+                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Sabo — freeze gratis</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dos columnas enfrentadas */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Mi equipo */}
+                  <div className="rounded-xl overflow-hidden"
+                    style={{ background: 'linear-gradient(180deg, rgba(239,68,68,0.08), rgba(239,68,68,0.02))', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <div className="px-2.5 py-2 border-b flex items-center gap-1.5"
+                      style={{ borderColor: 'rgba(239,68,68,0.15)' }}>
+                      <span className="text-xs">⚔️</span>
+                      <p className="text-xs font-black text-red-400 truncate">{myLeagueName}</p>
+                    </div>
+                    <div className="divide-y" style={{ borderColor: 'rgba(239,68,68,0.08)' }}>
+                      {myTeam.filter(p => p.profiles).map(p => {
+                        const isMe = p.user_id === user.id
+                        const roleEmoji = p.role === 'spy' ? '🕵️' : p.role === 'saboteur' ? '💣' : '⚔️'
+                        return (
+                          <div key={p.id} className="px-2.5 py-2 flex items-center gap-2">
+                            <div className="relative flex-shrink-0">
+                              {p.profiles?.avatar_url
+                                ? <img src={p.profiles.avatar_url} className="w-7 h-7 rounded-full object-cover" alt="" />
+                                : <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
+                                    style={{ backgroundColor: 'rgba(239,68,68,0.15)' }}>🍺</div>}
+                              {p.is_captain && (
+                                <div className="absolute -top-1 -right-1 text-xs leading-none">👑</div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold truncate" style={{ color: isMe ? '#f59e0b' : 'var(--text-primary)' }}>
+                                {p.profiles?.username?.split(' ')[0]}{isMe ? ' ✓' : ''}
+                              </p>
+                              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{roleEmoji}</p>
+                            </div>
+                            {iAmCaptain && !isMe && (
+                              <motion.button whileTap={{ scale: 0.85 }}
+                                onClick={() => setSelectedMemberForRole(p)}
+                                className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 text-xs"
+                                style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>✏️</motion.button>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <TeamSection team={myTeam} leagueName={myLeagueName} isMyTeam={true} />
-                    <TeamSection team={enemyTeam} leagueName={enemyLeagueName} isMyTeam={false} />
+                  {/* Equipo rival */}
+                  <div className="rounded-xl overflow-hidden"
+                    style={{ background: 'linear-gradient(180deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02))', border: '1px solid rgba(99,102,241,0.2)' }}>
+                    <div className="px-2.5 py-2 border-b flex items-center gap-1.5 justify-end"
+                      style={{ borderColor: 'rgba(99,102,241,0.15)' }}>
+                      <p className="text-xs font-black text-indigo-400 truncate">{enemyLeagueName}</p>
+                      <span className="text-xs">🛡️</span>
+                    </div>
+                    <div className="divide-y" style={{ borderColor: 'rgba(99,102,241,0.08)' }}>
+                      {enemyTeam.filter(p => p.profiles).map(p => {
+                        const roleEmoji = p.role === 'spy' ? '🕵️' : p.role === 'saboteur' ? '💣' : '🛡️'
+                        return (
+                          <div key={p.id} className="px-2.5 py-2 flex items-center gap-2 flex-row-reverse">
+                            <div className="relative flex-shrink-0">
+                              {p.profiles?.avatar_url
+                                ? <img src={p.profiles.avatar_url} className="w-7 h-7 rounded-full object-cover" alt="" />
+                                : <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs"
+                                    style={{ backgroundColor: 'rgba(99,102,241,0.15)' }}>🍺</div>}
+                              {p.is_captain && (
+                                <div className="absolute -top-1 -left-1 text-xs leading-none">👑</div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 text-right">
+                              <p className="text-xs font-bold truncate" style={{ color: 'var(--text-primary)' }}>
+                                {p.profiles?.username?.split(' ')[0]}
+                              </p>
+                              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{roleEmoji}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {enemyTeam.length === 0 && (
+                        <div className="px-2.5 py-4 text-center">
+                          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>Sin datos</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+              </div>
+            )}
+          </div>
+        )}
+      </>
+    )}
+  </div>
+)}
 
       {/* ── DECLARAR GUERRA ── */}
       {tab === 'challenge' && (
