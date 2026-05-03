@@ -1,0 +1,20 @@
+name: Operación Barbacoa — Notificación masiva
+
+on:
+  schedule:
+    # Medianoche hora de Madrid el 9 de Mayo (22:00 UTC del 8 de Mayo)
+    - cron: '0 22 8 5 *'
+  workflow_dispatch: # permite lanzarlo manualmente también
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar notificación Operación Barbacoa
+        run: |
+          curl -s -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/notify_operacion_barbacoa" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo "✅ Notificación Operación Barbacoa enviada"
