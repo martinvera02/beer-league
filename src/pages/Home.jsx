@@ -368,7 +368,7 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
               <div className="w-full h-px mb-4" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />
 
               {/* Roles preview */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
+              <div className="grid grid-cols-2 gap-2 mb-4">
                 {[
                   { emoji: '🕵️', label: 'Espía',    desc: 'Ve el progreso rival en tiempo real', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
                   { emoji: '💣', label: 'Saboteador', desc: 'Congela a un rival una vez', color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
@@ -385,9 +385,10 @@ export default function Home({ setCurrentPage, setSelectedLeague }) {
               {/* Features */}
               <div className="space-y-2 mb-4">
                 {[
-                  { emoji: '📋', text: 'Misiones diarias para cada liga · puntos extra garantizados' },
-                  { emoji: '⚡', text: 'Eventos aleatorios cada 12h · double points, sabotajes, bonus' },
-                  { emoji: '🏆', text: 'Gana por puntos totales · 1000🪙 por miembro ganador' },
+                  { emoji: '🎯', text: 'Batallas colectivas · todo el equipo contribuye al objetivo' },
+                  { emoji: '⚖️', text: 'Objetivos distintos por equipo · el capitán decide las reglas' },
+                  { emoji: '👑', text: 'El capitán (más puntos) asigna roles de Espía y Saboteador' },
+                  { emoji: '🏆', text: 'Recompensa configurable · hasta 5000🪙 por miembro ganador' },
                 ].map((f, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <span className="text-sm flex-shrink-0 mt-0.5">{f.emoji}</span>
