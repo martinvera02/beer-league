@@ -322,18 +322,19 @@ export default function ClanWar() {
   }
 
   const handleAssignRole = async (userId, role) => {
-    if (!activeWar) return
-    setAssigningRole(true)
-    await supabase.from('clan_war_participants')
-      .update({ role })
-      .eq('war_id', activeWar.id)
-      .eq('user_id', userId)
-      .eq('league_id', myLeagueId)
-    soundSuccess()
-    setSelectedMemberForRole(null)
-    fetchData(true)
-    setAssigningRole(false)
-  }
+  if (!activeWar) return
+  setAssigningRole(true)
+  const { error } = await supabase.from('clan_war_participants')
+    .update({ role })
+    .eq('war_id', activeWar.id)
+    .eq('user_id', userId)
+    .eq('league_id', myLeagueId)
+  if (error) { soundError(); showMsg(false, 'Error al asignar rol') }
+  else { soundSuccess() }
+  setSelectedMemberForRole(null)
+  fetchData(true)
+  setAssigningRole(false)
+}
 
   const handleCancelWar = async () => {
     if (!activeWar) return
