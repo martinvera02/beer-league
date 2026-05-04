@@ -298,6 +298,16 @@ function UserProfile({ profileId, onClose, onOpenChat }) {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setIsFollowing(true); setFollowersCount(prev => prev + 1); soundSuccess()
+      // Notificar al usuario seguido
+      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+      await supabase.from('notifications').insert({
+        user_id: profileId,
+        type: 'new_follower',
+        title: '👤 Nuevo seguidor',
+        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
+        read: false,
+        sent_push: false,
+      })
     }
     const { data: chatFollow } = await supabase.from('follows').select('id').eq('follower_id', profileId).eq('following_id', user.id).maybeSingle()
     setCanChat(!isFollowing && !!chatFollow)
@@ -589,6 +599,16 @@ export default function Social() {
     } else {
       await supabase.from('follows').insert({ follower_id: user.id, following_id: profileId })
       setFollowing(prev => [...prev, profileId]); soundSuccess()
+      // Notificar al usuario seguido
+      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+      await supabase.from('notifications').insert({
+        user_id: profileId,
+        type: 'new_follower',
+        title: '👤 Nuevo seguidor',
+        body: `${myProfile?.username || 'Alguien'} ha empezado a seguirte`,
+        read: false,
+        sent_push: false,
+      })
     }
   }
 
@@ -694,33 +714,16 @@ export default function Social() {
     { id: 'chats',   label: '💬 Chats', unread: totalUnread },
   ]
 
-
   return (
     <div className="min-h-screen pb-24 transition-colors duration-300"
       style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)' }}>
 
-      {/* ── HEADER ── */}
       <div className="px-4 pt-6 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-black">Social 🍻</h1>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Comparte, conecta y sigue a tus rivales</p>
-          </div>
-          {totalUnread > 0 && (
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-              style={{ backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }}>
-              <div className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-xs font-black text-red-400">{totalUnread} nuevos</span>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Tabs */}
+        <h1 className="text-2xl font-bold mb-4">Social 🍻</h1>
         <div className="flex rounded-xl p-1" style={{ backgroundColor: 'var(--bg-input)' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className="relative flex-1 py-2 rounded-lg text-xs font-bold transition-colors z-10 flex items-center justify-center gap-1"
+              className="relative flex-1 py-2 rounded-lg text-xs font-medium transition-colors z-10 flex items-center justify-center gap-1"
               style={{ color: tab === t.id ? '#fff' : 'var(--text-muted)' }}>
               {tab === t.id && (
                 <motion.div layoutId="social-tab" className="absolute inset-0 rounded-lg"
@@ -742,120 +745,63 @@ export default function Social() {
 
       {/* ── FEED ── */}
       {tab === 'feed' && (
-        <div className="max-w-md mx-auto">
-          {/* Historias en el feed */}
+        <div className="max-w-md mx-auto px-4 pt-4">
           {Object.keys(storiesByUser).length > 0 && (
-            <div className="px-4 pt-4 pb-2">
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
-                  <motion.button key={userStories[0].user_id} whileTap={{ scale: 0.9 }}
-                    onClick={() => setSelectedStory(userStories[0])}
-                    className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                    <div className="p-0.5 rounded-full" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-                      <div className="p-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-base)' }}>
-                        {profile?.avatar_url
-                          ? <img src={profile.avatar_url} alt={profile.username} className="w-12 h-12 rounded-full object-cover" />
-                          : <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
-                      </div>
+            <div className="flex gap-3 overflow-x-auto pb-3 mb-4">
+              {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
+                <motion.button key={userStories[0].user_id} whileTap={{ scale: 0.95 }}
+                  onClick={() => setSelectedStory(userStories[0])}
+                  className="flex flex-col items-center gap-1 flex-shrink-0">
+                  <div className="p-0.5 rounded-full bg-gradient-to-tr from-amber-400 to-amber-600">
+                    <div className="p-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-base)' }}>
+                      <Avatar url={profile?.avatar_url} username={profile?.username} size="sm" />
                     </div>
-                    <span className="text-xs truncate w-14 text-center font-medium" style={{ color: 'var(--text-muted)' }}>{profile?.username}</span>
-                  </motion.button>
-                ))}
-              </div>
+                  </div>
+                  <span className="text-xs truncate w-14 text-center" style={{ color: 'var(--text-muted)' }}>{profile?.username}</span>
+                </motion.button>
+              ))}
             </div>
           )}
-
-          {/* Caja de nuevo post */}
-          <div className="px-4 pt-3 pb-2">
-            <motion.button whileTap={{ scale: 0.98 }} onClick={() => setShowNewPost(true)}
-              className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
-              style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
-              <div className="flex-1">
-                <p className="text-sm font-medium" style={{ color: 'var(--text-hint)' }}>¿Qué estás bebiendo?</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📷</span>
-                <div className="px-3 py-1.5 rounded-xl text-xs font-bold"
-                  style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>Post</div>
-              </div>
-            </motion.button>
-          </div>
-
-          {/* Posts */}
-          <div className="px-4 pt-2 pb-6">
-            {loading ? (
-              <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
-                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-4xl mb-3">🍺</motion.div>
-                <p className="text-sm">Cargando feed...</p>
-              </div>
-            ) : posts.length === 0 ? (
-              <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-                <div className="text-5xl mb-3">📰</div>
-                <p className="font-medium">Aún no hay posts</p>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>¡Sé el primero en publicar!</p>
-              </div>
+          <motion.div {...fadeIn} className="rounded-2xl p-3 mb-4 flex items-center gap-3 cursor-pointer"
+            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}
+            onClick={() => setShowNewPost(true)}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+            <div className="flex-1 rounded-xl px-4 py-2.5 text-sm" style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>¿Qué estás bebiendo?</div>
+          </motion.div>
+          {loading ? <p className="text-center py-10" style={{ color: 'var(--text-muted)' }}>Cargando feed...</p>
+            : posts.length === 0 ? (
+              <motion.div {...fadeIn} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-5xl mb-3">📰</div><p>Aún no hay posts</p>
+              </motion.div>
             ) : (
-              <div className="space-y-3">
-                {posts.map((post, idx) => {
+              <div className="space-y-4">
+                {posts.map(post => {
                   const isMe = post.user_id === user.id
                   const liked = post.post_likes?.some(l => l.user_id === user.id)
-                  const likesCount = post.post_likes?.length || 0
-                  const commentsCount = post.post_comments?.length || 0
                   return (
-                    <motion.div key={post.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.04 }}
-                      className="rounded-2xl overflow-hidden"
-                      style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-
-                      {/* Header del post */}
-                      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-                        <motion.button whileTap={{ scale: 0.92 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
-                          {post.profiles?.avatar_url
-                            ? <img src={post.profiles.avatar_url} alt={post.profiles.username} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                            : <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                    <motion.div key={post.id} variants={staggerItem} initial="initial" animate="animate"
+                      className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
+                      <div className="flex items-center gap-3 p-4 pb-3">
+                        <motion.button whileTap={{ scale: 0.95 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
+                          <Avatar url={post.profiles?.avatar_url} username={post.profiles?.username} />
                         </motion.button>
-                        <div className="flex-1 min-w-0">
-                          <motion.button whileTap={{ scale: 0.97 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
-                            <p className="font-black text-sm text-left">{post.profiles?.username}</p>
+                        <div className="flex-1">
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => !isMe && setViewingProfile(post.user_id)}>
+                            <p className="font-bold text-sm text-left">{post.profiles?.username}</p>
                           </motion.button>
                           <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(post.created_at)}</p>
                         </div>
-                        {isMe && (
-                          <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)}
-                            className="w-8 h-8 rounded-xl flex items-center justify-center"
-                            style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-hint)' }}>
-                            🗑️
-                          </motion.button>
-                        )}
+                        {isMe && <motion.button whileTap={{ scale: 0.9 }} onClick={() => deletePost(post.id)} className="text-lg" style={{ color: 'var(--text-hint)' }}>🗑️</motion.button>}
                       </div>
-
-                      {/* Contenido */}
-                      {post.content && (
-                        <p className="px-4 pb-3 text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{post.content}</p>
-                      )}
-                      {post.image_url && (
-                        <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />
-                      )}
-
-                      {/* Acciones */}
-                      <div className="flex items-center gap-1 px-3 py-2.5 border-t" style={{ borderColor: 'var(--border)' }}>
-                        <motion.button whileTap={{ scale: 0.8 }} onClick={() => toggleLike(post)}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm flex-1 justify-center"
-                          style={{ backgroundColor: liked ? 'rgba(245,158,11,0.1)' : 'transparent' }}>
-                          <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} transition={{ duration: 0.3 }} className="text-lg">
-                            {liked ? '🍺' : '🤍'}
-                          </motion.span>
-                          <span className="font-bold text-xs" style={{ color: liked ? '#f59e0b' : 'var(--text-muted)' }}>{likesCount}</span>
+                      {post.content && <p className="px-4 pb-3 text-sm leading-relaxed">{post.content}</p>}
+                      {post.image_url && <img src={post.image_url} alt="Post" className="w-full object-cover max-h-80" />}
+                      <div className="flex items-center gap-4 px-4 py-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                        <motion.button whileTap={{ scale: 0.8 }} onClick={() => toggleLike(post)} className="flex items-center gap-1.5 text-sm">
+                          <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} transition={{ duration: 0.3 }} className="text-xl">{liked ? '🍺' : '🤍'}</motion.span>
+                          <span style={{ color: liked ? '#f59e0b' : 'var(--text-muted)' }}>{post.post_likes?.length || 0}</span>
                         </motion.button>
-
-                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => openCommentsPanel(post)}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm flex-1 justify-center"
-                          style={{ color: 'var(--text-muted)' }}>
-                          <span className="text-lg">💬</span>
-                          <span className="font-bold text-xs">{commentsCount}</span>
+                        <motion.button whileTap={{ scale: 0.9 }} onClick={() => openCommentsPanel(post)} className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                          <span className="text-xl">💬</span><span>{post.post_comments?.length || 0}</span>
                         </motion.button>
                       </div>
                     </motion.div>
@@ -863,59 +809,35 @@ export default function Social() {
                 })}
               </div>
             )}
-          </div>
         </div>
       )}
 
       {/* ── HISTORIAS ── */}
       {tab === 'stories' && (
         <div className="max-w-md mx-auto px-4 pt-4">
-          {/* Botón añadir historia */}
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => storyImageRef.current?.click()} disabled={uploadingStory}
-            className="w-full rounded-2xl p-5 flex items-center gap-4 mb-5"
-            style={{ backgroundColor: 'var(--bg-card)', border: '2px dashed rgba(245,158,11,0.3)' }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(245,158,11,0.05))', border: '2px solid rgba(245,158,11,0.3)' }}>
-              {uploadingStory ? '⏳' : '+'}
-            </div>
-            <div className="text-left">
-              <p className="font-black text-sm">{uploadingStory ? 'Subiendo...' : 'Añadir historia'}</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Visible durante 24 horas</p>
-            </div>
+          <motion.button whileTap={{ scale: 0.96 }} onClick={() => storyImageRef.current?.click()} disabled={uploadingStory}
+            className="w-full border-2 border-dashed rounded-2xl py-6 flex flex-col items-center gap-2 mb-6"
+            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            <span className="text-3xl">{uploadingStory ? '⏳' : '⭕'}</span>
+            <span className="text-sm">{uploadingStory ? 'Subiendo...' : 'Añadir historia'}</span>
+            <span className="text-xs" style={{ color: 'var(--text-hint)' }}>Desaparece en 24 horas</span>
           </motion.button>
           <input ref={storyImageRef} type="file" accept="image/*" onChange={submitStory} className="hidden" />
-
           {Object.keys(storiesByUser).length === 0 ? (
-            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-              <div className="text-5xl mb-3">⭕</div>
-              <p className="font-medium">No hay historias activas</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Las historias duran 24 horas</p>
-            </div>
+            <motion.div {...fadeIn} className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+              <div className="text-5xl mb-3">⭕</div><p>No hay historias activas</p>
+            </motion.div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {Object.values(storiesByUser).map(({ profile, stories: userStories }) => (
-                <motion.button key={userStories[0].user_id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => setSelectedStory(userStories[0])}
-                  className="relative rounded-2xl overflow-hidden aspect-[3/4]"
-                  style={{ backgroundColor: 'var(--bg-card)' }}>
+                <motion.button key={userStories[0].user_id} variants={staggerItem} initial="initial" animate="animate"
+                  whileTap={{ scale: 0.95 }} onClick={() => setSelectedStory(userStories[0])}
+                  className="relative rounded-2xl overflow-hidden aspect-[3/4]" style={{ backgroundColor: 'var(--bg-card)' }}>
                   <img src={userStories[0].image_url} alt="Historia" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }} />
-                  {/* Ring dorado */}
-                  <div className="absolute top-3 left-3">
-                    <div className="p-0.5 rounded-full" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-                      <div className="p-0.5 rounded-full bg-black/30">
-                        {profile?.avatar_url
-                          ? <img src={profile.avatar_url} alt={profile.username} className="w-8 h-8 rounded-full object-cover" />
-                          : <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm bg-black/40">🍺</div>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <p className="text-xs font-black text-white truncate">{profile?.username}</p>
-                    <p className="text-xs text-white/60 mt-0.5">{formatTime(userStories[0].created_at)}</p>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                    <Avatar url={profile?.avatar_url} username={profile?.username} size="sm" />
+                    <span className="text-xs font-semibold text-white truncate">{profile?.username}</span>
                   </div>
                 </motion.button>
               ))}
@@ -927,51 +849,40 @@ export default function Social() {
       {/* ── BUSCAR ── */}
       {tab === 'people' && (
         <div className="max-w-md mx-auto px-4 pt-4">
-          {/* Buscador */}
           <div className="relative mb-5">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--text-hint)' }}>
-              {searching
-                ? <motion.span animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} style={{ display: 'inline-block' }}>🔍</motion.span>
-                : '🔍'}
-            </div>
             <input type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)}
-              placeholder="Buscar por nombre de usuario..."
-              className="w-full rounded-2xl pl-11 pr-4 py-3.5 text-sm outline-none"
-              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+              placeholder="Buscar usuarios..."
+              className="w-full rounded-2xl px-5 py-3.5 text-sm outline-none focus:ring-2 focus:ring-amber-500 pr-10"
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }} />
+            {searching
+              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="absolute right-4 top-1/2 -translate-y-1/2 text-lg">🔍</motion.div>
+              : <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lg" style={{ color: 'var(--text-hint)' }}>🔍</span>}
           </div>
-
           {searchQuery ? (
             searchResults.length === 0 && !searching ? (
-              <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
-                <div className="text-4xl mb-2">😶</div>
-                <p className="text-sm">No se encontró ningún usuario</p>
+              <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-4xl mb-2">😶</div><p className="text-sm">No se encontró ningún usuario</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {searchResults.map((profile, idx) => {
+                {searchResults.map(profile => {
                   const isFollowingUser = following.includes(profile.id)
                   return (
-                    <motion.div key={profile.id}
-                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.04 }}
-                      className="rounded-2xl p-3.5 flex items-center gap-3"
-                      style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                      <motion.button whileTap={{ scale: 0.92 }} onClick={() => setViewingProfile(profile.id)}>
+                    <motion.div key={profile.id} variants={staggerItem} initial="initial" animate="animate"
+                      className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: 'var(--bg-card)' }}>
+                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => setViewingProfile(profile.id)}>
                         {profile.avatar_url
-                          ? <img src={profile.avatar_url} alt={profile.username} className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
-                          : <div className="w-11 h-11 rounded-full flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                          ? <img src={profile.avatar_url} alt={profile.username} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                          : <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
                       </motion.button>
-                      <motion.button className="flex-1 text-left min-w-0" whileTap={{ scale: 0.98 }} onClick={() => setViewingProfile(profile.id)}>
-                        <p className="font-black text-sm truncate">{profile.username}</p>
+                      <motion.button className="flex-1 text-left" whileTap={{ scale: 0.98 }} onClick={() => setViewingProfile(profile.id)}>
+                        <p className="font-bold text-sm">{profile.username}</p>
                         <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>Ver perfil →</p>
                       </motion.button>
-                      <motion.button whileTap={{ scale: 0.92 }} onClick={() => toggleFollow(profile.id)}
-                        className="px-4 py-2 rounded-xl text-xs font-black flex-shrink-0"
-                        style={{
-                          backgroundColor: isFollowingUser ? 'var(--bg-input)' : 'rgba(245,158,11,0.15)',
-                          color: isFollowingUser ? 'var(--text-muted)' : '#f59e0b',
-                          border: isFollowingUser ? '1px solid var(--border)' : '1px solid rgba(245,158,11,0.3)',
-                        }}>
-                        {isFollowingUser ? '✓ Siguiendo' : '+ Seguir'}
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => toggleFollow(profile.id)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0"
+                        style={{ backgroundColor: isFollowingUser ? 'var(--bg-input)' : '#f59e0b', color: isFollowingUser ? 'var(--text-muted)' : '#fff' }}>
+                        {isFollowingUser ? 'Siguiendo' : '+ Seguir'}
                       </motion.button>
                     </motion.div>
                   )
@@ -981,8 +892,8 @@ export default function Social() {
           ) : (
             <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
               <div className="text-5xl mb-3">🔍</div>
-              <p className="font-bold">Busca usuarios por nombre</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a alguien para poder chatear</p>
+              <p className="font-medium">Busca usuarios por nombre</p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a otros para poder chatear</p>
             </div>
           )}
         </div>
@@ -992,40 +903,39 @@ export default function Social() {
       {tab === 'chats' && (
         <div className="max-w-md mx-auto px-4 pt-4">
           {loadingChats ? (
-            <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="text-3xl mb-2">💬</motion.div>
               <p className="text-sm">Cargando chats...</p>
             </div>
           ) : chats.length === 0 ? (
             <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
               <div className="text-5xl mb-3">💬</div>
-              <p className="font-bold">No tienes chats activos</p>
-              <p className="text-sm mt-2" style={{ color: 'var(--text-hint)' }}>Sigue a alguien y si te sigue de vuelta podréis chatear</p>
+              <p className="font-medium">No tienes chats activos</p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-hint)' }}>Sigue a alguien y si te sigue de vuelta podréis chatear</p>
               <motion.button whileTap={{ scale: 0.96 }} onClick={() => setTab('people')}
-                className="mt-5 px-6 py-3 rounded-2xl text-sm font-black text-white"
-                style={{ backgroundColor: '#f59e0b' }}>
+                className="mt-4 px-6 py-3 rounded-2xl text-sm font-bold text-white" style={{ backgroundColor: '#f59e0b' }}>
                 🔍 Buscar usuarios
               </motion.button>
             </div>
           ) : (
             <div className="space-y-2">
-              {chats.map((chat, idx) => {
+              {chats.map(chat => {
                 const unread = unreadByChat[chat.id] || 0
                 const lastMsgText = chat.lastMsg?.image_url && !chat.lastMsg?.content ? '📷 Imagen' : (chat.lastMsg?.content || 'Inicia la conversación...')
                 return (
-                  <motion.button key={chat.id}
-                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.04 }}
+                  <motion.button key={chat.id} variants={staggerItem} initial="initial" animate="animate"
                     whileTap={{ scale: 0.97 }}
                     onClick={() => handleOpenChat(chat, chat.otherUser)}
                     className="w-full rounded-2xl p-4 flex items-center gap-3 text-left"
                     style={{
-                      backgroundColor: unread > 0 ? 'rgba(16,185,129,0.06)' : 'var(--bg-card)',
-                      border: unread > 0 ? '1px solid rgba(16,185,129,0.25)' : '1px solid var(--border)',
+                      backgroundColor: 'var(--bg-card)',
+                      border: unread > 0 ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent',
                     }}>
                     <div className="relative flex-shrink-0">
                       {chat.otherUser?.avatar_url
                         ? <img src={chat.otherUser.avatar_url} alt={chat.otherUser.username} className="w-12 h-12 rounded-full object-cover" />
                         : <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>}
+                      {/* Badge de no leídos en el avatar */}
                       {unread > 0 && (
                         <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}
                           className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-white font-black"
@@ -1035,17 +945,16 @@ export default function Social() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm truncate ${unread > 0 ? 'font-black' : 'font-bold'}`}>{chat.otherUser?.username}</p>
-                      <p className="text-xs truncate mt-0.5"
-                        style={{ color: unread > 0 ? 'var(--text-primary)' : 'var(--text-hint)', fontWeight: unread > 0 ? 600 : 400 }}>
+                      <p className={`text-sm ${unread > 0 ? 'font-bold' : 'font-medium'}`}>{chat.otherUser?.username}</p>
+                      <p className={`text-xs truncate mt-0.5 ${unread > 0 ? 'font-semibold' : ''}`}
+                        style={{ color: unread > 0 ? 'var(--text-primary)' : 'var(--text-hint)' }}>
                         {lastMsgText}
                       </p>
                     </div>
                     {chat.lastMsg && (
-                      <div className="flex-shrink-0 text-right">
-                        <p className="text-xs" style={{ color: 'var(--text-hint)' }}>{formatTime(chat.lastMsg.created_at)}</p>
-                        {unread > 0 && <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1 ml-auto" />}
-                      </div>
+                      <p className="text-xs flex-shrink-0" style={{ color: 'var(--text-hint)' }}>
+                        {formatTime(chat.lastMsg.created_at)}
+                      </p>
                     )}
                   </motion.button>
                 )
@@ -1055,44 +964,38 @@ export default function Social() {
         </div>
       )}
 
-      {/* FAB nuevo post */}
+      {/* FAB */}
       {tab === 'feed' && (
         <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}
           onClick={() => setShowNewPost(true)}
-          className="fixed bottom-24 right-5 w-14 h-14 text-white rounded-full shadow-xl flex items-center justify-center text-2xl z-40"
-          style={{ background: 'linear-gradient(135deg, #d97706, #f59e0b)', boxShadow: '0 6px 25px rgba(245,158,11,0.4)' }}>
+          className="fixed bottom-24 right-5 w-14 h-14 bg-amber-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-40">
           ✏️
         </motion.button>
       )}
 
-      {/* ── MODAL NUEVO POST ── */}
+      {/* Modal nuevo post */}
       <AnimatePresence>
         {showNewPost && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex flex-col justify-end"
-            style={{ backgroundColor: 'rgba(0,0,0,0.8)' }} onClick={closeNewPost}>
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)' }} onClick={closeNewPost}>
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
               className="flex flex-col rounded-t-3xl w-full max-w-lg mx-auto"
-              style={{ backgroundColor: 'var(--bg-card)', maxHeight: '90vh' }}>
-
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b flex-shrink-0"
-                style={{ borderColor: 'var(--border)' }}>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={closeNewPost}
-                  className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cancelar</motion.button>
-                <h2 className="text-base font-black">Nuevo post</h2>
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', maxHeight: '90vh' }}>
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0 border-b" style={{ borderColor: 'var(--border)' }}>
+                <motion.button whileTap={{ scale: 0.9 }} onClick={closeNewPost} className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cancelar</motion.button>
+                <h2 className="text-base font-bold">Nuevo post</h2>
                 <motion.button whileTap={{ scale: 0.95 }} onClick={submitPost} disabled={!canPublish}
-                  className="px-4 py-2 rounded-full text-sm font-black"
-                  style={{ backgroundColor: canPublish ? '#f59e0b' : 'var(--bg-input)', color: canPublish ? '#000' : 'var(--text-hint)' }}>
+                  className="px-4 py-2 rounded-full text-sm font-bold"
+                  style={{ backgroundColor: canPublish ? '#f59e0b' : 'var(--bg-input)', color: canPublish ? '#fff' : 'var(--text-hint)' }}>
                   {uploadingPost ? '...' : 'Publicar'}
                 </motion.button>
               </div>
-
               <div className="flex-1 overflow-y-auto px-5 pt-4">
                 <div className="flex gap-3 mb-4">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 mt-1"
-                    style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg mt-1" style={{ backgroundColor: 'var(--bg-input)' }}>🍺</div>
                   <textarea ref={textareaRef} value={newPostContent} onChange={e => setNewPostContent(e.target.value)}
                     placeholder="¿Qué estás bebiendo? 🍺" rows={5}
                     className="flex-1 outline-none resize-none text-sm bg-transparent leading-relaxed"
@@ -1101,107 +1004,78 @@ export default function Social() {
                 {newPostPreview && (
                   <div className="relative mb-4 ml-12">
                     <img src={newPostPreview} alt="Preview" className="w-full rounded-2xl max-h-52 object-cover" />
-                    <motion.button whileTap={{ scale: 0.9 }}
-                      onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setNewPostImage(null); setNewPostPreview(null) }}
                       className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm">✕</motion.button>
                   </div>
                 )}
               </div>
-
               <div className="flex-shrink-0 border-t px-5 py-3 flex items-center gap-3" style={{ borderColor: 'var(--border)' }}>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => postImageRef.current?.click()}
-                  className="p-2 rounded-xl" style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => postImageRef.current?.click()} style={{ color: '#f59e0b' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                     <path fillRule="evenodd" d="M1.5 6a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 6v12a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 18V6zM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0021 18v-1.94l-2.69-2.689a1.5 1.5 0 00-2.12 0l-.88.879.97.97a.75.75 0 11-1.06 1.06l-5.16-5.159a1.5 1.5 0 00-2.12 0L3 16.061zm10.125-7.81a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0z" clipRule="evenodd" />
                   </svg>
                 </motion.button>
                 <input ref={postImageRef} type="file" accept="image/*" onChange={handlePostImageSelect} className="hidden" />
-                <p className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>
-                  {newPostContent.length > 0 && `${newPostContent.length} caracteres`}
-                </p>
+                <p className="text-xs ml-auto" style={{ color: 'var(--text-hint)' }}>{newPostContent.length > 0 && `${newPostContent.length} caracteres`}</p>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── VISOR HISTORIA ── */}
+      {/* Visor historia */}
       <AnimatePresence>
         {selectedStory && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black z-50 flex items-center justify-center"
-            onClick={() => setSelectedStory(null)}>
-            <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-              src={selectedStory.image_url} alt="Historia" className="w-full h-full object-contain" />
-            <div className="absolute top-0 left-0 right-0 p-6 flex items-center gap-3"
-              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.6), transparent)' }}>
-              {selectedStory.profiles?.avatar_url
-                ? <img src={selectedStory.profiles.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-amber-400" />
-                : <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl bg-black/40">🍺</div>}
+            className="fixed inset-0 bg-black z-50 flex items-center justify-center" onClick={() => setSelectedStory(null)}>
+            <motion.img initial={{ scale: 0.9 }} animate={{ scale: 1 }} src={selectedStory.image_url} alt="Historia" className="w-full h-full object-contain" />
+            <div className="absolute top-6 left-4 flex items-center gap-2">
+              <Avatar url={selectedStory.profiles?.avatar_url} username={selectedStory.profiles?.username} />
               <div>
-                <p className="text-white font-black text-sm">{selectedStory.profiles?.username}</p>
-                <p className="text-white/50 text-xs">{formatTime(selectedStory.created_at)}</p>
+                <p className="text-white font-bold text-sm">{selectedStory.profiles?.username}</p>
+                <p className="text-gray-300 text-xs">{formatTime(selectedStory.created_at)}</p>
               </div>
-              <button onClick={() => setSelectedStory(null)} className="ml-auto text-white/70 text-2xl">✕</button>
             </div>
+            <button onClick={() => setSelectedStory(null)} className="absolute top-6 right-4 text-white text-2xl">✕</button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── PANEL COMENTARIOS ── */}
+      {/* Panel comentarios */}
       <AnimatePresence>
         {openComments && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end"
-            style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+            className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
             onClick={closeCommentsPanel}>
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 400, damping: 40 }}
               onClick={e => e.stopPropagation()}
-              className="w-full rounded-t-3xl flex flex-col"
-              style={{ backgroundColor: 'var(--bg-card)', height: '80vh' }}>
-
-              <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
-                <div className="flex items-center gap-2">
-                  <p className="font-black text-base">Comentarios</p>
-                  {comments.length > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                      style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>{comments.length}</span>
-                  )}
-                </div>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={closeCommentsPanel}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)' }}>✕</motion.button>
+              style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', width: '100%', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', height: '80vh' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                <p style={{ fontWeight: 'bold', fontSize: 16 }}>Comentarios {comments.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 'normal', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 999 }}>{comments.length}</span>}</p>
+                <button onClick={closeCommentsPanel} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer', backgroundColor: 'var(--bg-input)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>✕</button>
               </div>
-
-              <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px' }}>
                 {comments.length === 0 ? (
-                  <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
-                    <div className="text-4xl mb-2">💬</div>
-                    <p className="text-sm">Sin comentarios todavía</p>
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
+                    <p style={{ fontSize: 14 }}>Sin comentarios todavía</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {comments.map(comment => {
                       const isMe = comment.user_id === user.id
                       return (
-                        <motion.div key={comment.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                          className="flex gap-3">
-                          <div className="w-9 h-9 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center"
-                            style={{ backgroundColor: 'var(--bg-input)' }}>
-                            {comment.profiles?.avatar_url
-                              ? <img src={comment.profiles.avatar_url} className="w-full h-full object-cover" alt="" />
-                              : <span className="text-lg">🍺</span>}
+                        <motion.div key={comment.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', gap: 10 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, backgroundColor: 'var(--bg-input)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            {comment.profiles?.avatar_url ? <img src={comment.profiles.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <span style={{ fontSize: 18 }}>🍺</span>}
                           </div>
-                          <div className="flex-1">
-                            <div className="rounded-2xl px-3.5 py-2.5"
-                              style={{ backgroundColor: isMe ? 'rgba(245,158,11,0.1)' : 'var(--bg-input)', borderRadius: '4px 16px 16px 16px' }}>
-                              <p className="text-xs font-black mb-1" style={{ color: isMe ? '#f59e0b' : 'var(--text-muted)' }}>
-                                {comment.profiles?.username}{isMe && ' (tú)'}
-                              </p>
-                              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{comment.content}</p>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ borderRadius: '4px 16px 16px 16px', padding: '10px 14px', backgroundColor: isMe ? 'rgba(245,158,11,0.15)' : 'var(--bg-input)' }}>
+                              <p style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 4, color: isMe ? '#f59e0b' : 'var(--text-primary)' }}>{comment.profiles?.username} {isMe && '(tú)'}</p>
+                              <p style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5 }}>{comment.content}</p>
                             </div>
-                            <p className="text-xs mt-1 ml-1" style={{ color: 'var(--text-hint)' }}>{formatTime(comment.created_at)}</p>
+                            <p style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 4, marginLeft: 4 }}>{formatTime(comment.created_at)}</p>
                           </div>
                         </motion.div>
                       )
@@ -1210,23 +1084,15 @@ export default function Social() {
                   </div>
                 )}
               </div>
-
-              <div className="flex-shrink-0 border-t px-4 py-3 pb-10 flex gap-3 items-end"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-card)' }}>
+              <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)', padding: '12px 16px 80px 16px', display: 'flex', gap: 10, alignItems: 'flex-end', backgroundColor: 'var(--bg-card)' }}>
                 <textarea value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={handleCommentKeyDown}
                   placeholder="Escribe un comentario..." rows={1}
-                  className="flex-1 rounded-2xl px-4 py-2.5 outline-none resize-none text-sm"
-                  style={{ backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', maxHeight: 80, fontFamily: 'inherit', lineHeight: 1.5 }} />
-                <motion.button whileTap={{ scale: 0.9 }} onClick={submitComment}
-                  disabled={!commentText.trim() || sendingComment}
-                  className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: commentText.trim() ? '#f59e0b' : 'var(--bg-input)', color: commentText.trim() ? '#000' : 'var(--text-hint)' }}>
+                  style={{ flex: 1, borderRadius: 20, padding: '10px 16px', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)', border: 'none', outline: 'none', resize: 'none', fontSize: 14, maxHeight: 80, fontFamily: 'inherit', lineHeight: 1.5 }} />
+                <motion.button whileTap={{ scale: 0.9 }} onClick={submitComment} disabled={!commentText.trim() || sendingComment}
+                  style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: 'none', cursor: 'pointer', backgroundColor: commentText.trim() && !sendingComment ? '#f59e0b' : 'var(--bg-input)', color: commentText.trim() && !sendingComment ? '#fff' : 'var(--text-hint)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: !commentText.trim() || sendingComment ? 0.5 : 1 }}>
                   {sendingComment
-                    ? <motion.div className="w-4 h-4 border-2 rounded-full" style={{ borderColor: 'currentColor', borderTopColor: 'transparent' }}
-                        animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
-                    : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-                      </svg>}
+                    ? <motion.div style={{ width: 18, height: 18, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%' }} animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} />
+                    : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}><path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" /></svg>}
                 </motion.button>
               </div>
             </motion.div>
