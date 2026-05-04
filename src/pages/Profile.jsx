@@ -97,18 +97,24 @@ async function detectAchievements(userId, stats, supabaseClient) {
     { data: followers },
     { data: stories },
     { data: messages },
-    { data: leagueMembers },
+    { data: myRankings },
+    { data: stockPositions },
+    { data: loans },
+    { data: disputeVotes },
   ] = await Promise.all([
-    supabaseClient.from('drinks').select('drink_type_id, consumed_at, league_id, user_id').eq('user_id', userId),
+    supabaseClient.from('drinks').select('drink_type_id, consumed_at, league_id').eq('user_id', userId).eq('is_adjustment', false),
     supabaseClient.from('wallets').select('balance').eq('user_id', userId).single(),
     supabaseClient.from('market_positions').select('id').eq('user_id', userId),
     supabaseClient.from('roulette_bets').select('won, net, created_at, bet_amount').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabaseClient.from('active_powerups').select('powerup_id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
-    supabaseClient.from('league_transfers').select('receiver_id, amount, created_at').eq('sender_id', userId),
+    supabaseClient.from('active_powerups').select('id, effect_type, created_at, target_user_id').eq('user_id', userId),
+    supabaseClient.from('league_transfers').select('receiver_id, amount').eq('sender_id', userId),
     supabaseClient.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', userId),
     supabaseClient.from('stories').select('id').eq('user_id', userId),
     supabaseClient.from('messages').select('id').eq('user_id', userId),
-    supabaseClient.from('league_members').select('league_id').eq('user_id', userId),
+    supabaseClient.from('league_rankings').select('user_id, total_points, total_drinks, league_id').eq('user_id', userId),
+    supabaseClient.from('stock_positions').select('id').eq('user_id', userId),
+    supabaseClient.from('bank_loans').select('status').eq('user_id', userId),
+    supabaseClient.from('dispute_votes').select('id').eq('user_id', userId),
   ])
 
   const uniqueDrinks = stats?.count || 0
@@ -126,27 +132,30 @@ async function detectAchievements(userId, stats, supabaseClient) {
   }, {})
   const maxDrinksInDay = Math.max(0, ...Object.values(drinksByDay))
 
-  const hasMartesM = (drinks || []).some(d => {
-    const madridDate = new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-    return madridDate.getDay() === 2
-  })
+  const toMadrid = ts => new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+  const drinkWeekDays = (drinks || []).map(d => toMadrid(d.consumed_at).getDay())
+  const drinkHours    = (drinks || []).map(d => toMadrid(d.consumed_at).getHours())
 
-  let rouletteStreak = 0
-  for (const bet of (rouletteBets || [])) {
-    if (bet.won) rouletteStreak++
-    else break
-  }
+  const hasMartesM     = drinkWeekDays.some(d => d === 2)
+  const hasMondayDrink = drinkWeekDays.some(d => d === 1)
+  const hasNightOwl    = drinkHours.some(h => h >= 4 && h < 6)
+  const hasEarlyBird   = drinkHours.some(h => h < 12)
 
-  const hasBigBet = (rouletteBets || []).some(b => b.bet_amount >= 500)
-  const hasBigWin = (rouletteBets || []).some(b => b.won && b.net >= 500)
-  const totalBets = (rouletteBets || []).length
+  let rouletteStreak = 0, rouletteLosingStreak = 0
+  for (const bet of (rouletteBets || [])) { if (bet.won) rouletteStreak++; else break }
+  for (const bet of (rouletteBets || [])) { if (!bet.won) rouletteLosingStreak++; else break }
+  const hasBigBet      = (rouletteBets || []).some(b => b.bet_amount >= 500)
+  const hasBigWin      = (rouletteBets || []).some(b => b.won && b.net >= 500)
+  const totalBets      = (rouletteBets || []).length
   const hasRouletteWin = (rouletteBets || []).some(b => b.won)
 
   const uniqueReceivers = new Set((transfers || []).map(t => t.receiver_id))
   const totalSent = (transfers || []).reduce((s, t) => s + (t.amount || 0), 0)
 
-  const hasSabotage = (activePowerups || []).some(p => p.effect_type === 'sabotage')
+  const hasSabotage   = (activePowerups || []).some(p => p.effect_type === 'sabotage')
   const hasShieldUsed = (activePowerups || []).some(p => p.effect_type === 'shield')
+  const hasTurboUsed  = (activePowerups || []).some(p => p.effect_type === 'turbo')
+  const hasDoubleUsed = (activePowerups || []).some(p => p.effect_type === 'double_points')
 
   const attackPowerupsByDay = (activePowerups || []).reduce((acc, p) => {
     if (['sabotage', 'sniper'].includes(p.effect_type)) {
@@ -158,33 +167,14 @@ async function detectAchievements(userId, stats, supabaseClient) {
   }, {})
   const hasWarMode = Object.values(attackPowerupsByDay).some(s => s.has('sabotage') && s.has('sniper'))
 
-  let hasRevenge = false
-  if (hasSabotage) {
-    const { data: receivedSabotage } = await supabaseClient
-      .from('active_powerups').select('user_id, created_at')
-      .eq('target_user_id', userId).eq('effect_type', 'sabotage')
-    if (receivedSabotage && receivedSabotage.length > 0) {
-      const attackerIds = new Set(receivedSabotage.map(s => s.user_id))
-      const myAttacks = (activePowerups || []).filter(p => p.effect_type === 'sabotage')
-      hasRevenge = myAttacks.some(a => attackerIds.has(a.target_user_id))
-    }
-  }
-
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  const recentAttacks = (activePowerups || []).filter(p =>
-    ['sabotage', 'sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo
-  )
-  const isPacifist = uniqueDrinks > 0 && recentAttacks.length === 0
+  const isPacifist = uniqueDrinks > 0 &&
+    !(activePowerups || []).some(p => ['sabotage','sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo)
 
   const sortedDrinks = [...(drinks || [])].sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
-  let hasComeBack = false
-  if (sortedDrinks.length >= 2) {
-    const latest = new Date(sortedDrinks[0].consumed_at)
-    const previous = new Date(sortedDrinks[1].consumed_at)
-    hasComeBack = (latest - previous) / (1000 * 60 * 60 * 24) >= 7
-  }
+  const hasComeBack = sortedDrinks.length >= 2 &&
+    (new Date(sortedDrinks[0].consumed_at) - new Date(sortedDrinks[1].consumed_at)) / 86400000 >= 7
 
-  // Ranking en paralelo — sin loops secuenciales
   const leagueIds = (myRankings || []).map(r => r.league_id)
   let isTop1 = false, isTop3 = false, isMostActive = false
   if (leagueIds.length > 0) {
@@ -206,8 +196,8 @@ async function detectAchievements(userId, stats, supabaseClient) {
     })
   }
 
-  const { data: myPosts } = await supabaseClient.from('posts').select('id').eq('user_id', userId)
   let totalLikes = 0
+  const { data: myPosts } = await supabaseClient.from('posts').select('id').eq('user_id', userId)
   if (myPosts && myPosts.length > 0) {
     const { count } = await supabaseClient.from('post_likes')
       .select('id', { count: 'exact', head: true })
@@ -215,39 +205,74 @@ async function detectAchievements(userId, stats, supabaseClient) {
     totalLikes = count || 0
   }
 
+  const hasLoanTaken    = (loans || []).length > 0
+  const hasLoanPaid     = (loans || []).some(l => l.status === 'repaid')
+  const hasLoanDefault  = (loans || []).some(l => l.status === 'defaulted')
+  const hasStockHolder  = (stockPositions || []).length > 0
+  const hasDisputeJudge = (disputeVotes || []).length >= 5
+
   const conditions = {
-    first_drink:      uniqueDrinks >= 1,
-    drinks_10:        uniqueDrinks >= 10,
-    drinks_50:        uniqueDrinks >= 50,
-    drinks_100:       uniqueDrinks >= 100,
-    martes_macarra:   hasMartesM,
-    variety_5:        drinkTypes.size >= 5,
-    drinks_day_3:     maxDrinksInDay >= 3,
-    drinks_day_10:    maxDrinksInDay >= 10,
-    top1_league:      isTop1,
-    come_back:        hasComeBack,
-    most_active:      isMostActive,
-    roulette_win:     hasRouletteWin,
-    roulette_3wins:   rouletteStreak >= 3,
-    millionaire:      balance >= 1000,
-    market_5:         marketCount >= 5,
-    big_bet:          hasBigBet,
-    broke:            balance === 0 && uniqueDrinks > 0,
-    negative_balance: balance < 0,
-    lender:           uniqueReceivers.size >= 3,
-    big_sender:       totalSent >= 1000,
-    roulette_10bets:  totalBets >= 10,
-    big_win:          hasBigWin,
-    sabotage:         hasSabotage,
-    shield:           hasShieldUsed,
-    generous:         (transfers || []).length >= 1,
-    popular:          totalLikes >= 10,
-    pacifist:         isPacifist,
-    war_mode:         hasWarMode,
-    revenge:          hasRevenge,
-    influencer:       followersCount >= 5,
-    chatterbox:       messagesCount >= 50,
-    photographer:     storiesCount >= 5,
+    first_drink:       uniqueDrinks >= 1,
+    drinks_10:         uniqueDrinks >= 10,
+    drinks_50:         uniqueDrinks >= 50,
+    drinks_100:        uniqueDrinks >= 100,
+    drinks_200:        uniqueDrinks >= 200,
+    drinks_500:        uniqueDrinks >= 500,
+    martes_macarra:    hasMartesM,
+    variety_5:         drinkTypes.size >= 5,
+    drinks_day_3:      maxDrinksInDay >= 3,
+    drinks_day_5:      maxDrinksInDay >= 5,
+    drinks_day_10:     maxDrinksInDay >= 10,
+    top1_league:       isTop1,
+    top3_league:       isTop3,
+    come_back:         hasComeBack,
+    most_active:       isMostActive,
+    night_owl:         hasNightOwl,
+    early_bird:        hasEarlyBird,
+    monday_drinker:    hasMondayDrink,
+    roulette_win:      hasRouletteWin,
+    roulette_3wins:    rouletteStreak >= 3,
+    roulette_loser:    rouletteLosingStreak >= 5,
+    roulette_10bets:   totalBets >= 10,
+    millionaire:       balance >= 1000,
+    millionaire_2:     balance >= 5000,
+    market_5:          marketCount >= 5,
+    big_bet:           hasBigBet,
+    big_win:           hasBigWin,
+    broke:             balance === 0 && uniqueDrinks > 0,
+    negative_balance:  balance < 0,
+    lender:            uniqueReceivers.size >= 3,
+    big_sender:        totalSent >= 1000,
+    loan_taken:        hasLoanTaken,
+    loan_paid:         hasLoanPaid,
+    loan_defaulted:    hasLoanDefault,
+    stock_holder:      hasStockHolder,
+    bet_winner:        (rouletteBets || []).some(b => b.won && b.bet_amount > 0),
+    sabotage:          hasSabotage,
+    shield:            hasShieldUsed,
+    turbo_user:        hasTurboUsed,
+    double_user:       hasDoubleUsed,
+    generous:          (transfers || []).length >= 1,
+    popular:           totalLikes >= 10,
+    pacifist:          isPacifist,
+    war_mode:          hasWarMode,
+    revenge:           false,
+    influencer:        followersCount >= 5,
+    super_influencer:  followersCount >= 15,
+    chatterbox:        messagesCount >= 50,
+    photographer:      storiesCount >= 5,
+    dispute_judge:     hasDisputeJudge,
+    all_drinks:        false,
+    solo_drinker:      false,
+    operacion_barbacoa_2026: false,
+    war_winner:        false,
+    war_captain:       false,
+    spy_role:          false,
+    saboteur_role:     false,
+    frozen:            false,
+    dispute_winner:    false,
+    dispute_guilty:    false,
+    market_manipulator: false,
   }
 
   for (const [id, condition] of Object.entries(conditions)) {
