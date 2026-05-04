@@ -45,6 +45,41 @@ const ACHIEVEMENTS = [
   { id: 'influencer',        emoji: '🌟', name: 'Influencer',              desc: 'Ten 5 seguidores',                                    category: 'social' },
   { id: 'chatterbox',        emoji: '💬', name: 'Tertuliano',              desc: 'Escribe 50 mensajes en chats de liga',                category: 'social' },
   { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas',      desc: 'Sube 5 historias',                                   category: 'social' },
+
+  // Consumiciones — nuevos
+  { id: 'drinks_200',         emoji: '🪦', name: 'Ya no tiene arreglo',        desc: 'Acumula 200 consumiciones',                           category: 'consumiciones' },
+  { id: 'drinks_500',         emoji: '🏛️', name: 'Patrimonio de la humanidad', desc: 'Acumula 500 consumiciones',                           category: 'consumiciones' },
+  { id: 'night_owl',          emoji: '🦉', name: 'El que nunca duerme',        desc: 'Anota una consumición entre las 4h y las 6h',         category: 'consumiciones' },
+  { id: 'early_bird',         emoji: '🐓', name: 'Desayuno de campeones',      desc: 'Anota una consumición antes de las 12h',              category: 'consumiciones' },
+  { id: 'monday_drinker',     emoji: '😔', name: 'El lunes también cuenta',    desc: 'Anota una consumición en lunes',                      category: 'consumiciones' },
+  { id: 'drinks_day_5',       emoji: '🌪️', name: 'Fuerza de la naturaleza',   desc: 'Anota 5 consumiciones en un mismo día',               category: 'consumiciones' },
+  { id: 'top3_league',        emoji: '🥉', name: 'En el podio',                desc: 'Llega al top 3 del ranking de tu liga',               category: 'consumiciones' },
+  { id: 'operacion_barbacoa_2026', emoji: '🍖', name: 'Veterano de la Barbacoa', desc: 'Participaste en la Operación Barbacoa 2026',       category: 'consumiciones' },
+  { id: 'all_drinks',         emoji: '🌍', name: 'Coleccionista',              desc: 'Prueba todas las bebidas disponibles',                 category: 'consumiciones' },
+  { id: 'solo_drinker',       emoji: '🧍', name: 'Bebedor solitario',          desc: 'Sé el único de tu liga que bebe en un día',           category: 'consumiciones' },
+
+  // Casino & Dinero — nuevos
+  { id: 'loan_taken',         emoji: '🏦', name: 'Al banco a pedir',           desc: 'Solicita tu primer préstamo',                         category: 'casino' },
+  { id: 'loan_paid',          emoji: '✅', name: 'Hombre de palabra',           desc: 'Devuelve un préstamo a tiempo',                       category: 'casino' },
+  { id: 'loan_defaulted',     emoji: '😬', name: 'El del banco llama',          desc: 'Deja un préstamo vencer sin pagar',                   category: 'casino' },
+  { id: 'millionaire_2',      emoji: '💎', name: 'Multimillonario',             desc: 'Acumula 5000 monedas',                                category: 'casino' },
+  { id: 'roulette_loser',     emoji: '😭', name: 'La casa siempre gana',        desc: 'Pierde 5 veces seguidas en ruleta',                   category: 'casino' },
+  { id: 'stock_holder',       emoji: '📊', name: 'Accionista',                  desc: 'Compra acciones en el S&PINTA 500',                   category: 'casino' },
+  { id: 'market_manipulator', emoji: '🎭', name: 'Manipulador de mercado',      desc: 'Mueve el precio de una bebida al máximo o mínimo',    category: 'casino' },
+  { id: 'bet_winner',         emoji: '🤝', name: 'Apostador ganador',           desc: 'Gana una apuesta contra otro miembro',                category: 'casino' },
+
+  // Guerra & Juicio — nuevos
+  { id: 'war_winner',         emoji: '🏆', name: 'Conquistador',                desc: 'Gana tu primera guerra de clanes',                    category: 'social' },
+  { id: 'war_captain',        emoji: '👑', name: 'Mi general',                  desc: 'Sé capitán en una guerra de clanes',                  category: 'social' },
+  { id: 'spy_role',           emoji: '🕵️', name: 'El espía',                    desc: 'Juega una guerra con el rol de Espía',                category: 'social' },
+  { id: 'saboteur_role',      emoji: '💣', name: 'El saboteador de guerras',    desc: 'Juega una guerra con el rol de Saboteador',           category: 'social' },
+  { id: 'frozen',             emoji: '🧊', name: 'Congelado en vida',           desc: 'Recibe un Freeze de otro miembro',                    category: 'social' },
+  { id: 'dispute_winner',     emoji: '⚖️', name: 'Inocente',                    desc: 'Gana una votación de El Juzgado',                     category: 'social' },
+  { id: 'dispute_guilty',     emoji: '🔨', name: 'Culpable según el jurado',    desc: 'Pierde una votación de El Juzgado',                   category: 'social' },
+  { id: 'dispute_judge',      emoji: '👨‍⚖️', name: 'El Pontífice',               desc: 'Vota en 5 juicios de El Juzgado',                    category: 'social' },
+  { id: 'super_influencer',   emoji: '🌠', name: 'Celebrity',                   desc: 'Ten 15 seguidores',                                   category: 'social' },
+  { id: 'turbo_user',         emoji: '⚡', name: 'Turbo activado',              desc: 'Usa el powerup Turbo',                                category: 'social' },
+  { id: 'double_user',        emoji: '🔥', name: 'Doble o nada',               desc: 'Usa el powerup Racha Doble',                          category: 'social' },
 ]
 
 // ─── LÓGICA DE DETECCIÓN ──────────────────────────────────────────────────────
@@ -62,24 +97,18 @@ async function detectAchievements(userId, stats, supabaseClient) {
     { data: followers },
     { data: stories },
     { data: messages },
-    { data: myRankings },
-    { data: stockPositions },
-    { data: loans },
-    { data: disputeVotes },
+    { data: leagueMembers },
   ] = await Promise.all([
-    supabaseClient.from('drinks').select('drink_type_id, consumed_at, league_id').eq('user_id', userId).eq('is_adjustment', false),
+    supabaseClient.from('drinks').select('drink_type_id, consumed_at, league_id, user_id').eq('user_id', userId),
     supabaseClient.from('wallets').select('balance').eq('user_id', userId).single(),
     supabaseClient.from('market_positions').select('id').eq('user_id', userId),
     supabaseClient.from('roulette_bets').select('won, net, created_at, bet_amount').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabaseClient.from('active_powerups').select('id, effect_type, created_at, target_user_id').eq('user_id', userId),
-    supabaseClient.from('league_transfers').select('receiver_id, amount').eq('sender_id', userId),
+    supabaseClient.from('active_powerups').select('powerup_id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
+    supabaseClient.from('league_transfers').select('receiver_id, amount, created_at').eq('sender_id', userId),
     supabaseClient.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', userId),
     supabaseClient.from('stories').select('id').eq('user_id', userId),
     supabaseClient.from('messages').select('id').eq('user_id', userId),
-    supabaseClient.from('league_rankings').select('user_id, total_points, total_drinks, league_id').eq('user_id', userId),
-    supabaseClient.from('stock_positions').select('id').eq('user_id', userId),
-    supabaseClient.from('bank_loans').select('status').eq('user_id', userId),
-    supabaseClient.from('dispute_votes').select('id').eq('user_id', userId),
+    supabaseClient.from('league_members').select('league_id').eq('user_id', userId),
   ])
 
   const uniqueDrinks = stats?.count || 0
@@ -90,7 +119,6 @@ async function detectAchievements(userId, stats, supabaseClient) {
   const storiesCount = stories?.length || 0
   const messagesCount = messages?.length || 0
 
-  // Días con más bebidas
   const drinksByDay = (drinks || []).reduce((acc, d) => {
     const day = new Date(d.consumed_at).toDateString()
     acc[day] = (acc[day] || 0) + 1
@@ -98,34 +126,27 @@ async function detectAchievements(userId, stats, supabaseClient) {
   }, {})
   const maxDrinksInDay = Math.max(0, ...Object.values(drinksByDay))
 
-  // Horas y días de la semana en Madrid
-  const toMadrid = ts => new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
-  const drinkHours = (drinks || []).map(d => toMadrid(d.consumed_at).getHours())
-  const drinkWeekDays = (drinks || []).map(d => toMadrid(d.consumed_at).getDay())
+  const hasMartesM = (drinks || []).some(d => {
+    const madridDate = new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+    return madridDate.getDay() === 2
+  })
 
-  const hasMartesM    = drinkWeekDays.some(day => day === 2)
-  const hasMondayDrink = drinkWeekDays.some(day => day === 1)
-  const hasNightOwl   = drinkHours.some(h => h >= 4 && h < 6)
-  const hasEarlyBird  = drinkHours.some(h => h < 12)
+  let rouletteStreak = 0
+  for (const bet of (rouletteBets || [])) {
+    if (bet.won) rouletteStreak++
+    else break
+  }
 
-  // Ruleta
-  let rouletteStreak = 0, rouletteLosingStreak = 0
-  for (const bet of (rouletteBets || [])) { if (bet.won) rouletteStreak++; else break }
-  for (const bet of (rouletteBets || [])) { if (!bet.won) rouletteLosingStreak++; else break }
-  const hasBigBet      = (rouletteBets || []).some(b => b.bet_amount >= 500)
-  const hasBigWin      = (rouletteBets || []).some(b => b.won && b.net >= 500)
-  const totalBets      = (rouletteBets || []).length
+  const hasBigBet = (rouletteBets || []).some(b => b.bet_amount >= 500)
+  const hasBigWin = (rouletteBets || []).some(b => b.won && b.net >= 500)
+  const totalBets = (rouletteBets || []).length
   const hasRouletteWin = (rouletteBets || []).some(b => b.won)
 
-  // Transferencias
   const uniqueReceivers = new Set((transfers || []).map(t => t.receiver_id))
   const totalSent = (transfers || []).reduce((s, t) => s + (t.amount || 0), 0)
 
-  // Powerups
-  const hasSabotage    = (activePowerups || []).some(p => p.effect_type === 'sabotage')
-  const hasShieldUsed  = (activePowerups || []).some(p => p.effect_type === 'shield')
-  const hasTurboUsed   = (activePowerups || []).some(p => p.effect_type === 'turbo')
-  const hasDoubleUsed  = (activePowerups || []).some(p => p.effect_type === 'double_points')
+  const hasSabotage = (activePowerups || []).some(p => p.effect_type === 'sabotage')
+  const hasShieldUsed = (activePowerups || []).some(p => p.effect_type === 'shield')
 
   const attackPowerupsByDay = (activePowerups || []).reduce((acc, p) => {
     if (['sabotage', 'sniper'].includes(p.effect_type)) {
@@ -137,16 +158,33 @@ async function detectAchievements(userId, stats, supabaseClient) {
   }, {})
   const hasWarMode = Object.values(attackPowerupsByDay).some(s => s.has('sabotage') && s.has('sniper'))
 
+  let hasRevenge = false
+  if (hasSabotage) {
+    const { data: receivedSabotage } = await supabaseClient
+      .from('active_powerups').select('user_id, created_at')
+      .eq('target_user_id', userId).eq('effect_type', 'sabotage')
+    if (receivedSabotage && receivedSabotage.length > 0) {
+      const attackerIds = new Set(receivedSabotage.map(s => s.user_id))
+      const myAttacks = (activePowerups || []).filter(p => p.effect_type === 'sabotage')
+      hasRevenge = myAttacks.some(a => attackerIds.has(a.target_user_id))
+    }
+  }
+
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  const isPacifist = uniqueDrinks > 0 &&
-    !(activePowerups || []).some(p => ['sabotage','sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo)
+  const recentAttacks = (activePowerups || []).filter(p =>
+    ['sabotage', 'sniper'].includes(p.effect_type) && new Date(p.created_at) > sevenDaysAgo
+  )
+  const isPacifist = uniqueDrinks > 0 && recentAttacks.length === 0
 
-  // Comeback
   const sortedDrinks = [...(drinks || [])].sort((a, b) => new Date(b.consumed_at) - new Date(a.consumed_at))
-  const hasComeBack = sortedDrinks.length >= 2 &&
-    (new Date(sortedDrinks[0].consumed_at) - new Date(sortedDrinks[1].consumed_at)) / 86400000 >= 7
+  let hasComeBack = false
+  if (sortedDrinks.length >= 2) {
+    const latest = new Date(sortedDrinks[0].consumed_at)
+    const previous = new Date(sortedDrinks[1].consumed_at)
+    hasComeBack = (latest - previous) / (1000 * 60 * 60 * 24) >= 7
+  }
 
-  // Ranking — todas las ligas en paralelo, sin loops secuenciales
+  // Ranking en paralelo — sin loops secuenciales
   const leagueIds = (myRankings || []).map(r => r.league_id)
   let isTop1 = false, isTop3 = false, isMostActive = false
   if (leagueIds.length > 0) {
@@ -168,9 +206,8 @@ async function detectAchievements(userId, stats, supabaseClient) {
     })
   }
 
-  // Likes en posts
-  let totalLikes = 0
   const { data: myPosts } = await supabaseClient.from('posts').select('id').eq('user_id', userId)
+  let totalLikes = 0
   if (myPosts && myPosts.length > 0) {
     const { count } = await supabaseClient.from('post_likes')
       .select('id', { count: 'exact', head: true })
@@ -178,76 +215,39 @@ async function detectAchievements(userId, stats, supabaseClient) {
     totalLikes = count || 0
   }
 
-  // Banco y acciones
-  const hasLoanTaken   = (loans || []).length > 0
-  const hasLoanPaid    = (loans || []).some(l => l.status === 'repaid')
-  const hasLoanDefault = (loans || []).some(l => l.status === 'defaulted')
-  const hasStockHolder = (stockPositions || []).length > 0
-  const hasDisputeJudge = (disputeVotes || []).length >= 5
-
   const conditions = {
-    first_drink:       uniqueDrinks >= 1,
-    drinks_10:         uniqueDrinks >= 10,
-    drinks_50:         uniqueDrinks >= 50,
-    drinks_100:        uniqueDrinks >= 100,
-    drinks_200:        uniqueDrinks >= 200,
-    drinks_500:        uniqueDrinks >= 500,
-    martes_macarra:    hasMartesM,
-    variety_5:         drinkTypes.size >= 5,
-    drinks_day_3:      maxDrinksInDay >= 3,
-    drinks_day_5:      maxDrinksInDay >= 5,
-    drinks_day_10:     maxDrinksInDay >= 10,
-    top1_league:       isTop1,
-    top3_league:       isTop3,
-    come_back:         hasComeBack,
-    most_active:       isMostActive,
-    night_owl:         hasNightOwl,
-    early_bird:        hasEarlyBird,
-    monday_drinker:    hasMondayDrink,
-    roulette_win:      hasRouletteWin,
-    roulette_3wins:    rouletteStreak >= 3,
-    roulette_loser:    rouletteLosingStreak >= 5,
-    roulette_10bets:   totalBets >= 10,
-    millionaire:       balance >= 1000,
-    millionaire_2:     balance >= 5000,
-    market_5:          marketCount >= 5,
-    big_bet:           hasBigBet,
-    big_win:           hasBigWin,
-    broke:             balance === 0 && uniqueDrinks > 0,
-    negative_balance:  balance < 0,
-    lender:            uniqueReceivers.size >= 3,
-    big_sender:        totalSent >= 1000,
-    loan_taken:        hasLoanTaken,
-    loan_paid:         hasLoanPaid,
-    loan_defaulted:    hasLoanDefault,
-    stock_holder:      hasStockHolder,
-    bet_winner:        (rouletteBets || []).some(b => b.won && b.bet_amount > 0),
-    sabotage:          hasSabotage,
-    shield:            hasShieldUsed,
-    turbo_user:        hasTurboUsed,
-    double_user:       hasDoubleUsed,
-    generous:          (transfers || []).length >= 1,
-    popular:           totalLikes >= 10,
-    pacifist:          isPacifist,
-    war_mode:          hasWarMode,
-    influencer:        followersCount >= 5,
-    super_influencer:  followersCount >= 15,
-    chatterbox:        messagesCount >= 50,
-    photographer:      storiesCount >= 5,
-    dispute_judge:     hasDisputeJudge,
-    // Los siguientes requieren datos adicionales no disponibles aquí
-    revenge:           false,
-    all_drinks:        false,
-    solo_drinker:      false,
-    operacion_barbacoa_2026: false,
-    war_winner:        false,
-    war_captain:       false,
-    spy_role:          false,
-    saboteur_role:     false,
-    frozen:            false,
-    dispute_winner:    false,
-    dispute_guilty:    false,
-    market_manipulator: false,
+    first_drink:      uniqueDrinks >= 1,
+    drinks_10:        uniqueDrinks >= 10,
+    drinks_50:        uniqueDrinks >= 50,
+    drinks_100:       uniqueDrinks >= 100,
+    martes_macarra:   hasMartesM,
+    variety_5:        drinkTypes.size >= 5,
+    drinks_day_3:     maxDrinksInDay >= 3,
+    drinks_day_10:    maxDrinksInDay >= 10,
+    top1_league:      isTop1,
+    come_back:        hasComeBack,
+    most_active:      isMostActive,
+    roulette_win:     hasRouletteWin,
+    roulette_3wins:   rouletteStreak >= 3,
+    millionaire:      balance >= 1000,
+    market_5:         marketCount >= 5,
+    big_bet:          hasBigBet,
+    broke:            balance === 0 && uniqueDrinks > 0,
+    negative_balance: balance < 0,
+    lender:           uniqueReceivers.size >= 3,
+    big_sender:       totalSent >= 1000,
+    roulette_10bets:  totalBets >= 10,
+    big_win:          hasBigWin,
+    sabotage:         hasSabotage,
+    shield:           hasShieldUsed,
+    generous:         (transfers || []).length >= 1,
+    popular:          totalLikes >= 10,
+    pacifist:         isPacifist,
+    war_mode:         hasWarMode,
+    revenge:          hasRevenge,
+    influencer:       followersCount >= 5,
+    chatterbox:       messagesCount >= 50,
+    photographer:     storiesCount >= 5,
   }
 
   for (const [id, condition] of Object.entries(conditions)) {
@@ -288,6 +288,11 @@ export default function Profile() {
   const [unlockedIds, setUnlockedIds] = useState(new Set())
   const [newlyUnlocked, setNewlyUnlocked] = useState([])
   const [loadingAchievements, setLoadingAchievements] = useState(false)
+  const [globalRank, setGlobalRank] = useState(null)
+  const [globalPoints, setGlobalPoints] = useState(null)
+  const [totalGlobalPlayers, setTotalGlobalPlayers] = useState(null)
+  const [warStats, setWarStats] = useState(null)
+  const [walletBalance, setWalletBalance] = useState(0)
 
   const fileInputRef = useRef(null)
   const PAGE_SIZE = 20
@@ -298,6 +303,29 @@ export default function Profile() {
     if (section === 'notifications') markAllRead()
     if (section === 'achievements') fetchAndCheckAchievements()
   }, [section])
+
+  const fetchGlobalStats = async () => {
+    const [{ data: wallet }, { data: allRankings }] = await Promise.all([
+      supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
+      supabase.from('global_rankings').select('user_id, total_points').order('total_points', { ascending: false }),
+    ])
+    setWalletBalance(wallet?.balance || 0)
+    if (allRankings) {
+      setTotalGlobalPlayers(allRankings.length)
+      const myIdx = allRankings.findIndex(r => r.user_id === user.id)
+      if (myIdx !== -1) { setGlobalRank(myIdx + 1); setGlobalPoints(Math.round(allRankings[myIdx].total_points * 10) / 10) }
+    }
+    const { data: warParticipations } = await supabase
+      .from('clan_war_participants')
+      .select('war_id, league_id, clan_wars(winner_league_id, status, clan_war_battles(winner_league_id))')
+      .eq('user_id', user.id)
+    if (warParticipations) {
+      const finished = warParticipations.filter(p => p.clan_wars?.status === 'finished')
+      const won = finished.filter(p => p.clan_wars?.winner_league_id === p.league_id)
+      const battlesWon = finished.reduce((sum, p) => sum + (p.clan_wars?.clan_war_battles || []).filter(b => b.winner_league_id === p.league_id).length, 0)
+      setWarStats({ wars_played: finished.length, wars_won: won.length, battles_won: battlesWon })
+    }
+  }
 
   const fetchProfile = async () => {
     const [
@@ -335,6 +363,7 @@ export default function Profile() {
       setStats({ total, count: unique.length, byType })
     }
     setLoading(false)
+    fetchGlobalStats()
   }
 
   const fetchHistory = async (page) => {
@@ -501,92 +530,195 @@ export default function Profile() {
         {/* ── PERFIL ── */}
         {section === 'profile' && (
           <motion.div {...fadeIn} key="profile">
-            <div className="rounded-2xl p-6 mb-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-              <div className="relative inline-block mb-3">
-                {profile?.avatar_url
-                  ? <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-amber-500" />
-                  : <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center text-4xl" style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border)' }}>🍺</div>}
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
-                  className="absolute bottom-0 right-0 bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm">
-                  {uploadingAvatar ? '⏳' : '📷'}
-                </motion.button>
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+
+            {/* Banner + Avatar */}
+            <div className="rounded-3xl overflow-hidden mb-4 relative" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <div className="h-24 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a0a2e, #0f0a1f, #0a1020)' }}>
+                {[{top:'15%',left:'8%',size:2},{top:'40%',left:'85%',size:3},{top:'70%',left:'20%',size:2},{top:'25%',left:'60%',size:2},{top:'65%',left:'70%',size:2},{top:'80%',left:'45%',size:3}].map((s,i) => (
+                  <motion.div key={i} className="absolute rounded-full bg-white"
+                    style={{ top:s.top, left:s.left, width:s.size, height:s.size, opacity:0.4 }}
+                    animate={{ opacity:[0.2,0.7,0.2] }} transition={{ duration:2+i*0.5, repeat:Infinity, delay:i*0.3 }} />
+                ))}
+                {globalRank && (
+                  <div className="absolute top-3 right-3">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor:'rgba(245,158,11,0.2)', border:'1px solid rgba(245,158,11,0.4)' }}>
+                      <span className="text-xs">{globalRank<=3?['🥇','🥈','🥉'][globalRank-1]:'🏆'}</span>
+                      <span className="text-xs font-black text-amber-400">#{globalRank} Global</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="text-xl font-bold">{profile?.username}</p>
-              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{user.email}</p>
-
-              {/* ✅ NUEVO: Seguidores y seguidos */}
-              <div className="flex justify-center gap-6 py-3 border-t border-b mb-3"
-                style={{ borderColor: 'var(--border)' }}>
-                <div className="text-center">
-                  <p className="text-xl font-bold text-amber-400">{followersCount}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>seguidores</p>
+              <div className="px-5 pb-5">
+                <div className="flex items-end gap-4 -mt-10 mb-3">
+                  <div className="relative flex-shrink-0">
+                    {profile?.avatar_url
+                      ? <img src={profile.avatar_url} alt="Avatar" className="w-20 h-20 rounded-2xl object-cover border-4" style={{ borderColor:'var(--bg-card)' }} />
+                      : <div className="w-20 h-20 rounded-2xl border-4 flex items-center justify-center text-3xl" style={{ backgroundColor:'var(--bg-input)', borderColor:'var(--bg-card)' }}>🍺</div>}
+                    <motion.button whileTap={{ scale:0.9 }} onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
+                      className="absolute -bottom-1 -right-1 w-7 h-7 rounded-xl flex items-center justify-center text-xs text-white" style={{ backgroundColor:'#f59e0b' }}>
+                      {uploadingAvatar ? '⏳' : '📷'}
+                    </motion.button>
+                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                  </div>
+                  <div className="flex-1 min-w-0 pt-10">
+                    <p className="text-lg font-black truncate" style={{ color:'var(--text-primary)' }}>{profile?.username}</p>
+                    <p className="text-xs truncate" style={{ color:'var(--text-hint)' }}>{user.email}</p>
+                  </div>
                 </div>
-                <div className="w-px" style={{ backgroundColor: 'var(--border)' }} />
-                <div className="text-center">
-                  <p className="text-xl font-bold text-amber-400">{followingCount}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-hint)' }}>siguiendo</p>
-                </div>
-              </div>
-
-              {unlockedCount > 0 && (
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-sm">🏅</span>
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{unlockedCount}/{totalCount} logros</span>
-                </div>
-              )}
-            </div>
-
-            {stats && (
-              <>
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-4 gap-2 mb-4">
                   {[
-                    { label: 'Consumiciones', value: stats.count },
-                    // ✅ FIX: usar formatPts para evitar decimales sucios
-                    { label: 'Puntos totales', value: formatPts(stats.total) },
-                  ].map(stat => (
-                    <motion.div key={stat.label} variants={staggerItem} initial="initial" animate="animate"
-                      className="rounded-2xl p-4 text-center" style={{ backgroundColor: 'var(--bg-card)' }}>
-                      <p className="text-3xl font-bold text-amber-400">{stat.value}</p>
-                      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{stat.label}</p>
-                    </motion.div>
+                    { label:'Consumiciones', value:stats?.count||0, color:'#f59e0b' },
+                    { label:'Puntos', value:stats?formatPts(stats.total):0, color:'#f59e0b' },
+                    { label:'Seguidores', value:followersCount, color:'#818cf8' },
+                    { label:'Monedas', value:walletBalance?.toLocaleString()||0, color:'#10b981' },
+                  ].map(s => (
+                    <div key={s.label} className="rounded-xl p-2 text-center" style={{ backgroundColor:'var(--bg-input)' }}>
+                      <p className="text-sm font-black" style={{ color:s.color }}>{s.value}</p>
+                      <p style={{ color:'var(--text-hint)', fontSize:9 }} className="font-medium mt-0.5 leading-tight">{s.label}</p>
+                    </div>
                   ))}
                 </div>
-
-                <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: 'var(--bg-card)' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--text-muted)' }}>Desglose por bebida</p>
-                  {Object.entries(stats.byType).length === 0
-                    ? <p className="text-sm" style={{ color: 'var(--text-hint)' }}>Aún no has anotado nada</p>
-                    : <div className="space-y-2">
-                        {Object.entries(stats.byType).sort(([, a], [, b]) => b.count - a.count).map(([name, { count, emoji }]) => (
-                          <div key={name} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl">{emoji}</span>
-                              <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-1.5 rounded-full bg-amber-500 opacity-60" style={{ width: `${Math.round((count / stats.count) * 80)}px` }} />
-                              <span className="text-amber-400 font-bold text-sm">{count}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black" style={{ color:'var(--text-primary)' }}>{followersCount}</span>
+                    <span className="text-xs" style={{ color:'var(--text-hint)' }}>seguidores</span>
+                  </div>
+                  <div className="w-1 h-1 rounded-full" style={{ backgroundColor:'var(--border)' }} />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black" style={{ color:'var(--text-primary)' }}>{followingCount}</span>
+                    <span className="text-xs" style={{ color:'var(--text-hint)' }}>siguiendo</span>
+                  </div>
+                  <div className="w-1 h-1 rounded-full" style={{ backgroundColor:'var(--border)' }} />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black text-amber-400">{unlockedCount}</span>
+                    <span className="text-xs" style={{ color:'var(--text-hint)' }}>logros</span>
+                  </div>
                 </div>
+              </div>
+            </div>
 
-                <div className="flex gap-2">
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('history')}
-                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
-                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                    🍺 Historial →
-                  </motion.button>
-                  <motion.button whileTap={{ scale: 0.97 }} onClick={() => setSection('achievements')}
-                    className="flex-1 py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
-                    style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                    🏅 Logros →
-                  </motion.button>
+            {/* Ranking Global */}
+            {globalRank && (
+              <div className="rounded-2xl p-4 mb-4 relative overflow-hidden"
+                style={{ background:'linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04))', border:'1px solid rgba(245,158,11,0.25)' }}>
+                <motion.div className="absolute inset-0"
+                  style={{ background:'linear-gradient(90deg,transparent,rgba(245,158,11,0.05),transparent)' }}
+                  animate={{ x:['-100%','200%'] }} transition={{ duration:3, repeat:Infinity, ease:'linear', repeatDelay:2 }} />
+                <div className="relative flex items-center gap-4">
+                  <motion.div className="text-5xl" animate={{ scale:[1,1.08,1] }} transition={{ duration:2, repeat:Infinity }}>
+                    {globalRank===1?'🥇':globalRank===2?'🥈':globalRank===3?'🥉':'🏆'}
+                  </motion.div>
+                  <div className="flex-1">
+                    <p className="text-xs font-black" style={{ color:'rgba(245,158,11,0.7)' }}>RANKING GLOBAL</p>
+                    <p className="text-3xl font-black text-amber-400">#{globalRank}</p>
+                    <p className="text-xs" style={{ color:'var(--text-hint)' }}>de {totalGlobalPlayers} jugadores</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs" style={{ color:'var(--text-hint)' }}>Puntos totales</p>
+                    <p className="text-xl font-black text-amber-400">{globalPoints}</p>
+                  </div>
                 </div>
-              </>
+              </div>
             )}
+
+            {/* Stats de guerra */}
+            {warStats && warStats.wars_played > 0 && (
+              <div className="rounded-2xl overflow-hidden mb-4" style={{ backgroundColor:'var(--bg-card)', border:'1px solid rgba(220,38,38,0.2)' }}>
+                <div className="px-4 py-2.5 border-b flex items-center gap-2" style={{ borderColor:'rgba(220,38,38,0.15)', backgroundColor:'rgba(220,38,38,0.06)' }}>
+                  <span className="text-sm">⚔️</span>
+                  <p className="text-xs font-black text-red-400">HISTORIAL DE GUERRA</p>
+                </div>
+                <div className="grid grid-cols-3 divide-x" style={{ borderColor:'rgba(255,255,255,0.05)' }}>
+                  {[{label:'Guerras',value:warStats.wars_played,color:'var(--text-primary)'},{label:'Victorias',value:warStats.wars_won,color:'#10b981'},{label:'Batallas',value:warStats.battles_won,color:'#f59e0b'}].map((s,i) => (
+                    <div key={i} className="py-3 text-center" style={{ borderColor:'rgba(255,255,255,0.05)' }}>
+                      <p className="text-xl font-black" style={{ color:s.color }}>{s.value}</p>
+                      <p className="text-xs" style={{ color:'var(--text-hint)' }}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-2.5 border-t" style={{ borderColor:'rgba(255,255,255,0.05)' }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs" style={{ color:'var(--text-hint)' }}>Ratio de victorias</span>
+                    <span className="text-xs font-black text-red-400">{Math.round((warStats.wars_won/warStats.wars_played)*100)}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor:'rgba(255,255,255,0.06)' }}>
+                    <motion.div className="h-full rounded-full" style={{ background:'linear-gradient(90deg,#7f1d1d,#ef4444)' }}
+                      initial={{ width:0 }} animate={{ width:`${(warStats.wars_won/warStats.wars_played)*100}%` }} transition={{ duration:0.8 }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Medallas recientes */}
+            {unlockedCount > 0 && (
+              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor:'var(--bg-card)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-bold">🏅 Logros</p>
+                  <motion.button whileTap={{ scale:0.95 }} onClick={() => setSection('achievements')} className="text-xs font-bold text-amber-400">Ver todos →</motion.button>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs" style={{ color:'var(--text-hint)' }}>{unlockedCount} de {totalCount} desbloqueados</p>
+                  <p className="text-xs font-bold text-amber-400">{Math.round((unlockedCount/totalCount)*100)}%</p>
+                </div>
+                <div className="w-full h-1.5 rounded-full overflow-hidden mb-3" style={{ backgroundColor:'var(--bg-input)' }}>
+                  <motion.div className="h-full rounded-full bg-amber-500" initial={{ width:0 }} animate={{ width:`${(unlockedCount/totalCount)*100}%` }} transition={{ duration:0.8 }} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {ACHIEVEMENTS.filter(a => unlockedIds.has(a.id)).slice(-8).map(a => (
+                    <div key={a.id} title={a.name} className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                      style={{ backgroundColor:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.2)' }}>{a.emoji}</div>
+                  ))}
+                  {unlockedCount < totalCount && (
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black"
+                      style={{ backgroundColor:'var(--bg-input)', color:'var(--text-hint)' }}>+{totalCount-unlockedCount}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Desglose bebidas */}
+            {stats && Object.keys(stats.byType).length > 0 && (
+              <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor:'var(--bg-card)' }}>
+                <p className="text-sm font-bold mb-3">🍺 Desglose por bebida</p>
+                <div className="space-y-2">
+                  {Object.entries(stats.byType).sort(([,a],[,b]) => b.count-a.count).map(([name,{count,emoji}]) => (
+                    <div key={name} className="flex items-center gap-3">
+                      <span className="text-xl w-7 flex-shrink-0">{emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs font-medium truncate" style={{ color:'var(--text-muted)' }}>{name}</span>
+                          <span className="text-xs font-black text-amber-400 flex-shrink-0 ml-2">{count}</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor:'var(--bg-input)' }}>
+                          <motion.div className="h-full rounded-full bg-amber-500" initial={{ width:0 }}
+                            animate={{ width:`${Math.round((count/stats.count)*100)}%` }} transition={{ duration:0.6 }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Accesos rápidos */}
+            <div className="grid grid-cols-2 gap-3">
+              <motion.button whileTap={{ scale:0.97 }} onClick={() => setSection('history')}
+                className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor:'var(--bg-card)' }}>
+                <span className="text-2xl">🍺</span>
+                <div className="text-left">
+                  <p className="text-sm font-bold">Historial</p>
+                  <p className="text-xs" style={{ color:'var(--text-hint)' }}>{stats?.count||0} consumiciones</p>
+                </div>
+              </motion.button>
+              <motion.button whileTap={{ scale:0.97 }} onClick={() => setSection('achievements')}
+                className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor:'var(--bg-card)' }}>
+                <span className="text-2xl">🏅</span>
+                <div className="text-left">
+                  <p className="text-sm font-bold">Logros</p>
+                  <p className="text-xs" style={{ color:'var(--text-hint)' }}>{unlockedCount}/{totalCount} obtenidos</p>
+                </div>
+              </motion.button>
+            </div>
           </motion.div>
         )}
 
@@ -843,6 +975,16 @@ export default function Profile() {
                   </motion.button>
                 ))}
               </div>
+            </div>
+
+            <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <h2 className="text-base font-bold mb-2">📖 Tutorial</h2>
+              <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>Vuelve a ver la guía de introducción a Beer League.</p>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => { localStorage.removeItem('beer_league_onboarding_done'); window.location.reload() }}
+                className="w-full py-3 rounded-xl font-semibold text-sm"
+                style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                🚀 Ver tutorial de nuevo
+              </motion.button>
             </div>
 
             <div className="rounded-2xl p-5 border border-red-900" style={{ backgroundColor: 'var(--bg-card)' }}>
