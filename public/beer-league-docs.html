@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beer League — Manual de Instrucciones</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --beer: #f59e0b;
+    --beer-dark: #d97706;
+    --red: #ef4444;
+    --green: #10b981;
+    --indigo: #6366f1;
+    --purple: #a855f7;
+    --bg: #060609;
+    --bg2: #0d0d14;
+    --bg3: #12121c;
+    --border: rgba(255,255,255,0.06);
+    --text: rgba(255,255,255,0.9);
+    --muted: rgba(255,255,255,0.45);
+    --hint: rgba(255,255,255,0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4rem 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245,158,11,0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 10% 80%, rgba(239,68,68,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 90% 70%, rgba(99,102,241,0.08) 0%, transparent 60%);
+  }
+
+  .grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(245,158,11,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,158,11,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
+  }
+
+  .hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(245,158,11,0.3);
+    background: rgba(245,158,11,0.08);
+    color: var(--beer);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    position: relative;
+  }
+
+  .hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(5rem, 15vw, 10rem);
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #fff 0%, var(--beer) 50%, #fff 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 4s linear infinite;
+    position: relative;
+    margin-bottom: 1.5rem;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--muted);
+    max-width: 520px;
+    line-height: 1.6;
+    margin-bottom: 3rem;
+    position: relative;
+  }
+
+  .hero-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    position: relative;
+  }
+
+  .stack-pill {
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.2s;
+  }
+
+  .stack-pill:hover {
+    border-color: rgba(245,158,11,0.4);
+    color: var(--beer);
+    background: rgba(245,158,11,0.06);
+  }
+
+  .scroll-hint {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--hint);
+    font-size: 0.75rem;
+    animation: bounce 2s ease-in-out infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(8px); }
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(6,6,9,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0.875rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .nav-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    color: var(--beer);
+    letter-spacing: 0.05em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+
+  .nav-link {
+    padding: 0.375rem 0.875rem;
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    background: none;
+    text-decoration: none;
+  }
+
+  .nav-link:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
+  }
+
+  /* ── SECTIONS ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  section {
+    padding: 6rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--beer);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .section-tag::before {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 1px;
+    background: var(--beer);
+  }
+
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    margin-bottom: 1.5rem;
+    color: var(--text);
+  }
+
+  .section-desc {
+    font-size: 1rem;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 600px;
+    margin-bottom: 3rem;
+  }
+
+  /* ── CARDS ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    padding: 1.75rem;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at top left, var(--accent-color, rgba(245,158,11,0.08)), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card:hover::before { opacity: 1; }
+  .card:hover { border-color: var(--accent-color, rgba(245,158,11,0.3)); transform: translateY(-2px); }
+
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  .card-title {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+  }
+
+  .card-desc {
+    font-size: 0.875rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .card-tag {
+    display: inline-flex;
+    margin-top: 1rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── FEATURE BIG ── */
+  .feature-big {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+    margin-bottom: 5rem;
+  }
+
+  .feature-big.reverse { direction: rtl; }
+  .feature-big.reverse > * { direction: ltr; }
+
+  @media (max-width: 768px) {
+    .feature-big { grid-template-columns: 1fr; gap: 2rem; }
+    .feature-big.reverse { direction: ltr; }
+  }
+
+  .feature-visual {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 1.5rem;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-visual::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at top right, var(--feature-color, rgba(245,158,11,0.1)), transparent 70%);
+  }
+
+  .mock-screen {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    position: relative;
+  }
+
+  .mock-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mock-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .mock-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .mock-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--feature-color, rgba(245,158,11,0.2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  .mock-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--feature-color, rgba(245,158,11,0.4));
+    animation: grow 2s ease-out infinite alternate;
+  }
+
+  @keyframes grow {
+    from { width: 30%; }
+    to { width: 90%; }
+  }
+
+  .mock-badge {
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(245,158,11,0.15);
+    color: var(--beer);
+    white-space: nowrap;
+  }
+
+  /* ── TECH STACK ── */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .tech-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    transition: all 0.2s;
+  }
+
+  .tech-card:hover {
+    border-color: rgba(255,255,255,0.12);
+    background: var(--bg3);
+  }
+
+  .tech-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .tech-name {
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: var(--text);
+  }
+
+  .tech-role {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+  }
+
+  /* ── DB TABLES ── */
+  .tables-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .table-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+
+  .table-card:hover { border-color: rgba(99,102,241,0.3); }
+
+  .table-header {
+    background: rgba(99,102,241,0.08);
+    border-bottom: 1px solid var(--border);
+    padding: 0.875rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .table-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #818cf8;
+  }
+
+  .table-cols {
+    padding: 0.75rem 1.25rem;
+  }
+
+  .table-col {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    padding: 0.2rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .col-type {
+    color: var(--hint);
+    font-size: 0.65rem;
+  }
+
+  /* ── FLOW ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+    padding-left: 2rem;
+  }
+
+  .flow::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 1.25rem;
+    bottom: 1.25rem;
+    width: 1px;
+    background: linear-gradient(180deg, var(--beer), var(--indigo));
+    opacity: 0.3;
+  }
+
+  .flow-step {
+    display: flex;
+    gap: 1.25rem;
+    padding: 1.25rem 0;
+    position: relative;
+  }
+
+  .flow-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--beer);
+    flex-shrink: 0;
+    margin-top: 0.2rem;
+    position: absolute;
+    left: -1.5rem;
+  }
+
+  .flow-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--beer);
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    width: 1.5rem;
+  }
+
+  .flow-content { flex: 1; }
+
+  .flow-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 0.375rem;
+    color: var(--text);
+  }
+
+  .flow-desc {
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── POWERUPS ── */
+  .powerups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+
+  .powerup-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    transition: all 0.2s;
+  }
+
+  .powerup-card:hover {
+    border-color: rgba(245,158,11,0.3);
+    transform: translateY(-1px);
+  }
+
+  .powerup-emoji {
+    font-size: 1.75rem;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(245,158,11,0.1);
+    border-radius: 0.75rem;
+  }
+
+  /* ── ACHIEVEMENTS ── */
+  .achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .achievement-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 0.875rem;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    transition: all 0.2s;
+  }
+
+  .achievement-card:hover {
+    border-color: rgba(245,158,11,0.25);
+    background: var(--bg3);
+  }
+
+  .achievement-emoji {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  /* ── SEASON ── */
+  .timeline {
+    display: flex;
+    gap: 0;
+    position: relative;
+    padding-bottom: 2rem;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 1.25rem;
+    height: 2px;
+    background: linear-gradient(90deg, var(--beer), var(--indigo), var(--green));
+    opacity: 0.3;
+  }
+
+  .timeline-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+  }
+
+  .timeline-dot {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border: 2px solid;
+    background: var(--bg);
+    z-index: 1;
+  }
+
+  .timeline-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 0.875rem;
+    padding: 1.25rem 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--muted);
+    overflow-x: auto;
+    margin: 1.5rem 0;
+  }
+
+  .code-block .kw { color: #818cf8; }
+  .code-block .fn { color: var(--beer); }
+  .code-block .str { color: #10b981; }
+  .code-block .cm { color: rgba(255,255,255,0.2); font-style: italic; }
+  .code-block .num { color: #f97316; }
+
+  /* ── TABLE ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .data-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: var(--muted);
+    vertical-align: top;
+  }
+
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .data-table td:first-child {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--beer);
+    white-space: nowrap;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 2rem 0;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 3rem 2rem;
+    text-align: center;
+    color: var(--hint);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .badge-beer { background: rgba(245,158,11,0.15); color: var(--beer); border: 1px solid rgba(245,158,11,0.3); }
+  .badge-red  { background: rgba(239,68,68,0.15);  color: var(--red);  border: 1px solid rgba(239,68,68,0.3); }
+  .badge-green{ background: rgba(16,185,129,0.15); color: var(--green);border: 1px solid rgba(16,185,129,0.3); }
+  .badge-indigo{background: rgba(99,102,241,0.15); color: #818cf8;     border: 1px solid rgba(99,102,241,0.3); }
+  .badge-purple{background: rgba(168,85,247,0.15);color: #c084fc;      border: 1px solid rgba(168,85,247,0.3); }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight-box {
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .highlight-box.beer {
+    background: rgba(245,158,11,0.06);
+    border: 1px solid rgba(245,158,11,0.2);
+  }
+  .highlight-box.red {
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.2);
+  }
+  .highlight-box.green {
+    background: rgba(16,185,129,0.06);
+    border: 1px solid rgba(16,185,129,0.2);
+  }
+  .highlight-box.indigo {
+    background: rgba(99,102,241,0.06);
+    border: 1px solid rgba(99,102,241,0.2);
+  }
+
+  .highlight-box-title {
+    font-weight: 700;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .highlight-box-desc {
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 999px; }
+</style>
+</head>
+<body>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <div class="hero-bg"></div>
+  <div class="grid-bg"></div>
+  <div class="hero-tag">
+    <span>🍺</span>
+    Manual de instrucciones v1.0
+  </div>
+  <h1 class="hero-title">BEER<br>LEAGUE</h1>
+  <p class="hero-sub">Documentación técnica y funcional completa del proyecto. Stack, arquitectura, base de datos, features y lógica de negocio.</p>
+  <div class="hero-stack">
+    <span class="stack-pill">React 19</span>
+    <span class="stack-pill">Vite</span>
+    <span class="stack-pill">Tailwind v4</span>
+    <span class="stack-pill">Supabase</span>
+    <span class="stack-pill">Framer Motion</span>
+    <span class="stack-pill">Vercel</span>
+    <span class="stack-pill">GitHub Actions</span>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll para explorar</span>
+    <span>↓</span>
+  </div>
+</div>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-logo">🍺 Beer League Docs</div>
+  <div class="nav-links">
+    <a class="nav-link" href="#stack">Stack</a>
+    <a class="nav-link" href="#estructura">Estructura</a>
+    <a class="nav-link" href="#features">Features</a>
+    <a class="nav-link" href="#bbdd">Base de datos</a>
+    <a class="nav-link" href="#logica">Lógica</a>
+    <a class="nav-link" href="#eventos">Eventos</a>
+    <a class="nav-link" href="#pendiente">Pendiente</a>
+  </div>
+</nav>
+
+<!-- ── STACK ── -->
+<section id="stack">
+  <div class="container">
+    <div class="section-tag">01 — Stack técnico</div>
+    <h2 class="section-title">Tecnologías</h2>
+    <p class="section-desc">Beer League es una PWA full-stack construida con tecnologías modernas y desplegada en Vercel. El backend es 100% Supabase — sin servidor propio.</p>
+
+    <div class="tech-grid">
+      <div class="tech-card">
+        <span class="tech-icon">⚛️</span>
+        <div>
+          <div class="tech-name">React 19 + Vite</div>
+          <div class="tech-role">UI framework · bundler</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">🎨</span>
+        <div>
+          <div class="tech-name">Tailwind CSS v4</div>
+          <div class="tech-role">Estilos utility-first</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">✨</span>
+        <div>
+          <div class="tech-name">Framer Motion</div>
+          <div class="tech-role">Animaciones y transiciones</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">🟩</span>
+        <div>
+          <div class="tech-name">Supabase</div>
+          <div class="tech-role">Auth · DB · Storage · Realtime</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">▲</span>
+        <div>
+          <div class="tech-name">Vercel</div>
+          <div class="tech-role">Hosting y deploy automático</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">🐙</span>
+        <div>
+          <div class="tech-name">GitHub Actions</div>
+          <div class="tech-role">CI/CD · tareas automáticas</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">🔔</span>
+        <div>
+          <div class="tech-name">Web Push API</div>
+          <div class="tech-role">Notificaciones push</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <span class="tech-icon">🔊</span>
+        <div>
+          <div class="tech-name">Web Audio API</div>
+          <div class="tech-role">Sonidos de la app</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box beer" style="margin-top: 2rem;">
+      <div class="highlight-box-title">🏗️ Arquitectura general</div>
+      <div class="highlight-box-desc">Frontend SPA (Single Page Application) desplegada en Vercel. El backend es completamente Supabase: PostgreSQL para datos, Auth para usuarios, Storage para imágenes, y Realtime para el chat y votos en vivo. No hay servidor propio — toda la lógica de negocio vive en funciones SQL de Supabase (PostgreSQL functions) protegidas por Row Level Security (RLS).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ESTRUCTURA ── -->
+<section id="estructura">
+  <div class="container">
+    <div class="section-tag">02 — Estructura del proyecto</div>
+    <h2 class="section-title">Organización de archivos</h2>
+    <p class="section-desc">Estructura estándar de proyecto Vite + React con separación clara entre páginas, componentes y contextos.</p>
+
+    <div class="code-block">
+<span class="cm">// src/</span>
+├── <span class="fn">pages/</span>
+│   ├── <span class="str">Home.jsx</span>          <span class="cm">// Tus ligas + banner guerra + recompensa diaria</span>
+│   ├── <span class="str">AddDrink.jsx</span>      <span class="cm">// Anotar consumición + eventos especiales</span>
+│   ├── <span class="str">Ranking.jsx</span>       <span class="cm">// Liga: ranking, chat, juicio, trofeos, apuestas...</span>
+│   ├── <span class="str">GlobalRanking.jsx</span>  <span class="cm">// Ranking global + historial de temporadas</span>
+│   ├── <span class="str">Market.jsx</span>        <span class="cm">// Cotización, tienda, cartera, banco</span>
+│   ├── <span class="str">Social.jsx</span>        <span class="cm">// Feed, historias, seguir usuarios</span>
+│   ├── <span class="str">ClanWar.jsx</span>       <span class="cm">// Guerra de clanes 3.0</span>
+│   ├── <span class="str">Profile.jsx</span>       <span class="cm">// Perfil, logros, historial, notificaciones</span>
+│   ├── <span class="str">Onboarding.jsx</span>    <span class="cm">// Tutorial para nuevos usuarios</span>
+│   └── <span class="str">Login.jsx</span>         <span class="cm">// Autenticación</span>
+├── <span class="fn">components/</span>
+│   ├── <span class="str">Navbar.jsx</span>        <span class="cm">// Barra de navegación inferior</span>
+│   ├── <span class="str">Footer.jsx</span>        <span class="cm">// Footer</span>
+│   ├── <span class="str">SeasonCountdown.jsx</span><span class="cm">// Countdown fin de temporada</span>
+│   └── <span class="str">PushNotificationBanner.jsx</span> <span class="cm">// Banner permisos push</span>
+├── <span class="fn">context/</span>
+│   ├── <span class="str">AuthContext.jsx</span>    <span class="cm">// Usuario autenticado</span>
+│   ├── <span class="str">ThemeContext.jsx</span>   <span class="cm">// Tema claro/oscuro/sistema</span>
+│   └── <span class="str">NotificationsContext.jsx</span> <span class="cm">// Notificaciones en tiempo real</span>
+├── <span class="fn">lib/</span>
+│   ├── <span class="str">supabase.js</span>       <span class="cm">// Cliente Supabase</span>
+│   ├── <span class="str">animations.js</span>     <span class="cm">// Variantes Framer Motion reutilizables</span>
+│   └── <span class="str">sounds.js</span>         <span class="cm">// Sonidos Web Audio API</span>
+└── <span class="fn">App.jsx</span>             <span class="cm">// Router + providers + onboarding</span>
+    </div>
+
+    <div class="highlight-box indigo">
+      <div class="highlight-box-title">🔒 Row Level Security (RLS)</div>
+      <div class="highlight-box-desc">Todas las tablas tienen RLS habilitado. Los usuarios solo pueden leer y escribir sus propios datos, excepto en casos específicos como ver el ranking de su liga. La lógica sensible (comprar powerups, abrir préstamos, resolver guerras) vive en funciones SQL con <code>security definer</code> para ejecutarse con privilegios elevados.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ── -->
+<section id="features">
+  <div class="container">
+    <div class="section-tag">03 — Features principales</div>
+    <h2 class="section-title">Módulos de la app</h2>
+    <p class="section-desc">Beer League está organizada en módulos independientes accesibles desde la barra de navegación inferior.</p>
+
+    <!-- LIGAS Y RANKING -->
+    <div class="feature-big">
+      <div>
+        <span class="badge badge-beer" style="margin-bottom: 1rem; display: inline-flex;">🏆 Ligas & Ranking</span>
+        <h3 style="font-family: 'Bebas Neue'; font-size: 2rem; letter-spacing: 0.02em; margin-bottom: 1rem;">Sistema de ligas y competición</h3>
+        <p style="color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-size: 0.95rem;">El núcleo de la app. Cada usuario puede pertenecer a múltiples ligas cerradas. Dentro de cada liga hay un ranking de puntos en tiempo real que se resetea cada 10 días (temporada). Al final de temporada el top 3 recibe monedas.</p>
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-dot"></div>
+            <div class="flow-content">
+              <div class="flow-title">Crear o unirse</div>
+              <div class="flow-desc">El owner crea la liga y obtiene un código único (BEER-XXXX-XXXX). Los demás se unen con ese código.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot"></div>
+            <div class="flow-content">
+              <div class="flow-title">Anotar consumiciones</div>
+              <div class="flow-desc">Cada consumición suma puntos según el tipo de bebida y el multiplicador del mercado. Se anota en todas las ligas del usuario a la vez.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot"></div>
+            <div class="flow-content">
+              <div class="flow-title">Fin de temporada</div>
+              <div class="flow-desc">Cada 10 días se ejecuta automáticamente <code>end_season_and_reward()</code> via GitHub Actions. Reparte monedas al top 3 y guarda el historial.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="feature-visual" style="--feature-color: rgba(245,158,11,0.15);">
+        <div class="mock-screen">
+          <div class="mock-header">
+            <div class="mock-dot" style="background:#10b981"></div>
+            <div class="mock-dot" style="background:#f59e0b"></div>
+            <div class="mock-dot" style="background:#ef4444"></div>
+            <span style="font-size:0.75rem;color:var(--muted);margin-left:0.5rem;">Ranking — Hijoputas</span>
+          </div>
+          <div class="mock-row">
+            <div class="mock-avatar">🥇</div>
+            <div style="flex:1">
+              <div style="font-size:0.8rem;font-weight:700;">JPeligroso</div>
+              <div class="mock-bar" style="width:95%;margin-top:0.3rem;"></div>
+            </div>
+            <div style="font-size:0.9rem;font-weight:700;color:var(--beer);">109pts</div>
+          </div>
+          <div class="mock-row">
+            <div class="mock-avatar">🥈</div>
+            <div style="flex:1">
+              <div style="font-size:0.8rem;font-weight:700;">DonMartineitor</div>
+              <div class="mock-bar" style="width:80%;animation-delay:0.2s;margin-top:0.3rem;"></div>
+            </div>
+            <div style="font-size:0.9rem;font-weight:700;color:var(--beer);">106pts</div>
+          </div>
+          <div class="mock-row">
+            <div class="mock-avatar">🥉</div>
+            <div style="flex:1">
+              <div style="font-size:0.8rem;font-weight:700;">MaryAnno</div>
+              <div class="mock-bar" style="width:65%;animation-delay:0.4s;margin-top:0.3rem;"></div>
+            </div>
+            <div style="font-size:0.9rem;font-weight:700;color:var(--beer);">101pts</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MERCADO -->
+    <div class="feature-big reverse">
+      <div>
+        <span class="badge badge-indigo" style="margin-bottom: 1rem; display: inline-flex;">📈 Mercado</span>
+        <h3 style="font-family: 'Bebas Neue'; font-size: 2rem; letter-spacing: 0.02em; margin-bottom: 1rem;">Cotización de bebidas</h3>
+        <p style="color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-size: 0.95rem;">Cada bebida tiene un precio en el mercado que varía entre x0.5 y x2.0. El multiplicador afecta directamente a los puntos y monedas obtenidos al anotar. El mercado se actualiza cada hora.</p>
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color: #6366f1;"></div>
+            <div class="flow-content">
+              <div class="flow-title">Fluctuación automática</div>
+              <div class="flow-desc">Cada hora un job de GitHub Actions llama a <code>update_drink_market()</code> que ajusta los precios con variación aleatoria.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color: #6366f1;"></div>
+            <div class="flow-content">
+              <div class="flow-title">Operaciones LONG/SHORT</div>
+              <div class="flow-desc">Los usuarios pueden apostar monedas a que el precio subirá (LONG) o bajará (SHORT). Máximo 3 operaciones por día. Solo disponible de 22:00 a 02:00h.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color: #6366f1;"></div>
+            <div class="flow-content">
+              <div class="flow-title">S&PINTA 500</div>
+              <div class="flow-desc">Mercado de acciones de empresas ficticias. Los accionistas reciben dividendos diarios automáticamente.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="feature-visual" style="--feature-color: rgba(99,102,241,0.15);">
+        <div class="mock-screen">
+          <div class="mock-header">
+            <div style="font-size:0.7rem;color:#818cf8;font-family:'JetBrains Mono'">MERCADO · ABIERTO</div>
+            <div style="margin-left:auto;font-size:0.7rem;color:var(--muted)">próx. tick: 23m</div>
+          </div>
+          <div class="mock-row">
+            <div class="mock-avatar" style="background:rgba(16,185,129,0.15);font-size:1.1rem;">🍺</div>
+            <div style="flex:1">
+              <div style="font-size:0.8rem;font-weight:700;font-family:'JetBrains Mono'">CERVEZA</div>
+              <div style="font-size:0.7rem;color:#10b981;font-family:'JetBrains Mono'">x1.45 ▲2.3%</div>
+            </div>
+            <span class="mock-badge" style="background:rgba(16,185,129,0.15);color:#10b981;">🔥 HOT</span>
+          </div>
+          <div class="mock-row">
+            <div class="mock-avatar" style="background:rgba(239,68,68,0.15);font-size:1.1rem;">🥃</div>
+            <div style="flex:1">
+              <div style="font-size:0.8rem;font-weight:700;font-family:'JetBrains Mono'">WHISKY</div>
+              <div style="font-size:0.7rem;color:#ef4444;font-family:'JetBrains Mono'">x0.62 ▼5.1%</div>
+            </div>
+            <span class="mock-badge" style="background:rgba(239,68,68,0.15);color:#ef4444;">❄️ COLD</span>
+          </div>
+          <div class="mock-row">
+            <div class="mock-avatar" style="background:rgba(99,102,241,0.15);font-size:1.1rem;">🍷</div>
+            <div style="flex:1">
+              <div style="font-size:0.8rem;font-weight:700;font-family:'JetBrains Mono'">VINO</div>
+              <div style="font-size:0.7rem;color:var(--muted);font-family:'JetBrains Mono'">x1.00 ▲0.0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUERRA -->
+    <div class="feature-big">
+      <div>
+        <span class="badge badge-red" style="margin-bottom: 1rem; display: inline-flex;">⚔️ Guerra de Clanes 3.0</span>
+        <h3 style="font-family: 'Bebas Neue'; font-size: 2rem; letter-spacing: 0.02em; margin-bottom: 1rem;">Batallas colectivas entre ligas</h3>
+        <p style="color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-size: 0.95rem;">Una liga reta a otra. El declarante configura las reglas: duración, recompensa en monedas y objetivos por día (que pueden ser distintos para cada equipo). El capitán —el de más puntos de la temporada— asigna roles.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.5rem;">
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:0.75rem;padding:1rem;">
+            <div style="font-size:1.25rem;margin-bottom:0.5rem;">🕵️</div>
+            <div style="font-weight:700;font-size:0.875rem;margin-bottom:0.25rem;">Espía</div>
+            <div style="font-size:0.8rem;color:var(--muted);">Ve el progreso rival en tiempo real</div>
+          </div>
+          <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:0.75rem;padding:1rem;">
+            <div style="font-size:1.25rem;margin-bottom:0.5rem;">💣</div>
+            <div style="font-weight:700;font-size:0.875rem;margin-bottom:0.25rem;">Saboteador</div>
+            <div style="font-size:0.8rem;color:var(--muted);">Freeze gratuito a un rival</div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color:#ef4444"></div>
+            <div class="flow-content">
+              <div class="flow-title">Tipos de batalla</div>
+              <div class="flow-desc">Consumiciones totales · Miembros activos · Puntos totales · Consumiciones nocturnas (22h-4h)</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color:#ef4444"></div>
+            <div class="flow-content">
+              <div class="flow-title">Resolución</div>
+              <div class="flow-desc">El primero en completar su objetivo gana la batalla. Al final, el equipo con más batallas ganadas se lleva las monedas configuradas.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="feature-visual" style="--feature-color: rgba(239,68,68,0.12);">
+        <div class="mock-screen" style="background:linear-gradient(135deg,#0a0005,#1a0008);">
+          <div style="text-align:center;padding:1rem 0;">
+            <div style="font-size:0.65rem;color:#ef4444;font-family:'JetBrains Mono';letter-spacing:0.15em;margin-bottom:0.5rem;">⚔️ DÍA 1/3</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+              <div style="flex:1;text-align:left;">
+                <div style="font-size:0.75rem;font-weight:700;color:rgba(255,255,255,0.8);">Hijoputas</div>
+                <div style="font-size:2rem;font-weight:900;color:#ef4444;font-family:'Bebas Neue'">2</div>
+                <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);">batallas</div>
+              </div>
+              <div style="font-size:0.9rem;font-weight:900;color:rgba(255,255,255,0.2);">VS</div>
+              <div style="flex:1;text-align:right;">
+                <div style="font-size:0.75rem;font-weight:700;color:rgba(255,255,255,0.8);">Ubuntu</div>
+                <div style="font-size:2rem;font-weight:900;color:#818cf8;font-family:'Bebas Neue'">1</div>
+                <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);">batallas</div>
+              </div>
+            </div>
+            <div style="margin-top:0.75rem;height:6px;border-radius:999px;overflow:hidden;display:flex;">
+              <div style="width:60%;background:linear-gradient(90deg,#7f1d1d,#ef4444);"></div>
+              <div style="flex:1;background:linear-gradient(90deg,#4338ca,#6366f1);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JUICIO -->
+    <div class="feature-big reverse">
+      <div>
+        <span class="badge badge-purple" style="margin-bottom: 1rem; display: inline-flex;">⚖️ El Juzgado</span>
+        <h3 style="font-family: 'Bebas Neue'; font-size: 2rem; letter-spacing: 0.02em; margin-bottom: 1rem;">Votación de consumiciones sospechosas</h3>
+        <p style="color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-size: 0.95rem;">Cualquier miembro puede impugnar una consumición de las últimas 24 horas. Se abre automáticamente un juicio donde la liga vota en tiempo real vía Supabase Realtime.</p>
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color:#a855f7"></div>
+            <div class="flow-content">
+              <div class="flow-title">Impugnación</div>
+              <div class="flow-desc">El acusador pulsa "Impugnar". El juicio se abre para toda la liga automáticamente y el acusado recibe una notificación push.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color:#a855f7"></div>
+            <div class="flow-content">
+              <div class="flow-title">Votación en vivo</div>
+              <div class="flow-desc">Los miembros votan ✅ Real o ❌ Falso. Los votos se ven en tiempo real con barras animadas. El acusado puede subir una foto como prueba.</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-dot" style="border-color:#a855f7"></div>
+            <div class="flow-content">
+              <div class="flow-title">Veredicto automático</div>
+              <div class="flow-desc">Si ≥65% vota FALSO → consumición anulada (0 puntos). Si ≥65% vota REAL → consumición validada. La función <code>resolve_dispute_by_votes()</code> lo gestiona todo.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="feature-visual" style="--feature-color: rgba(168,85,247,0.12);">
+        <div class="mock-screen" style="background:#0d0d1a;">
+          <div style="text-align:center;padding:0.5rem 0 1rem;">
+            <div style="font-size:2rem;margin-bottom:0.25rem;">⚖️</div>
+            <div style="font-size:0.9rem;font-weight:900;color:white;">EL JUZGADO</div>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);margin-top:0.25rem;">7 votos · en vivo</div>
+          </div>
+          <div style="margin-bottom:0.75rem;">
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--muted);margin-bottom:0.4rem;">
+              <span>✅ Real (3)</span>
+              <span>❌ Falso (4)</span>
+            </div>
+            <div style="height:20px;border-radius:999px;overflow:hidden;display:flex;background:rgba(255,255,255,0.06);">
+              <div style="width:43%;background:#10b981;display:flex;align-items:center;justify-content:end;padding-right:6px;font-size:0.65rem;font-weight:700;color:white;">43%</div>
+              <div style="flex:1;background:#ef4444;display:flex;align-items:center;padding-left:6px;font-size:0.65rem;font-weight:700;color:white;">57%</div>
+            </div>
+            <div style="font-size:0.65rem;color:var(--muted);text-align:center;margin-top:0.4rem;">Falta 8% para anular</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+            <div style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:0.625rem;padding:0.625rem;text-align:center;font-size:0.8rem;font-weight:900;color:#10b981;">✅ REAL</div>
+            <div style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:0.625rem;padding:0.625rem;text-align:center;font-size:0.8rem;font-weight:900;color:#ef4444;">❌ FALSO</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POWERUPS -->
+    <h3 style="font-family:'Bebas Neue';font-size:2rem;letter-spacing:0.02em;margin-bottom:0.75rem;">⚡ Powerups</h3>
+    <p style="color:var(--muted);font-size:0.95rem;line-height:1.6;margin-bottom:2rem;">Se compran con monedas en la Tienda del Mercado. Cooldown de 30 minutos entre compras.</p>
+    <div class="powerups-grid">
+      <div class="powerup-card">
+        <div class="powerup-emoji">🔥</div>
+        <div>
+          <div class="card-title">Racha Doble</div>
+          <div class="card-desc">Dobla tus puntos durante 2 horas. Se acumula con el multiplicador del mercado.</div>
+          <div class="badge badge-beer" style="margin-top:0.75rem;">double_points</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">🧊</div>
+        <div>
+          <div class="card-title">Freeze</div>
+          <div class="card-desc">Congela a un rival 15 minutos. No puede sumar puntos mientras dure.</div>
+          <div class="badge badge-indigo" style="margin-top:0.75rem;">freeze</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">💣</div>
+        <div>
+          <div class="card-title">Sabotaje</div>
+          <div class="card-desc">Aplica un Freeze a un rival durante 30 minutos. Versión extendida.</div>
+          <div class="badge badge-red" style="margin-top:0.75rem;">sabotage</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">🛡️</div>
+        <div>
+          <div class="card-title">Escudo</div>
+          <div class="card-desc">Bloquea el próximo ataque que recibas. Se consume al absorber el impacto.</div>
+          <div class="badge badge-indigo" style="margin-top:0.75rem;">shield</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">👻</div>
+        <div>
+          <div class="card-title">Invisible</div>
+          <div class="card-desc">Tus consumiciones muestran 0 pts en el ranking pero sigues ganando monedas.</div>
+          <div class="badge badge-indigo" style="margin-top:0.75rem;">invisible</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">⚡</div>
+        <div>
+          <div class="card-title">Turbo</div>
+          <div class="card-desc">Triple de puntos para una bebida específica durante 4 horas.</div>
+          <div class="badge badge-beer" style="margin-top:0.75rem;">turbo</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">🎰</div>
+        <div>
+          <div class="card-title">Gamble</div>
+          <div class="card-desc">La próxima consumición vale x0 o x4 aleatoriamente. Todo o nada.</div>
+          <div class="badge badge-purple" style="margin-top:0.75rem;">gamble</div>
+        </div>
+      </div>
+      <div class="powerup-card">
+        <div class="powerup-emoji">🔄</div>
+        <div>
+          <div class="card-title">Reset de mercado</div>
+          <div class="card-desc">Resetea el multiplicador de una bebida a x1.0. Útil cuando está en mínimos.</div>
+          <div class="badge badge-green" style="margin-top:0.75rem;">market_reset</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── BASE DE DATOS ── -->
+<section id="bbdd">
+  <div class="container">
+    <div class="section-tag">04 — Base de datos</div>
+    <h2 class="section-title">Tablas principales</h2>
+    <p class="section-desc">PostgreSQL gestionado por Supabase. Todas las tablas tienen RLS habilitado. Las relaciones principales siguen el patrón user → league → drinks.</p>
+
+    <div class="tables-list">
+      <div class="table-card">
+        <div class="table-header">🧑 <span class="table-name">profiles</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>id</span><span class="col-type">uuid PK</span></div>
+          <div class="table-col"><span>username</span><span class="col-type">text unique</span></div>
+          <div class="table-col"><span>avatar_url</span><span class="col-type">text</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🏆 <span class="table-name">leagues</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>id</span><span class="col-type">integer PK</span></div>
+          <div class="table-col"><span>name</span><span class="col-type">text</span></div>
+          <div class="table-col"><span>invite_code</span><span class="col-type">text unique</span></div>
+          <div class="table-col"><span>created_by</span><span class="col-type">uuid FK</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">👥 <span class="table-name">league_members</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>league_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>user_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>role</span><span class="col-type">owner|admin|member</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🍺 <span class="table-name">drinks</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>id</span><span class="col-type">integer PK</span></div>
+          <div class="table-col"><span>user_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>league_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>drink_type_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>points</span><span class="col-type">numeric</span></div>
+          <div class="table-col"><span>season_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>dispute_status</span><span class="col-type">none|disputed|proven|forfeited</span></div>
+          <div class="table-col"><span>drink_group_id</span><span class="col-type">uuid</span></div>
+          <div class="table-col"><span>is_adjustment</span><span class="col-type">boolean</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🪙 <span class="table-name">wallets</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>user_id</span><span class="col-type">uuid PK FK</span></div>
+          <div class="table-col"><span>balance</span><span class="col-type">integer</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">📈 <span class="table-name">drink_market</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>drink_type_id</span><span class="col-type">integer PK FK</span></div>
+          <div class="table-col"><span>price</span><span class="col-type">numeric (50-200)</span></div>
+          <div class="table-col"><span>volume</span><span class="col-type">integer</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">⚔️ <span class="table-name">clan_wars</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>id</span><span class="col-type">integer PK</span></div>
+          <div class="table-col"><span>challenger_league_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>defender_league_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>status</span><span class="col-type">pending|active|finished|cancelled</span></div>
+          <div class="table-col"><span>duration_days</span><span class="col-type">integer (1-3)</span></div>
+          <div class="table-col"><span>reward_coins</span><span class="col-type">integer</span></div>
+          <div class="table-col"><span>captain_challenger_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>captain_defender_id</span><span class="col-type">uuid FK</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🎯 <span class="table-name">clan_war_battles</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>war_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>day</span><span class="col-type">integer</span></div>
+          <div class="table-col"><span>battle_type</span><span class="col-type">drink_count|unique_members|total_points|night_drinks</span></div>
+          <div class="table-col"><span>challenger_target</span><span class="col-type">integer</span></div>
+          <div class="table-col"><span>defender_target</span><span class="col-type">integer</span></div>
+          <div class="table-col"><span>winner_league_id</span><span class="col-type">integer FK</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">⚖️ <span class="table-name">drink_disputes</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>id</span><span class="col-type">uuid PK</span></div>
+          <div class="table-col"><span>drink_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>league_id</span><span class="col-type">integer FK</span></div>
+          <div class="table-col"><span>disputed_by</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>status</span><span class="col-type">pending|proven|forfeited</span></div>
+          <div class="table-col"><span>expires_at</span><span class="col-type">timestamptz (+3h)</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🗳️ <span class="table-name">dispute_votes</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>dispute_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>user_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>vote</span><span class="col-type">real|fake</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🏦 <span class="table-name">bank_loans</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>user_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>amount</span><span class="col-type">integer</span></div>
+          <div class="table-col"><span>interest_rate</span><span class="col-type">5|8|12 %</span></div>
+          <div class="table-col"><span>status</span><span class="col-type">active|repaid|defaulted</span></div>
+          <div class="table-col"><span>due_date</span><span class="col-type">timestamptz</span></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">🏅 <span class="table-name">achievements</span></div>
+        <div class="table-cols">
+          <div class="table-col"><span>user_id</span><span class="col-type">uuid FK</span></div>
+          <div class="table-col"><span>achievement_id</span><span class="col-type">text</span></div>
+          <div class="table-col"><span>unlocked_at</span><span class="col-type">timestamptz</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── LÓGICA ── -->
+<section id="logica">
+  <div class="container">
+    <div class="section-tag">05 — Lógica de negocio</div>
+    <h2 class="section-title">Funciones SQL clave</h2>
+    <p class="section-desc">Toda la lógica crítica vive en funciones PostgreSQL con <code>security definer</code>. El frontend solo llama a <code>supabase.rpc()</code>.</p>
+
+    <div style="overflow-x:auto;border-radius:1rem;border:1px solid var(--border);">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Función</th>
+            <th>Qué hace</th>
+            <th>Cuándo se llama</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>add_drink_with_effects()</td><td>Anota consumición aplicando powerups activos (freeze, double, turbo, gamble, invisible). Inserta en todas las ligas del usuario en una sola transacción.</td><td>Al pulsar "Anotar" en AddDrink</td></tr>
+          <tr><td>end_season_and_reward()</td><td>Cierra la temporada activa, reparte monedas al top 3 de cada liga, guarda en season_results y abre una nueva temporada.</td><td>GitHub Action cada 10 días</td></tr>
+          <tr><td>update_drink_market()</td><td>Ajusta precios de todas las bebidas con variación aleatoria respetando los límites x0.5–x2.0.</td><td>GitHub Action cada hora</td></tr>
+          <tr><td>buy_powerup()</td><td>Valida saldo, aplica el powerup, descuenta monedas y registra el efecto activo. Gestiona el cooldown de 30min.</td><td>Al comprar en la Tienda</td></tr>
+          <tr><td>resolve_dispute_by_votes()</td><td>Calcula porcentaje de votos fake. Si ≥65% → anula consumición (0 pts) y notifica al acusado.</td><td>Tras cada voto en El Juzgado</td></tr>
+          <tr><td>update_war_battle_progress()</td><td>Recalcula challenger_current y defender_current para todas las batallas activas. Detecta completado y asigna winner_league_id.</td><td>Al cargar ClanWar</td></tr>
+          <tr><td>resolve_clan_war()</td><td>Cuenta batallas ganadas por equipo, determina ganador, reparte reward_coins a los miembros del equipo vencedor.</td><td>Al expirar la guerra</td></tr>
+          <tr><td>get_war_captain()</td><td>Devuelve el user_id con más puntos en la temporada activa para una liga dada.</td><td>Al declarar o aceptar una guerra</td></tr>
+          <tr><td>claim_daily_reward()</td><td>Gestiona la racha de recompensa diaria. Día 7 da powerup gratis. Actualiza streak y añade monedas.</td><td>Al abrir cofre en Home</td></tr>
+          <tr><td>request_bank_loan()</td><td>Valida que no haya préstamo activo, calcula límite (2× saldo), acredita monedas y crea el registro de deuda.</td><td>Al pedir préstamo en Banco</td></tr>
+          <tr><td>join_league_by_code()</td><td>Busca liga por código (case-insensitive), comprueba que no sea ya miembro, inserta en league_members.</td><td>Al unirse con código</td></tr>
+          <tr><td>send_coins_to_member()</td><td>Transfiere monedas entre usuarios dentro de una liga. Registra en league_transfers.</td><td>Al enviar en Transferencias</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-family:'Bebas Neue';font-size:1.75rem;letter-spacing:0.02em;margin:3rem 0 1rem;">Flujo de una consumición</h3>
+    <div class="code-block">
+<span class="cm">// Frontend → AddDrink.jsx</span>
+<span class="kw">const</span> { data } = <span class="kw">await</span> supabase.<span class="fn">rpc</span>(<span class="str">'add_drink_with_effects'</span>, {
+  p_drink_type_id: <span class="num">2</span>,        <span class="cm">// cerveza</span>
+  p_season_id: seasonId,
+  p_league_ids: [<span class="num">14</span>, <span class="num">18</span>],    <span class="cm">// todas las ligas del usuario</span>
+  p_drink_group_id: uuid(),   <span class="cm">// agrupa inserts de varias ligas</span>
+})
+
+<span class="cm">// La función SQL:</span>
+<span class="cm">// 1. Comprueba si el usuario está congelado (freeze)</span>
+<span class="cm">// 2. Obtiene multiplicador del mercado para la bebida</span>
+<span class="cm">// 3. Aplica double_points si está activo</span>
+<span class="cm">// 4. Aplica turbo si está activo para esa bebida</span>
+<span class="cm">// 5. Aplica gamble (x0 o x4 aleatorio)</span>
+<span class="cm">// 6. Aplica invisible (muestra 0 pts pero guarda real)</span>
+<span class="cm">// 7. Inserta en drinks por cada league_id</span>
+<span class="cm">// 8. Actualiza wallet (+coins = puntos × 10)</span>
+<span class="cm">// 9. Gestiona deuda si balance < 0</span>
+<span class="cm">// Retorna: { success, final_points, coins, ... }</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── EVENTOS ── -->
+<section id="eventos">
+  <div class="container">
+    <div class="section-tag">06 — Automatización</div>
+    <h2 class="section-title">GitHub Actions</h2>
+    <p class="section-desc">Las tareas automáticas corren en GitHub Actions y llaman directamente a la API de Supabase. No hay servidor backend.</p>
+
+    <div class="cards-grid">
+      <div class="card" style="--accent-color: rgba(245,158,11,0.3)">
+        <span class="card-icon">⏰</span>
+        <div class="card-title">Actualización de mercado</div>
+        <div class="card-desc">Llama a <code>update_drink_market()</code> cada hora en punto. Ajusta los precios de todas las bebidas con variación aleatoria controlada.</div>
+        <div class="card-tag badge-beer" style="margin-top:1rem;">Cron: 0 * * * *</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(16,185,129,0.3)">
+        <span class="card-icon">🏁</span>
+        <div class="card-title">Fin de temporada</div>
+        <div class="card-desc">Ejecuta <code>end_season_and_reward()</code> cada 10 días. Cierra la temporada, reparte monedas al top 3 de cada liga y abre una nueva.</div>
+        <div class="card-tag badge-green" style="margin-top:1rem;">Cron: 0 0 */10 * *</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(239,68,68,0.3)">
+        <span class="card-icon">🍖</span>
+        <div class="card-title">Operación Barbacoa</div>
+        <div class="card-desc">Notificación masiva el 8 de mayo a las 22:00 UTC (medianoche Madrid). Llama a <code>notify_operacion_barbacoa()</code> para avisar a todos los usuarios del evento.</div>
+        <div class="card-tag badge-red" style="margin-top:1rem;">Cron: 0 22 8 5 *</div>
+      </div>
+    </div>
+
+    <h3 style="font-family:'Bebas Neue';font-size:1.75rem;letter-spacing:0.02em;margin:3rem 0 1rem;">Eventos especiales</h3>
+    <div style="overflow-x:auto;border-radius:1rem;border:1px solid var(--border);">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Evento</th>
+            <th>Cuándo</th>
+            <th>Efecto</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Martes Macarra 😈</td><td>Todos los martes (y madrugada del miércoles hasta las 4h)</td><td>Puntos ×2. Banner animado en AddDrink. El cubata Camarada no aparece.</td></tr>
+          <tr><td>Operación Barbacoa 🍖</td><td>9 de Mayo (todo el día)</td><td>Puntos ×2. El cubata normal se oculta y aparece el Cubata del Camarada (15pts). Medalla exclusiva al anotar.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-family:'Bebas Neue';font-size:1.75rem;letter-spacing:0.02em;margin:3rem 0 1rem;">Sistema de temporadas</h3>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color:var(--beer);color:var(--beer);">1</div>
+        <div class="timeline-label">Inicio<br><span style="font-size:0.7rem;color:var(--hint);">Nueva temporada activa</span></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color:var(--indigo);color:#818cf8;">~</div>
+        <div class="timeline-label">10 días<br><span style="font-size:0.7rem;color:var(--hint);">Consumiciones y ranking</span></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color:var(--green);color:var(--green);">🏁</div>
+        <div class="timeline-label">Fin<br><span style="font-size:0.7rem;color:var(--hint);">Reparto de monedas</span></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color:var(--beer);color:var(--beer);">💾</div>
+        <div class="timeline-label">Historial<br><span style="font-size:0.7rem;color:var(--hint);">Guardado en season_results</span></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="border-color:var(--beer);color:var(--beer);">1</div>
+        <div class="timeline-label">Reinicio<br><span style="font-size:0.7rem;color:var(--hint);">Nueva temporada</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PENDIENTE ── -->
+<section id="pendiente">
+  <div class="container">
+    <div class="section-tag">07 — Roadmap</div>
+    <h2 class="section-title">Features pendientes</h2>
+    <p class="section-desc">Lista de mejoras y features identificadas durante el desarrollo que quedan por implementar.</p>
+
+    <div class="cards-grid">
+      <div class="card" style="--accent-color: rgba(239,68,68,0.2)">
+        <span class="card-icon">⚔️</span>
+        <div class="card-title">Saboteador en Guerra</div>
+        <div class="card-desc">El rol Saboteador existe en la UI pero el freeze gratuito no está conectado con la función de powerup. Pendiente implementar <code>handleSabotage</code> en ClanWar.jsx.</div>
+        <div class="card-tag badge-red" style="margin-top:1rem;">Alta prioridad</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(245,158,11,0.2)">
+        <span class="card-icon">📊</span>
+        <div class="card-title">Historial personal</div>
+        <div class="card-desc">Estadísticas avanzadas por usuario: evolución por temporada, bebida favorita, horas pico, racha más larga...</div>
+        <div class="card-tag badge-beer" style="margin-top:1rem;">Media prioridad</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(245,158,11,0.2)">
+        <span class="card-icon">👥</span>
+        <div class="card-title">Admin: inventarios</div>
+        <div class="card-desc">Ver monedas y powerups activos de cada usuario en el panel de admin de liga.</div>
+        <div class="card-tag badge-beer" style="margin-top:1rem;">Media prioridad</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(16,185,129,0.2)">
+        <span class="card-icon">⚔️</span>
+        <div class="card-title">Logros de guerra</div>
+        <div class="card-desc">Conectar los logros war_winner, war_captain, spy_role, saboteur_role con queries reales de clan_war_participants.</div>
+        <div class="card-tag badge-green" style="margin-top:1rem;">Media prioridad</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(99,102,241,0.2)">
+        <span class="card-icon">🔑</span>
+        <div class="card-title">Bug: código de invitación</div>
+        <div class="card-desc">Los códigos de liga funcionan desde SQL pero devuelven "Código no válido" desde el frontend. Posible problema de permisos RLS o grant en la función.</div>
+        <div class="card-tag badge-indigo" style="margin-top:1rem;">Bug conocido</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(168,85,247,0.2)">
+        <span class="card-icon">📱</span>
+        <div class="card-title">iOS pantalla negra</div>
+        <div class="card-desc">Algunos usuarios iOS experimentan pantalla negra al cargar. El service worker importScripts fue corregido pero el problema persiste. Sin acceso a consola de errores.</div>
+        <div class="card-tag badge-purple" style="margin-top:1rem;">Bug conocido</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(245,158,11,0.2)">
+        <span class="card-icon">🗓️</span>
+        <div class="card-title">Eventos desde admin</div>
+        <div class="card-desc">Que el owner pueda crear eventos especiales manuales (ej: "hoy doble puntos") desde el panel de admin.</div>
+        <div class="card-tag badge-beer" style="margin-top:1rem;">Baja prioridad</div>
+      </div>
+      <div class="card" style="--accent-color: rgba(16,185,129,0.2)">
+        <span class="card-icon">🏖️</span>
+        <div class="card-title">Modo vacaciones</div>
+        <div class="card-desc">Pausar la cuenta para que no afecte al ranking ni a guerras durante un período definido.</div>
+        <div class="card-tag badge-green" style="margin-top:1rem;">Baja prioridad</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div style="font-family:'Bebas Neue';font-size:1.5rem;color:var(--beer);letter-spacing:0.05em;margin-bottom:0.5rem;">🍺 BEER LEAGUE</div>
+  <div>Documentación generada · MVC Productions · v1.0</div>
+</footer>
+
+<script>
+  // Smooth scroll para nav links
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault()
+      const el = document.querySelector(a.getAttribute('href'))
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  })
+
+  // Animación de entrada para cards al hacer scroll
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1'
+        e.target.style.transform = 'translateY(0)'
+      }
+    })
+  }, { threshold: 0.1 })
+
+  document.querySelectorAll('.card, .table-card, .powerup-card, .achievement-card, .tech-card').forEach(el => {
+    el.style.opacity = '0'
+    el.style.transform = 'translateY(16px)'
+    el.style.transition = 'opacity 0.5s ease, transform 0.5s ease'
+    observer.observe(el)
+  })
+</script>
+</body>
+</html>

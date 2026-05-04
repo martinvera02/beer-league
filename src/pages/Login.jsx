@@ -242,6 +242,25 @@ export default function Login() {
               transition={{ duration: 2, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }} />
             <span className="relative">🍺 Unirse a Beer League</span>
           </motion.button>
+
+          {/* Documentación */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="mt-6">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              whileHover={{ scale: 1.02 }}
+              onClick={() => window.open('/beer-league-docs.html', '_blank')}
+              className="flex items-center gap-2.5 mx-auto px-6 py-3 rounded-2xl font-bold text-sm"
+              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+              <span>📖</span>
+              <span>Documentación</span>
+              <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>↗</span>
+            </motion.button>
+          </motion.div>
         </motion.div>
       </div>
 
