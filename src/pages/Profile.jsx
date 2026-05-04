@@ -250,8 +250,6 @@ export default function Profile() {
 
   const [unlockedIds, setUnlockedIds] = useState(new Set())
   const [newlyUnlocked, setNewlyUnlocked] = useState([])
-  const [unlockedIds, setUnlockedIds] = useState(new Set())
-  const [newlyUnlocked, setNewlyUnlocked] = useState([])
   const [loadingAchievements, setLoadingAchievements] = useState(false)
   const [globalRank, setGlobalRank] = useState(null)
   const [globalPoints, setGlobalPoints] = useState(null)
