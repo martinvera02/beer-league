@@ -14,10 +14,14 @@ import ClanWar from './pages/ClanWar'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import PushNotificationBanner from './components/PushNotificationBanner'
+import Onboarding, { useOnboarding } from './pages/Onboarding'
 
 function Dashboard() {
   const [currentPage, setCurrentPage] = useState('home')
   const [selectedLeague, setSelectedLeague] = useState(null)
+  const { showOnboarding, completeOnboarding } = useOnboarding()
+
+  if (showOnboarding) return <Onboarding onComplete={completeOnboarding} />
 
   const renderPage = () => {
     switch (currentPage) {

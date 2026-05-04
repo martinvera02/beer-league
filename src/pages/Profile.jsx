@@ -103,7 +103,7 @@ async function detectAchievements(userId, stats, supabaseClient) {
     supabaseClient.from('wallets').select('balance').eq('user_id', userId).single(),
     supabaseClient.from('market_positions').select('id').eq('user_id', userId),
     supabaseClient.from('roulette_bets').select('won, net, created_at, bet_amount').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabaseClient.from('active_powerups').select('id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
+    supabaseClient.from('active_powerups').select('powerup_id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
     supabaseClient.from('league_transfers').select('receiver_id, amount, created_at').eq('sender_id', userId),
     supabaseClient.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', userId),
     supabaseClient.from('stories').select('id').eq('user_id', userId),
@@ -224,7 +224,7 @@ async function detectAchievements(userId, stats, supabaseClient) {
   const hasAllDrinks = false // requiere saber cuántas bebidas hay en total
   const rouletteLosingStreak = (() => { let s = 0; for (const b of (rouletteBets || [])) { if (!b.won) s++; else break }; return s })()
   const hasLoanTaken = (activePowerups || []).length >= 0 // se comprueba en bank_loans
-  const hasStockHolder = false
+  const hasStockHolder = (myStockPositions || []).length > 0
   const hasTurboUsed = (activePowerups || []).some(p => p.effect_type === 'turbo')
   const hasDoubleUsed = (activePowerups || []).some(p => p.effect_type === 'double_points')
   const hasWarWinner = false // requiere clan_war_participants — se detecta en fetchGlobalStats
@@ -1067,6 +1067,19 @@ export default function Profile() {
                   </motion.button>
                 ))}
               </div>
+            </div>
+
+            <div className="rounded-2xl p-5 border border-red-900" style={{ backgroundColor: 'var(--bg-card)' }}>
+              <h2 className="text-base font-bold mb-2">📖 Tutorial</h2>
+              <p className="text-xs mb-4" style={{ color: 'var(--text-hint)' }}>Vuelve a ver la guía de introducción a Beer League.</p>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => {
+                localStorage.removeItem('beer_league_onboarding_done')
+                window.location.reload()
+              }}
+                className="w-full py-3 rounded-xl font-semibold text-sm"
+                style={{ backgroundColor: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                🚀 Ver tutorial de nuevo
+              </motion.button>
             </div>
 
             <div className="rounded-2xl p-5 border border-red-900" style={{ backgroundColor: 'var(--bg-card)' }}>
