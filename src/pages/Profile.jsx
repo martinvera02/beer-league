@@ -103,7 +103,7 @@ async function detectAchievements(userId, stats, supabaseClient) {
     supabaseClient.from('wallets').select('balance').eq('user_id', userId).single(),
     supabaseClient.from('market_positions').select('id').eq('user_id', userId),
     supabaseClient.from('roulette_bets').select('won, net, created_at, bet_amount').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabaseClient.from('active_powerups').select('powerup_id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
+    supabaseClient.from('active_powerups').select('id, effect_type, created_at, user_id, target_user_id').eq('user_id', userId),
     supabaseClient.from('league_transfers').select('receiver_id, amount, created_at').eq('sender_id', userId),
     supabaseClient.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', userId),
     supabaseClient.from('stories').select('id').eq('user_id', userId),
@@ -224,7 +224,7 @@ async function detectAchievements(userId, stats, supabaseClient) {
   const hasAllDrinks = false // requiere saber cuántas bebidas hay en total
   const rouletteLosingStreak = (() => { let s = 0; for (const b of (rouletteBets || [])) { if (!b.won) s++; else break }; return s })()
   const hasLoanTaken = (activePowerups || []).length >= 0 // se comprueba en bank_loans
-  const hasStockHolder = (myStockPositions || []).length > 0
+  const hasStockHolder = false
   const hasTurboUsed = (activePowerups || []).some(p => p.effect_type === 'turbo')
   const hasDoubleUsed = (activePowerups || []).some(p => p.effect_type === 'double_points')
   const hasWarWinner = false // requiere clan_war_participants — se detecta en fetchGlobalStats
