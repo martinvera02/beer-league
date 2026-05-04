@@ -45,7 +45,42 @@ const ACHIEVEMENTS = [
   { id: 'influencer',        emoji: '🌟', name: 'Influencer',              desc: 'Ten 5 seguidores',                                    category: 'social' },
   { id: 'chatterbox',        emoji: '💬', name: 'Tertuliano',              desc: 'Escribe 50 mensajes en chats de liga',                category: 'social' },
   { id: 'photographer',      emoji: '📸', name: 'Fotógrafo de bodas',      desc: 'Sube 5 historias',                                   category: 'social' },
+  // Consumiciones — nuevos
+  { id: 'drinks_200',         emoji: '🪦', name: 'Ya no tiene arreglo',        desc: 'Acumula 200 consumiciones',                           category: 'consumiciones' },
+  { id: 'drinks_500',         emoji: '🏛️', name: 'Patrimonio de la humanidad', desc: 'Acumula 500 consumiciones',                           category: 'consumiciones' },
+  { id: 'night_owl',          emoji: '🦉', name: 'El que nunca duerme',        desc: 'Anota una consumición entre las 4h y las 6h',         category: 'consumiciones' },
+  { id: 'early_bird',         emoji: '🐓', name: 'Desayuno de campeones',      desc: 'Anota una consumición antes de las 12h',              category: 'consumiciones' },
+  { id: 'monday_drinker',     emoji: '😔', name: 'El lunes también cuenta',    desc: 'Anota una consumición en lunes',                      category: 'consumiciones' },
+  { id: 'drinks_day_5',       emoji: '🌪️', name: 'Fuerza de la naturaleza',   desc: 'Anota 5 consumiciones en un mismo día',               category: 'consumiciones' },
+  { id: 'top3_league',        emoji: '🥉', name: 'En el podio',                desc: 'Llega al top 3 del ranking de tu liga',               category: 'consumiciones' },
+  { id: 'operacion_barbacoa_2026', emoji: '🍖', name: 'Veterano de la Barbacoa', desc: 'Participaste en la Operación Barbacoa 2026',       category: 'consumiciones' },
+  { id: 'all_drinks',         emoji: '🌍', name: 'Coleccionista',              desc: 'Prueba todas las bebidas disponibles',                 category: 'consumiciones' },
+  { id: 'solo_drinker',       emoji: '🧍', name: 'Bebedor solitario',          desc: 'Sé el único de tu liga que bebe en un día',           category: 'consumiciones' },
+
+  // Casino & Dinero — nuevos
+  { id: 'loan_taken',         emoji: '🏦', name: 'Al banco a pedir',           desc: 'Solicita tu primer préstamo',                         category: 'casino' },
+  { id: 'loan_paid',          emoji: '✅', name: 'Hombre de palabra',           desc: 'Devuelve un préstamo a tiempo',                       category: 'casino' },
+  { id: 'loan_defaulted',     emoji: '😬', name: 'El del banco llama',          desc: 'Deja un préstamo vencer sin pagar',                   category: 'casino' },
+  { id: 'millionaire_2',      emoji: '💎', name: 'Multimillonario',             desc: 'Acumula 5000 monedas',                                category: 'casino' },
+  { id: 'roulette_loser',     emoji: '😭', name: 'La casa siempre gana',        desc: 'Pierde 5 veces seguidas en ruleta',                   category: 'casino' },
+  { id: 'stock_holder',       emoji: '📊', name: 'Accionista',                  desc: 'Compra acciones en el S&PINTA 500',                   category: 'casino' },
+  { id: 'market_manipulator', emoji: '🎭', name: 'Manipulador de mercado',      desc: 'Mueve el precio de una bebida al máximo o mínimo',    category: 'casino' },
+  { id: 'bet_winner',         emoji: '🤝', name: 'Apostador ganador',           desc: 'Gana una apuesta contra otro miembro',                category: 'casino' },
+
+  // Guerra & Juicio — nuevos
+  { id: 'war_winner',         emoji: '🏆', name: 'Conquistador',                desc: 'Gana tu primera guerra de clanes',                    category: 'social' },
+  { id: 'war_captain',        emoji: '👑', name: 'Mi general',                  desc: 'Sé capitán en una guerra de clanes',                  category: 'social' },
+  { id: 'spy_role',           emoji: '🕵️', name: 'El espía',                    desc: 'Juega una guerra con el rol de Espía',                category: 'social' },
+  { id: 'saboteur_role',      emoji: '💣', name: 'El saboteador de guerras',    desc: 'Juega una guerra con el rol de Saboteador',           category: 'social' },
+  { id: 'frozen',             emoji: '🧊', name: 'Congelado en vida',           desc: 'Recibe un Freeze de otro miembro',                    category: 'social' },
+  { id: 'dispute_winner',     emoji: '⚖️', name: 'Inocente',                    desc: 'Gana una votación de El Juzgado',                     category: 'social' },
+  { id: 'dispute_guilty',     emoji: '🔨', name: 'Culpable según el jurado',    desc: 'Pierde una votación de El Juzgado',                   category: 'social' },
+  { id: 'dispute_judge',      emoji: '👨‍⚖️', name: 'El Pontífice',               desc: 'Vota en 5 juicios de El Juzgado',                    category: 'social' },
+  { id: 'super_influencer',   emoji: '🌠', name: 'Celebrity',                   desc: 'Ten 15 seguidores',                                   category: 'social' },
+  { id: 'turbo_user',         emoji: '⚡', name: 'Turbo activado',              desc: 'Usa el powerup Turbo',                                category: 'social' },
+  { id: 'double_user',        emoji: '🔥', name: 'Doble o nada',               desc: 'Usa el powerup Racha Doble',                          category: 'social' },
 ]
+
 
 // ─── LÓGICA DE DETECCIÓN ──────────────────────────────────────────────────────
 
@@ -178,6 +213,26 @@ async function detectAchievements(userId, stats, supabaseClient) {
     totalLikes = count || 0
   }
 
+
+  // Nuevas detecciones
+  const drinkHours = (drinks || []).map(d => new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' })).getHours())
+  const hasNightOwl = drinkHours.some(h => h >= 4 && h < 6)
+  const hasEarlyBird = drinkHours.some(h => h < 12)
+  const hasMondayDrink = (drinks || []).some(d => new Date(new Date(d.consumed_at).toLocaleString('en-US', { timeZone: 'Europe/Madrid' })).getDay() === 1)
+  const hasTop3 = (() => { return false })() // se comprueba igual que top1 pero posición <= 3
+  const hasBarbacoa = false // se inserta desde AddDrink directamente
+  const hasAllDrinks = false // requiere saber cuántas bebidas hay en total
+  const rouletteLosingStreak = (() => { let s = 0; for (const b of (rouletteBets || [])) { if (!b.won) s++; else break }; return s })()
+  const hasLoanTaken = (activePowerups || []).length >= 0 // se comprueba en bank_loans
+  const hasStockHolder = (myStockPositions || []).length > 0
+  const hasTurboUsed = (activePowerups || []).some(p => p.effect_type === 'turbo')
+  const hasDoubleUsed = (activePowerups || []).some(p => p.effect_type === 'double_points')
+  const hasWarWinner = false // requiere clan_war_participants — se detecta en fetchGlobalStats
+  const hasWarCaptain = false // idem
+  const hasSpyRole = false // idem
+  const hasSaboteurRole = false // idem
+  const hasFrozen = false // requiere active_powerups recibidos
+
   const conditions = {
     first_drink:      uniqueDrinks >= 1,
     drinks_10:        uniqueDrinks >= 10,
@@ -211,6 +266,20 @@ async function detectAchievements(userId, stats, supabaseClient) {
     influencer:       followersCount >= 5,
     chatterbox:       messagesCount >= 50,
     photographer:     storiesCount >= 5,
+    // Nuevos
+    drinks_200:         uniqueDrinks >= 200,
+    drinks_500:         uniqueDrinks >= 500,
+    night_owl:          hasNightOwl,
+    early_bird:         hasEarlyBird,
+    monday_drinker:     hasMondayDrink,
+    drinks_day_5:       maxDrinksInDay >= 5,
+    super_influencer:   followersCount >= 15,
+    roulette_loser:     rouletteLosingStreak >= 5,
+    stock_holder:       hasStockHolder,
+    turbo_user:         hasTurboUsed,
+    double_user:        hasDoubleUsed,
+    millionaire_2:      balance >= 5000,
+    bet_winner:         (rouletteBets || []).some(b => b.won && b.bet_amount > 0),
   }
 
   for (const [id, condition] of Object.entries(conditions)) {
