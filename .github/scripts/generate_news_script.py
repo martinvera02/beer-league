@@ -34,8 +34,7 @@ payload = {
     "contents": [{"parts": [{"text": prompt}]}],
     "generationConfig": {
         "temperature": 0.95,
-        "maxOutputTokens": 4000,
-        "responseMimeType": "application/json"
+        "maxOutputTokens": 4000
     }
 }
 
