@@ -425,11 +425,34 @@ print(f"Banco: {len(bank)} artículos, seleccionados: {len(articles)}", file=sys
 for a in articles:
     print(f"  [{a.get('category','?')}] {a['headline'][:60]}...", file=sys.stderr)
 
-github_output = os.environ.get('GITHUB_OUTPUT', '')
-if github_output:
-    with open(github_output, 'a') as f:
-        f.write("articles<<ENDARTICLES\n")
-        f.write(json.dumps(articles))
-        f.write("\nENDARTICLES\n")
+supabase_url = os.environ.get('SUPABASE_URL', '')
+supabase_key = os.environ.get('SUPABASE_KEY', '')
+
+# Guardar en Supabase directamente desde Python
+if supabase_url and supabase_key:
+    import urllib.request, urllib.error
+    payload = {
+        "block_type": block_type,
+        "articles": articles,
+        "market_snapshot": ctx
+    }
+    req = urllib.request.Request(
+        f"{supabase_url}/rest/v1/news_blocks",
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Prefer": "return=minimal"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            print(f"✅ Bloque {block_type} guardado en Supabase (HTTP {resp.status})", file=sys.stderr)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"❌ Error guardando en Supabase: HTTP {e.code}: {body}", file=sys.stderr)
+        sys.exit(1)
 else:
+    # Modo local: imprimir JSON
     print(json.dumps(articles, ensure_ascii=False, indent=2))
