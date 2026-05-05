@@ -11,7 +11,6 @@ import GlobalRanking from './pages/GlobalRanking'
 import Social from './pages/Social'
 import Profile from './pages/Profile'
 import ClanWar from './pages/ClanWar'
-import WarlordMode from './pages/WarlordMode'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import PushNotificationBanner from './components/PushNotificationBanner'
@@ -32,7 +31,6 @@ function Dashboard() {
       case 'globalranking': return <GlobalRanking />
       case 'social':        return <Social />
       case 'clanwar':       return <ClanWar />
-      case 'warlord':       return <WarlordMode />
       case 'profile':       return <Profile />
       default:              return null
     }

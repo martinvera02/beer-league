@@ -15,7 +15,6 @@ export default function Navbar({ currentPage, setCurrentPage }) {
     { id: 'leagues',       emoji: '🏆', label: 'Ligas' },
     { id: 'globalranking', emoji: '🌍', label: 'Global' },
     { id: 'social',        emoji: '🍻', label: 'Social' },
-    { id: 'warlord',       emoji: '🏴‍☠️', label: 'Mundo' },
     { id: 'clanwar',       emoji: '⚔️', label: 'Guerra' },
     { id: 'profile',       emoji: '👤', label: 'Perfil' },
   ]
