@@ -46,88 +46,101 @@ def build_bank():
 
     bank = []
 
-    # ── ECONOMÍA (80 artículos) ──────────────────────────────────────────────
-    economia = [
-        {"headline": f"EL {d0.upper()} SE DISPARA UN 340%: ANALISTAS HABLAN DE 'BURBUJA ETÍLICA'",
-         "subtitle": f"El {d0e} {d0} alcanza {d0p} puntos históricos mientras los mercados tiemblan",
-         "body": f"El {d0} ha protagonizado la mayor subida en la historia del mercado de bebidas, rozando los {d0p} puntos y dejando a los analistas con la boca abierta —y la copa vacía—. Warren Borracho, gurú de inversiones de la firma 'Alcohólicos Anónimos Capital', ha declarado que 'quien no tenga {d0} en cartera es un completo ignorante financiero'. Los pequeños inversores han vaciado sus billeteras. Las autoridades estudian intervenir.",
-         "author": "Warren Borracho, analista jefe", "icon": "📈", "chart_data": chart_for(d0p)},
+    # ── ECONOMÍA — generada dinámicamente con datos reales del mercado ──────
+    economia = []
 
-        {"headline": f"CRISIS EN EL {d1.upper()}: TOCA MÍNIMOS HISTÓRICOS Y LOS INVERSORES LLORAN",
-         "subtitle": f"El {d1e} cae a {d1p} puntos en lo que expertos llaman 'el lunes negro de la caña'",
-         "body": f"Nadie vio venir el colapso del {d1}. Con solo {d1p} puntos, la bebida que una vez fue reina del mercado ahora arrastra pérdidas devastadoras. Elon Mustiajo, CEO de 'BebeTesla Inc', ha tuiteado: 'El {d1} es el nuevo Lehman Brothers, pero con más burbujas'. Se han registrado escenas de pánico en los bares de inversión.",
-         "author": "Elon Mustiajo, visionario", "icon": "📉", "chart_data": chart_for(d1p)},
+    # Ordenar bebidas por puntos
+    drinks_sorted = sorted(drinks, key=lambda x: x['points'], reverse=True)
+    drinks_asc    = sorted(drinks, key=lambda x: x['points'])
 
-        {"headline": f"ANÁLISIS EXCLUSIVO: ¿POR QUÉ EL {d2.upper()} ES LA INVERSIÓN DEL SIGLO?",
-         "subtitle": f"Con {d2p} puntos y tendencia alcista, el {d2e} promete revolucionar las carteras",
-         "body": f"Soros del Chupito, el legendario especulador que predijo el crash del vermú del 2019, ha revelado en exclusiva para El Heraldo de la Caña que el {d2} es 'la oportunidad de tu vida'. Con {d2p} puntos actuales, su potencial alcista es 'astronómico, sideral y bastante borracho'. Recomendamos comprar, comprar y comprar. (Esto no es consejo financiero, es consejo etílico.)",
-         "author": "Soros del Chupito, especulador", "icon": "💰", "chart_data": chart_for(d2p)},
+    for i, d in enumerate(drinks_sorted[:8]):  # top 8 bebidas
+        nm  = d['name']; em = d['emoji']; pts = d['points']
+        ref = drinks_sorted[i+1] if i+1 < len(drinks_sorted) else drinks_asc[0]
 
-        {"headline": f"FUSIÓN HISTÓRICA: {d0.upper()} Y {d1.upper()} CREAN BEBIDA FRANKENSTEIN",
-         "subtitle": "El mercado no sabe si reír o llorar ante la mayor operación corporativa de la app",
-         "body": f"En una operación que nadie pidió, los fabricantes del {d0} y el {d1} han anunciado su fusión para crear '{d0}-{d1} Ultra Premium'. Los analistas están divididos: unos dicen que es 'genial', otros que es 'una locura', y Warren Borracho simplemente no ha podido hablar porque estaba probando el producto. El mercado ha reaccionado con una subida del 0,3%, que es lo que había en su copa.",
-         "author": "Pepita Fusiones, redactora económica", "icon": "🤝", "chart_data": chart_for((d0p+d1p)/2)},
+        # Calcular variación simulada pero determinista basada en puntos
+        import hashlib
+        seed = int(hashlib.md5(nm.encode()).hexdigest(), 16) % 1000
+        pct_up   = round(5 + (seed % 35), 1)
+        pct_down = round(2 + (seed % 20), 1)
+        pts_high = round(pts * (1 + pct_up/100), 1)
+        pts_low  = round(pts * (1 - pct_down/100), 1)
 
-        {"headline": f"INFORME BOMBSHELL: EL {d0.upper()} SUPERA AL ORO COMO REFUGIO SEGURO",
-         "subtitle": "Inversores huyen de los metales preciosos hacia las bebidas premium de la app",
-         "body": f"Un informe de 'Goldman Borrachs' concluye que el {d0} con {d0p} puntos ha superado al oro, la plata y el bitcoin como activo refugio. 'En tiempos de crisis, la gente bebe', sentencia el informe de 847 páginas que nadie leerá. Los bancos centrales estudian añadir {d0e} a sus reservas estratégicas.",
-         "author": "Goldman Borrachs Research", "icon": "🥇", "chart_data": chart_for(d0p*1.1)},
+        # Analistas rotativos
+        analysts = [
+            'Warren Borracho', 'Elon Mustiajo', 'Soros del Chupito',
+            'Goldman Borrachs', 'Fibonacci Borrachs', 'Pepita Inversiones',
+            'El Oráculo del Combinado', 'Christine LaGarza'
+        ]
+        analyst = analysts[i % len(analysts)]
 
-        {"headline": f"LA FED SUBE TIPOS Y EL {d1.upper()} SE HUNDE: COINCIDENCIA O CONSPIRACIÓN",
-         "subtitle": "Economistas señalan correlación directa entre política monetaria y precio del vermú",
-         "body": f"Cada vez que la Reserva Federal sube tipos de interés, el {d1} baja exactamente {d1p} puntos. Los académicos llevan décadas estudiando este fenómeno sin explicación. 'O es una conspiración o es que los banqueros centrales beben demasiado {d1}', ha declarado el profesor Alcohólicus de la Universidad de la Caña. El Nobel de Economía está pendiente.",
-         "author": "Prof. Alcohólicus, Ph.D", "icon": "🏦", "chart_data": chart_for(d1p*0.8)},
+        # Verbo de tendencia basado en si está por encima o debajo de la media
+        media = sum(x['points'] for x in drinks) / len(drinks) if drinks else 1
+        trending_up = pts > media
 
-        {"headline": "BITCOIN VS CUBATA: EL DEBATE QUE NADIE PIDIÓ",
-         "subtitle": "Criptoinversores y bebedores tradicionales se enfrentan en el gran debate económico",
-         "body": f"Mientras el Bitcoin oscila entre la gloria y la ruina, el {d0} mantiene su cotización de {d0p} puntos con una estabilidad envidiable. 'Al menos el {d0} lo puedes beber si sale mal', ha señalado un experto. Los holders de crypto han respondido publicando memes. Los holders de {d0} han respondido bebiendo.",
-         "author": "CryptoManuel, ex-millonario", "icon": "₿", "chart_data": chart_for(d0p)},
+        if trending_up:
+            economia.append({
+                "headline": f"ALERTA ALCISTA: {em} {nm.upper()} ROMPE RÉCORDS CON {pts} PUNTOS",
+                "subtitle": f"El activo más rentable del momento dispara las alarmas de los analistas",
+                "body": (
+                    f"El {nm} ({em}) cotiza hoy a {pts} puntos, muy por encima de la media del mercado ({round(media,1)} pts), "
+                    f"en lo que {analyst} de 'Goldman Borrachs' describe como 'la oportunidad etílica del siglo'. "
+                    f"Los modelos cuantitativos apuntan a un objetivo de {pts_high} puntos a corto plazo. "
+                    f"'Quien no tenga {em} en cartera está perdiendo el tiempo y el dinero', sentenció el analista desde su bar de confianza."
+                ),
+                "author": f"{analyst}, Goldman Borrachs",
+                "icon": "📈",
+                "chart_data": sorted([round(pts * (0.7 + (int(hashlib.md5((nm+str(j)).encode()).hexdigest(),16) % 600)/1000), 1) for j in range(6)] + [pts])
+            })
+        else:
+            economia.append({
+                "headline": f"COLAPSO EN EL MERCADO: {em} {nm.upper()} TOCA MÍNIMOS CON {pts} PUNTOS",
+                "subtitle": f"Los inversores huyen del {nm} mientras los expertos discuten si es el fondo",
+                "body": (
+                    f"El {nm} ({em}) languidece a {pts} puntos, por debajo de la media del mercado ({round(media,1)} pts), "
+                    f"generando pánico entre los tenedores del activo. {analyst} recomienda 'vender, llorar y pedir otra ronda'. "
+                    f"Los soportes técnicos apuntan a {pts_low} puntos como próximo nivel clave. "
+                    f"'El {nm} necesita un catalizador, o al menos un camarero que lo recomiende más', añade el informe."
+                ),
+                "author": f"{analyst}, Resaca Capital",
+                "icon": "📉",
+                "chart_data": sorted([round(pts * (0.7 + (int(hashlib.md5((nm+str(j)).encode()).hexdigest(),16) % 600)/1000), 1) for j in range(6)] + [pts])
+            })
 
-        {"headline": f"ESCÁNDALO: INSIDER TRADING EN EL MERCADO DEL {d2.upper()}",
-         "subtitle": "Investigación revela que alguien sabía que el chupito iba a subir antes que nadie",
-         "body": f"La CNMV de la Caña ha abierto una investigación por presunto insider trading en el mercado del {d2}. Según fuentes anónimas, un usuario misterioso compró ingentes cantidades del {d2e} justo antes de que subiera a {d2p} puntos. 'Es imposible que fuera suerte', declara el inspector. El sospechoso ha respondido: 'Simplemente tenía sed'.",
-         "author": "CNMV de la Caña, nota oficial", "icon": "🔍", "chart_data": chart_for(d2p)},
+    # Artículo de comparativa — las dos bebidas más extremas
+    if len(drinks_sorted) >= 2:
+        top_d  = drinks_sorted[0]
+        low_d  = drinks_asc[0]
+        diff   = round(top_d['points'] - low_d['points'], 1)
+        economia.append({
+            "headline": f"DUELO ÉPICO: {top_d['emoji']} {top_d['name'].upper()} VS {low_d['emoji']} {low_d['name'].upper()}",
+            "subtitle": f"Una diferencia de {diff} puntos separa al rey del mercado de su vasallo más humilde",
+            "body": (
+                f"El mercado de bebidas vive su mayor brecha histórica: {top_d['name']} ({top_d['points']} pts) "
+                f"frente a {low_d['name']} ({low_d['points']} pts), una diferencia de {diff} puntos que los analistas califican de 'brutal, injusta y completamente merecida'. "
+                f"Warren Borracho ha publicado un hilo de 47 tweets explicando por qué esto era inevitable. "
+                f"Nadie lo ha leído entero pero todo el mundo está de acuerdo."
+            ),
+            "author": "Warren Borracho, hilo de Twitter",
+            "icon": "⚖️",
+            "chart_data": [round(top_d['points'] * (0.8 + i*0.03), 1) for i in range(7)]
+        })
 
-        {"headline": "INFLACIÓN ALCOHÓLICA: LOS PRECIOS SE DISPARAN Y LOS HÍGADOS LLORAN",
-         "subtitle": "El IPC etílico marca récords históricos por decimoséptimo mes consecutivo",
-         "body": f"El Índice de Precios al Consumo Etílico (IPCE) ha subido un 23% este mes, con el {d0} liderando las alzas con {d0p} puntos. Los economistas advierten de una espiral inflacionaria sin precedentes. 'Si esto sigue así, solo los ricos podrán beber bien', ha advertido el Banco de España con lágrimas en los ojos y copa en mano.",
-         "author": "INE Etílico, estadísticas", "icon": "📊", "chart_data": chart_for(d0p*0.9)},
-
-        {"headline": f"REVOLUCIÓN EN LA BOLSA: EL {d1.upper()} LANZA SU PROPIA CRIPTOMONEDA",
-         "subtitle": "VermuCoin promete descentralizar el mercado de bebidas para siempre",
-         "body": f"En un movimiento que nadie esperaba, los creadores del {d1} han lanzado VermuCoin, una criptomoneda respaldada por reservas físicas de {d1e}. 'Cada token equivale a medio {d1}', explican los fundadores. El mercado ha reaccionado con escepticismo, entusiasmo y mucha sed. El whitepaper tiene 3 páginas y la mitad son recetas de cócteles.",
-         "author": "Satoshi Borrachimoto, fundador", "icon": "🪙", "chart_data": chart_for(d1p*1.5)},
-
-        {"headline": "WARREN BORRACHO REVELA SU CARTERA: 'TODO EN CUBATAS Y NADA EN AGUA'",
-         "subtitle": "El legendario inversor publica por primera vez su estrategia etílica de largo plazo",
-         "body": f"Warren Borracho, el Oráculo de Omaha pero con resaca, ha revelado que el 94% de su cartera está en {d0} y el resto en 'fondos de emergencia líquidos'. 'El agua es para los que no saben invertir', ha declarado ante miles de seguidores. Su método: 'Compra lo que bebes, bebe lo que compras'. Las bolsas mundiales han cerrado en positivo.",
-         "author": "Warren Borracho, leyenda viva", "icon": "🧓", "chart_data": chart_for(d0p)},
-
-        {"headline": f"COLAPSO TÉCNICO: EL {d2.upper()} PIERDE UN 40% EN 4 MINUTOS",
-         "subtitle": "Un error algorítmico provoca el flash crash más espectacular de la historia",
-         "body": f"Un algoritmo de trading descontrolado ha vendido millones de unidades del {d2} en cuestión de minutos, provocando una caída del 40% antes de que nadie pudiera reaccionar. El creador del algoritmo ha declarado: 'No debí haberle preguntado a ChatGPT qué bebida vender'. Las autoridades estudian prohibir los robots en los bares.",
-         "author": "Algoritmo Arrepentido, IA", "icon": "🤖", "chart_data": chart_for(d2p*0.6)},
-
-        {"headline": "EL FMI ADVIERTE: 'LA BURBUJA DE LAS BEBIDAS PUEDE HUNDIR LA ECONOMÍA GLOBAL'",
-         "subtitle": "Informe apocalíptico del Fondo Monetario Internacional sacude los mercados",
-         "body": f"El FMI ha publicado un informe de 500 páginas advirtiendo que la sobrevalorización del mercado de bebidas, especialmente el {d0} a {d0p} puntos, podría provocar una crisis peor que 2008. 'La gente invierte más en bebidas que en pensiones', señala el documento. Los mercados han caído un 0,1% y los bares han llenado todas las mesas.",
-         "author": "Christine LaGarza, FMI", "icon": "🌍", "chart_data": chart_for(d0p*0.85)},
-
-        {"headline": f"RECORD HISTÓRICO: EL {d0.upper()} ALCANZA LOS {round(d0p*1.3)} PUNTOS INTRADIARIOS",
-         "subtitle": "Sesión histórica que pasará a los libros de texto de economía etílica",
-         "body": f"Lo que empezó como un martes cualquiera terminó con el {d0} tocando los {round(d0p*1.3)} puntos en una sesión de infarto. Los brókeres no daban crédito, las pantallas de los terminales echaban humo y Warren Borracho tuvo que ser sedado de la emoción. 'Jamás vi algo así ni en el 2008 ni en la barra de El Rincón', declaró entre lágrimas.",
-         "author": "Bloomberg de la Caña, mercados", "icon": "🚀", "chart_data": chart_for(d0p*1.3)},
-
-        {"headline": "ANÁLISIS TÉCNICO: FIGURAS CHARTISTAS PREDICEN APOCALIPSIS O BONANZA",
-         "subtitle": "El mercado dibuja un 'hombro-copa-chupito' que tiene a los analistas en modo pánico",
-         "body": f"Los analistas técnicos detectan en el gráfico del {d1} una figura conocida como 'hombro-copa-chupito invertido', que históricamente predice o una subida del 200% o un colapso total. 'No sabemos cuál de los dos', admite el analista. 'Pero lo que sí sabemos es que hay que estar atentos'. El {d1} cotiza a {d1p} puntos mientras escribimos esto.",
-         "author": "Fibonacci Borrachs, análisis técnico", "icon": "📉", "chart_data": chart_for(d1p)},
-
-        {"headline": "HEDGE FUND APUESTA TODO CONTRA EL RADLER: ¿OPERACIÓN AUDAZ O SUICIDA?",
-         "subtitle": "El fondo 'Resaca Capital' abre una posición corta histórica en la bebida más odiada",
-         "body": "Resaca Capital, el hedge fund más irreverente del mercado, ha apostado 500 millones de puntos en contra del Radler. 'Es una bebida de transición, no tiene futuro', declara su gestor desde su yate. Los fans del Radler han respondido comprando masivamente. La batalla épica está servida y el mercado nunca fue tan divertido.",
-         "author": "Resaca Capital, comunicado", "icon": "🎰", "chart_data": chart_for(0.7)},
-    ]
+    # Artículo de recomendación global
+    mejor = drinks_sorted[0] if drinks_sorted else {'name':'Cubata','emoji':'🥃','points':10}
+    peor  = drinks_asc[0] if drinks_asc else {'name':'Radler','emoji':'🍋','points':1}
+    economia.append({
+        "headline": f"CARTERA RECOMENDADA: COMPRA {mejor['emoji']} {mejor['name'].upper()}, VENDE {peor['emoji']} {peor['name'].upper()}",
+        "subtitle": "El consenso de analistas del Heraldo de la Caña en un único movimiento",
+        "body": (
+            f"Tras analizar el mercado durante exactamente dos cañas, el equipo de análisis del Heraldo de la Caña "
+            f"recomienda COMPRAR {mejor['name']} ({mejor['points']} pts, máxima puntuación del mercado) y VENDER inmediatamente {peor['name']} ({peor['points']} pts). "
+            f"'La estrategia es simple: bebe lo que más puntúa y olvida lo que menos', resume el informe de 3 páginas. "
+            f"Rentabilidad estimada: muy alta. Resaca estimada: también muy alta."
+        ),
+        "author": "Comité de Análisis del Heraldo",
+        "icon": "💼",
+        "chart_data": [round(mejor['points'] * (0.75 + i*0.04), 1) for i in range(7)]
+    })
 
     # ── DEPORTES (80 artículos) ──────────────────────────────────────────────
     deportes = [
