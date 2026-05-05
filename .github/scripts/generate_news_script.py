@@ -2,7 +2,7 @@ import os, json, urllib.request, sys
 
 block_type = os.environ.get('BLOCK_TYPE', 'morning')
 market_context = os.environ.get('MARKET_CONTEXT', '{}')
-gemini_key = os.environ.get('GEMINI_API_KEY', '')
+anthropic_key = os.environ.get('ANTHROPIC_API_KEY', '')
 hora = 'MANANA' if block_type == 'morning' else 'TARDE'
 
 prompt = (
@@ -11,7 +11,7 @@ prompt = (
     f"CONTEXTO DE LA APP (datos reales):\n{market_context}\n\n"
     "El campo 'drinks' contiene las bebidas del juego con sus puntos. "
     "Usa esos puntos como si fueran cotizaciones bursatiles (mas puntos = cotiza mas alto).\n"
-    "El campo 'active_users' tiene los usuarios mas activos.Usalos en el cotilleo.\n"
+    "El campo 'active_users' tiene los usuarios mas activos. Usalos en el cotilleo.\n"
     "El campo 'top_ranking' tiene el ranking global actual.\n\n"
     "Genera exactamente 7 articulos. Devuelve SOLO un array JSON valido, "
     "sin texto adicional, sin backticks, sin markdown.\n"
@@ -21,7 +21,7 @@ prompt = (
     "- featured: exactamente 1 con true, resto false\n"
     "- economia (2 articulos): los puntos de las bebidas SON el precio de bolsa. "
     "Jerga bursatil absurda. Analistas: Warren Borracho, Elon Mustiajo, Soros del Chupito. "
-    "chart_data = array de 7 enteros coherentes con los puntos de esa bebida\n"
+    "chart_data = array de 7 enteros simulando evolucion coherente con los puntos\n"
     "- deportes (2 articulos): parodia nombres reales: "
     "Mbienpé, Real Madriz, Bargá, Vinicius el Tremendo, Arlaingui, Maldriní. Drama extremo. chart_data = null\n"
     "- cotilleo (1 articulo): usa los usernames REALES de active_users. "
@@ -31,18 +31,20 @@ prompt = (
 )
 
 payload = {
-    "contents": [{"parts": [{"text": prompt}]}],
-    "generationConfig": {
-        "temperature": 0.95,
-        "maxOutputTokens": 4000
-    }
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 4000,
+    "messages": [{"role": "user", "content": prompt}]
 }
 
-url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-001:generateContent?key={gemini_key}"
+url = "https://api.anthropic.com/v1/messages"
 req = urllib.request.Request(
     url,
     data=json.dumps(payload).encode(),
-    headers={"Content-Type": "application/json"}
+    headers={
+        "Content-Type": "application/json",
+        "x-api-key": anthropic_key,
+        "anthropic-version": "2023-06-01"
+    }
 )
 
 try:
@@ -52,16 +54,14 @@ except urllib.error.HTTPError as e:
     body = e.read().decode()
     print(f"Error HTTP {e.code}: {body}", file=sys.stderr)
     sys.exit(1)
-except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
 
 try:
-    text = data['candidates'][0]['content']['parts'][0]['text'].strip()
+    text = data['content'][0]['text'].strip()
 except (KeyError, IndexError) as e:
-    print(f"Respuesta inesperada de Gemini: {json.dumps(data)}", file=sys.stderr)
+    print(f"Respuesta inesperada: {json.dumps(data)}", file=sys.stderr)
     sys.exit(1)
 
+# Limpiar backticks si los hay
 if text.startswith('```'):
     text = text.split('\n', 1)[1]
     text = text.rsplit('```', 1)[0].strip()

@@ -45,10 +45,10 @@ jobs:
             fi
           fi
 
-      - name: Generate news with Gemini Flash
+      - name: Generate news with Claude Haiku
         id: news
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BLOCK_TYPE: ${{ steps.blocktype.outputs.type }}
           MARKET_CONTEXT: ${{ steps.market.outputs.context }}
         run: python3 .github/scripts/generate_news_script.py
