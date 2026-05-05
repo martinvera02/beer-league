@@ -33,12 +33,18 @@ function Sparkline({ data, color = '#f59e0b', height = 40 }) {
 }
 
 // ─── TICKER DE MERCADO ───────────────────────────────────────────────────────
-function MarketTicker({ articles }) {
-  const econ = articles.filter(a => a.category === 'economia')
-  if (!econ.length) return null
-  const items = econ.flatMap(a => [
-    { name: a.headline.split(' ')[0], change: (Math.random() * 20 - 10).toFixed(2) }
-  ])
+function MarketTicker({ marketSnapshot }) {
+  const drinks = marketSnapshot?.drinks || []
+  if (!drinks.length) return null
+
+  // Calcular variación simulada basada en puntos (más puntos = más volátil)
+  const items = drinks.map(d => {
+    const seed = d.name.length + Math.floor(d.points)
+    const change = (((seed * 7 + Date.now() / 86400000) % 20) - 10).toFixed(2)
+    return { name: d.name, emoji: d.emoji, pts: d.points, change: parseFloat(change) }
+  })
+
+  const totalWidth = items.length * 160
   return (
     <div className="overflow-hidden relative" style={{ background: '#0a0a0a', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
       <div className="flex items-center gap-0">
@@ -48,13 +54,15 @@ function MarketTicker({ articles }) {
         </div>
         <div className="overflow-hidden flex-1">
           <motion.div className="flex gap-8 py-1.5 px-4 whitespace-nowrap"
-            animate={{ x: [0, -800] }}
-            transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}>
+            animate={{ x: [0, -totalWidth] }}
+            transition={{ duration: items.length * 3, repeat: Infinity, ease: 'linear' }}>
             {[...items, ...items, ...items].map((item, i) => (
               <span key={i} className="text-xs font-bold flex items-center gap-1.5">
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>{item.name}</span>
-                <span style={{ color: parseFloat(item.change) >= 0 ? '#10b981' : '#ef4444' }}>
-                  {parseFloat(item.change) >= 0 ? '▲' : '▼'} {Math.abs(item.change)}%
+                <span>{item.emoji}</span>
+                <span style={{ color: 'rgba(255,255,255,0.7)' }}>{item.name}</span>
+                <span className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.3)' }}>{item.pts}pts</span>
+                <span style={{ color: item.change >= 0 ? '#10b981' : '#ef4444' }}>
+                  {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.change)}%
                 </span>
               </span>
             ))}
@@ -426,7 +434,7 @@ export default function News() {
       </div>
 
       {/* TICKER DE MERCADO */}
-      {featured && <MarketTicker articles={articles} />}
+      {selectedBlock?.market_snapshot && <MarketTicker marketSnapshot={selectedBlock.market_snapshot} />}
 
       {/* SELECTOR DE BLOQUES */}
       <BlockSelector blocks={blocks} selectedId={selectedBlock?.id} onSelect={selectBlock} />
