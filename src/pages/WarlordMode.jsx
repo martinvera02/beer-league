@@ -241,20 +241,21 @@ function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId 
 
   const getStyle = (code) => {
     const own = ownership[code]
-    const data = WORLD_COUNTRIES[code]
-    const cont = data?.c || 'other'
-    const palette = CONTINENT_COLORS[cont] || CONTINENT_COLORS.other
     const isSelected = code === selectedCode
     const isOwned = !!own
     const isMyTerr = own?.league_id === myLeagueId
 
-    let fill = isOwned ? (leagueColors[own.league_id] || '#888') : palette.base
-    let stroke = isSelected ? '#fff' : isMyTerr ? '#f59e0b' : 'rgba(0,0,0,0.45)'
-    let strokeWidth = isSelected ? 1.2/tr.k : isMyTerr ? 0.8/tr.k : 0.35/tr.k
-    let filter = isSelected
-      ? 'brightness(1.5) drop-shadow(0 0 4px rgba(255,255,255,0.7))'
-      : isMyTerr ? 'brightness(1.3) drop-shadow(0 0 2px rgba(245,158,11,0.5))'
-      : isOwned ? 'brightness(1.12)' : 'brightness(0.9)'
+    // Neutral: color único oscuro — sin distinción de continente
+    const fill = isOwned ? (leagueColors[own.league_id] || '#888') : '#1e2d45'
+
+    const stroke = isSelected ? '#fff' : isMyTerr ? '#f59e0b' : '#0a1628'
+    // vector-effect non-scaling-stroke maneja el grosor — aquí usamos valor fijo
+    const strokeWidth = isSelected ? 1.5 : isMyTerr ? 1 : 0.5
+
+    const filter = isSelected
+      ? 'brightness(1.6) drop-shadow(0 0 5px rgba(255,255,255,0.8))'
+      : isMyTerr ? 'brightness(1.3) drop-shadow(0 0 3px rgba(245,158,11,0.6))'
+      : isOwned ? 'brightness(1.1)' : 'none'
     return { fill, stroke, strokeWidth, filter }
   }
 
@@ -262,7 +263,7 @@ function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId 
     <div ref={containerRef}
       className="relative w-full overflow-hidden select-none"
       style={{
-        height:'58vh', borderRadius:20,
+        height:'70vh', borderRadius:20,
         background:'radial-gradient(ellipse at 45% 55%, #0a1e40 0%, #040c1c 100%)',
         cursor: dragging ? 'grabbing' : 'grab',
         boxShadow: 'inset 0 0 60px rgba(0,0,0,0.6)',
@@ -309,8 +310,8 @@ function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId 
                 stroke={s.stroke}
                 strokeWidth={s.strokeWidth}
                 strokeLinejoin="round"
-                filter="url(#shadow)"
-                style={{ filter: s.filter, transition: 'fill 0.35s ease' }}
+                vectorEffect="non-scaling-stroke"
+                style={{ filter: s.filter, transition: 'fill 0.35s ease', paintOrder: 'stroke fill' }}
               />
               {/* Highlight cartoon sobre territorios propios */}
               {isOwned && (
@@ -338,31 +339,52 @@ function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId 
         })}
       </svg>
 
-      {/* HUD zoom */}
-      <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 z-20">
-        {[{l:'+',f:()=>doZoom(1.3,480,250)},{l:'⊙',f:reset},{l:'−',f:()=>doZoom(0.77,480,250)}].map(({l,f})=>(
-          <motion.button key={l} whileTap={{scale:0.85}} onClick={f}
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
-            style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.65)',border:'1px solid rgba(255,255,255,0.1)',backdropFilter:'blur(8px)'}}>
+      {/* HUD zoom — botones grandes para móvil */}
+      <div className="absolute bottom-3 right-3 flex flex-col gap-2 z-20">
+        <motion.button whileTap={{scale:0.88}} onClick={()=>doZoom(1.35,480,250)}
+          className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl"
+          style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.75)',border:'1px solid rgba(255,255,255,0.12)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
+          +
+        </motion.button>
+        <motion.button whileTap={{scale:0.88}} onClick={reset}
+          className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg"
+          style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.45)',border:'1px solid rgba(255,255,255,0.08)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
+          ⊙
+        </motion.button>
+        <motion.button whileTap={{scale:0.88}} onClick={()=>doZoom(0.74,480,250)}
+          className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl"
+          style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.75)',border:'1px solid rgba(255,255,255,0.12)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
+          −
+        </motion.button>
+      </div>
+
+      {/* Botones de navegación rápida (mobile) — esquina inferior izquierda */}
+      <div className="absolute bottom-3 left-3 flex flex-col gap-2 z-20">
+        {[
+          {l:'🌍',tip:'Europa',cx:1020,cy:200},
+          {l:'🌎',tip:'Américas',cx:393,cy:300},
+          {l:'🌏',tip:'Asia',cx:1500,cy:280},
+        ].map(({l,tip,cx,cy})=>(
+          <motion.button key={l} whileTap={{scale:0.88}}
+            onClick={()=>{
+              const rect = containerRef.current?.getBoundingClientRect()
+              if (!rect) return
+              const k = 2.5
+              setTr({k, x: rect.width/2 - cx*k, y: rect.height/2 - cy*k})
+            }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-base"
+            style={{background:'rgba(4,12,28,0.85)',border:'1px solid rgba(255,255,255,0.08)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
             {l}
           </motion.button>
         ))}
       </div>
 
-      {/* Leyenda */}
-      <div className="absolute top-3 left-3 z-20 flex flex-col gap-1 p-2 rounded-xl" style={{background:'rgba(4,12,28,0.75)',backdropFilter:'blur(6px)',border:'1px solid rgba(255,255,255,0.06)'}}>
-        {Object.entries(CONTINENT_COLORS).filter(([k])=>k!=='other').map(([k,v])=>(
-          <div key={k} className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm" style={{backgroundColor:v.light}}/>
-            <span style={{color:'rgba(255,255,255,0.4)',fontSize:9,fontWeight:600}}>{CONTINENT_NAMES[k]}</span>
-          </div>
-        ))}
+      {/* Badge zoom level */}
+      <div className="absolute top-3 left-3 z-20 px-2 py-1 rounded-lg" style={{background:'rgba(4,12,28,0.75)',backdropFilter:'blur(6px)',border:'1px solid rgba(255,255,255,0.06)'}}>
+        <span style={{color:'rgba(255,255,255,0.35)',fontSize:10,fontWeight:700}}>{Math.round(tr.k*100)}%</span>
       </div>
 
-      {/* Hint zoom */}
-      <div className="absolute bottom-3 left-3 z-20">
-        <p style={{color:'rgba(255,255,255,0.18)',fontSize:10}}>Pellizca · arrastra · toca un país</p>
-      </div>
+
     </div>
   )
 }
@@ -387,7 +409,7 @@ function ProvincePanel({ code, ownership, leagueColors, leagueNames, myLeagueId,
 
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between"
-        style={{background:(ownerColor||palette.light)+'18',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+        style={{background:(ownerColor||'rgba(30,45,69,0.8)')+'18',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
         <div>
           <p className="font-black text-white text-base leading-tight">{data.n}</p>
           <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>
@@ -403,7 +425,7 @@ function ProvincePanel({ code, ownership, leagueColors, leagueNames, myLeagueId,
         {/* Badge estado */}
         <div className="flex items-center gap-2 flex-wrap">
           {isNeutral
-            ? <span className="text-xs font-bold px-3 py-1 rounded-full" style={{backgroundColor:palette.base+'33',color:palette.light}}>🌍 Territorio neutral</span>
+            ? <span className="text-xs font-bold px-3 py-1 rounded-full" style={{backgroundColor:'rgba(30,45,69,0.5)',color:'rgba(255,255,255,0.45)'}}>🌍 Territorio neutral</span>
             : isMyTerr
               ? <span className="text-xs font-black px-3 py-1 rounded-full" style={{backgroundColor:'rgba(245,158,11,0.15)',color:'#f59e0b'}}>⭐ Tu territorio</span>
               : <span className="text-xs font-black px-3 py-1 rounded-full" style={{backgroundColor:ownerColor+'25',color:ownerColor}}>👑 {ownerName}</span>
@@ -556,7 +578,7 @@ export default function WarlordMode() {
     <div className="min-h-screen pb-24" style={{background:'linear-gradient(180deg,#070f20 0%,#040c1c 100%)',color:'#fff'}}>
 
       {/* HEADER */}
-      <div className="relative px-4 pt-5 pb-4" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+      <div className="relative px-4 pt-3 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
         <div className="absolute inset-0 pointer-events-none" style={{background:'radial-gradient(ellipse at 25% 0%,rgba(37,99,235,0.1) 0%,transparent 65%)'}}/>
 
         <div className="relative flex items-start justify-between mb-4">
@@ -616,7 +638,7 @@ export default function WarlordMode() {
 
       {/* ── MAPA ── */}
       {tab==='map' && (
-        <div className="px-3 pt-3">
+        <div className="px-2 pt-2">
 
           {/* Banner unirse */}
           {!myLeagueId && (
