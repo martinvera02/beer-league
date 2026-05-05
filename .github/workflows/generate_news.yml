@@ -2,14 +2,8 @@ name: Beer League News Generator
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 9:00 Madrid (UTC+1) → bloque mañana
-    - cron: '0 17 * * *'  # 18:00 Madrid (UTC+1) → bloque tarde
-  workflow_dispatch:name: Beer League News Generator
-
-on:
-  schedule:
-    - cron: '0 8 * * *'   # 9:00 Madrid (UTC+1) → bloque mañana
-    - cron: '0 17 * * *'  # 18:00 Madrid (UTC+1) → bloque tarde
+    - cron: '0 8 * * *'
+    - cron: '0 17 * * *'
   workflow_dispatch:
     inputs:
       block_type:
@@ -21,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Get market context
         id: market
         run: |
@@ -30,14 +27,14 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{}')
-          echo "context<<EOF" >> $GITHUB_OUTPUT
+          echo "context<<ENDOFCONTEXT" >> $GITHUB_OUTPUT
           echo "$CONTEXT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "ENDOFCONTEXT" >> $GITHUB_OUTPUT
 
       - name: Determine block type
         id: blocktype
         run: |
-          if [ "${{ github.event.inputs.block_type }}" != "" ]; then
+          if [ -n "${{ github.event.inputs.block_type }}" ]; then
             echo "type=${{ github.event.inputs.block_type }}" >> $GITHUB_OUTPUT
           else
             HOUR=$(date -u +%H)
@@ -50,199 +47,28 @@ jobs:
 
       - name: Generate news with Gemini Flash
         id: news
-        run: |
-          BLOCK_TYPE="${{ steps.blocktype.outputs.type }}"
-          MARKET_CONTEXT='${{ steps.market.outputs.context }}'
-          HORA=$([ "$BLOCK_TYPE" = "morning" ] && echo "MAÑANA" || echo "TARDE")
-
-          PROMPT="Eres el redactor jefe de El Heraldo de la Caña, el periódico digital más irreverente, sarcástico y divertido de España. Genera el bloque noticioso de $HORA en formato JSON.
-
-CONTEXTO DEL MERCADO DE BEBIDAS (precios en tiempo real de la app):
-$MARKET_CONTEXT
-
-Genera exactamente 7 artículos. Devuelve SOLO un array JSON válido, sin texto adicional, sin backticks, sin markdown. Cada artículo con estos campos:
-{
-  \"headline\": \"TITULAR EN MAYÚSCULAS EXAGERADO Y DRAMÁTICO\",
-  \"subtitle\": \"Subtítulo que amplía el drama\",
-  \"category\": \"economia|deportes|cotilleo|actualidad|variedades\",
-  \"body\": \"Cuerpo de la noticia (3-4 frases, tono específico de la categoría)\",
-  \"author\": \"Nombre inventado gracioso de periodista\",
-  \"featured\": true,
-  \"icon\": \"emoji representativo\",
-  \"chart_data\": null
-}
-
-REGLAS:
-- featured: solo 1 artículo puede tener true, el más impactante.
-- economia (2 artículos): usa los precios REALES del contexto. Recomienda comprar/vender con jerga bursátil absurda. Analistas con nombres como Warren Borracho o Elon Mustiajo. Si precio > 100 ha subido, si < 100 ha bajado. En chart_data pon array de 7 números enteros coherentes con el precio actual (simulando evolución).
-- deportes (2 artículos): parodia de deportistas y equipos REALES con nombres ligeramente modificados (Mbappé→Mbienpé, Real Madrid→Real Madriz, Barça→Bargá, Vinicius→Vinicius Jr. el Tremendo, etc). Drama extremo.
-- cotilleo (1 artículo): usa los USERNAMES REALES del campo active_users del contexto. Estilo Lecturas/Hola pero con alcohol. Inventado y disparatado.
-- actualidad (1 artículo): noticia española o mundial reinterpretada con máximo sarcasmo.
-- variedades (1 artículo): horóscopo alcohólico, predicción del tiempo con drama existencial, o consejo de vida absurdo."
-
-          # Escapar el prompt para JSON
-          PROMPT_ESCAPED=$(echo "$PROMPT" | python3 -c "
-import sys, json
-print(json.dumps(sys.stdin.read()))
-")
-
-          RESPONSE=$(curl -s \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"contents\": [{
-                \"parts\": [{\"text\": $PROMPT_ESCAPED}]
-              }],
-              \"generationConfig\": {
-                \"temperature\": 0.95,
-                \"maxOutputTokens\": 4000,
-                \"responseMimeType\": \"application/json\"
-              }
-            }")
-
-          # Extraer el texto de la respuesta de Gemini
-          ARTICLES=$(echo "$RESPONSE" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-try:
-    text = data['candidates'][0]['content']['parts'][0]['text'].strip()
-    # Limpiar posibles backticks
-    if text.startswith('\`\`\`'):
-        text = text.split('\n', 1)[1]
-        text = text.rsplit('\`\`\`', 1)[0].strip()
-    # Validar que es JSON válido
-    parsed = json.loads(text)
-    print(json.dumps(parsed))
-except Exception as e:
-    print('[]', file=sys.stderr)
-    print(f'Error: {e}', file=sys.stderr)
-    print(json.dumps(data), file=sys.stderr)
-    sys.exit(1)
-")
-
-          echo "articles<<EOF" >> $GITHUB_OUTPUT
-          echo "$ARTICLES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BLOCK_TYPE: ${{ steps.blocktype.outputs.type }}
+          MARKET_CONTEXT: ${{ steps.market.outputs.context }}
+        run: python3 .github/scripts/generate_news_script.py
 
       - name: Save to Supabase
         run: |
-          BLOCK_TYPE="${{ steps.blocktype.outputs.type }}"
-          ARTICLES='${{ steps.news.outputs.articles }}'
-          MARKET='${{ steps.market.outputs.context }}'
-
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+          HTTP_STATUS=$(curl -s -o /tmp/sb_resp.json -w "%{http_code}" -X POST \
             "${{ secrets.SUPABASE_URL }}/rest/v1/news_blocks" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=minimal" \
-            -d "{
-              \"block_type\": \"$BLOCK_TYPE\",
-              \"articles\": $ARTICLES,
-              \"market_snapshot\": $MARKET
-            }")
-
+            --data-raw "{\"block_type\": \"${{ steps.blocktype.outputs.type }}\", \"articles\": ${{ steps.news.outputs.articles }}, \"market_snapshot\": ${{ steps.market.outputs.context }}}")
           if [ "$HTTP_STATUS" = "201" ]; then
-            echo "✅ Bloque $BLOCK_TYPE guardado correctamente"
+            echo "Bloque ${{ steps.blocktype.outputs.type }} guardado correctamente"
           else
-            echo "❌ Error al guardar: HTTP $HTTP_STATUS"
+            echo "Error HTTP $HTTP_STATUS"
+            cat /tmp/sb_resp.json
             exit 1
           fi
-
-      - name: Cleanup expired news
-        run: |
-          curl -s -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/cleanup_expired_news" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
-          echo "🧹 Noticias expiradas limpiadas"
-    inputs:
-      block_type:
-        description: 'morning o afternoon'
-        default: 'morning'
-
-jobs:
-  generate-news:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get market context
-        id: market
-        run: |
-          CONTEXT=$(curl -s -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/get_market_context_for_news" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}')
-          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
-
-      - name: Determine block type
-        id: blocktype
-        run: |
-          HOUR=$(date -u +%H)
-          if [ "${{ github.event.inputs.block_type }}" != "" ]; then
-            echo "type=${{ github.event.inputs.block_type }}" >> $GITHUB_OUTPUT
-          elif [ "$HOUR" -lt "12" ]; then
-            echo "type=morning" >> $GITHUB_OUTPUT
-          else
-            echo "type=afternoon" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Generate news with Claude
-        id: news
-        run: |
-          BLOCK_TYPE="${{ steps.blocktype.outputs.type }}"
-          MARKET_CONTEXT='${{ steps.market.outputs.context }}'
-          
-          HORA=$([ "$BLOCK_TYPE" = "morning" ] && echo "MAÑANA" || echo "TARDE")
-          
-          ARTICLES=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-sonnet-4-20250514\",
-              \"max_tokens\": 4000,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": \"Eres el redactor jefe de El Heraldo de la Caña, el periódico digital más irreverente, sarcástico y divertido de España. Genera el bloque noticioso de $HORA en formato JSON.\n\nCONTEXTO DEL MERCADO DE BEBIDAS (precios en tiempo real de la app):\n$MARKET_CONTEXT\n\nGenera exactamente 7 artículos en este formato JSON (sin markdown, solo el JSON puro):\n{\n  \\\"headline\\\": \\\"TITULAR EN MAYÚSCULAS EXAGERADO Y DRAMÁTICO\\\",\n  \\\"subtitle\\\": \\\"Subtítulo que amplía el drama\\\",\n  \\\"category\\\": \\\"economia|deportes|cotilleo|actualidad|variedades\\\",\n  \\\"body\\\": \\\"Cuerpo de la noticia (3-4 frases, tono específico de la categoría)\\\",\n  \\\"author\\\": \\\"Nombre inventado gracioso de periodista\\\",\n  \\\"featured\\\": true/false (solo 1 puede ser true, el más importante),\n  \\\"icon\\\": \\\"emoji representativo\\\",\n  \\\"chart_data\\\": null o array de números si es economía (últimos 7 días de precio ficticio coherente con el precio actual)\n}\n\nREGLAS POR CATEGORÍA:\n- economia (2 artículos): Usa los precios REALES del mercado de la app. Recomienda comprar/vender con jerga bursátil absurda. Inventa analistas con nombres como 'Warren Borracho' o 'Elon Mustiajo'. Si un precio está por encima de 100 es que ha subido, por debajo ha bajado. Incluye chart_data con 7 valores coherentes.\n- deportes (2 artículos): Parodia de deportistas y equipos REALES (Mbappé→Mbienpé, Real Madrid→Real Madriz, Barça→Bargá, etc). Drama extremo por cualquier resultado.\n- cotilleo (1 artículo): Usa los USERNAMES REALES de usuarios activos del contexto. Estilo Lecturas/Hola pero con alcohol. Completamente inventado y disparatado.\n- actualidad (1 artículo): Noticia española o mundial real reinterpretada con máximo sarcasmo.\n- variedades (1 artículo): Horóscopo alcohólico, predicción del tiempo con drama existencial, o consejo de vida absurdo.\n\nDevuelve SOLO un array JSON válido con los 7 artículos, sin texto adicional ni backticks.\"
-              }]
-            }" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-text = data['content'][0]['text'].strip()
-# Limpiar posibles backticks
-if text.startswith('\`\`\`'):
-    text = text.split('\n', 1)[1]
-    text = text.rsplit('\`\`\`', 1)[0]
-print(text)
-")
-          
-          echo "articles<<EOF" >> $GITHUB_OUTPUT
-          echo "$ARTICLES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Save to Supabase
-        run: |
-          BLOCK_TYPE="${{ steps.blocktype.outputs.type }}"
-          ARTICLES='${{ steps.news.outputs.articles }}'
-          MARKET='${{ steps.market.outputs.context }}'
-          
-          curl -s -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/news_blocks" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -H "Prefer: return=minimal" \
-            -d "{
-              \"block_type\": \"$BLOCK_TYPE\",
-              \"articles\": $ARTICLES,
-              \"market_snapshot\": $MARKET
-            }"
-          
-          echo "✅ Bloque $BLOCK_TYPE generado"
 
       - name: Cleanup expired news
         run: |
