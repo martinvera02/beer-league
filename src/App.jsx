@@ -15,6 +15,7 @@ import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import PushNotificationBanner from './components/PushNotificationBanner'
 import Onboarding, { useOnboarding } from './pages/Onboarding'
+import News from './pages/News'
 
 function Dashboard() {
   const [currentPage, setCurrentPage] = useState('home')
@@ -30,6 +31,7 @@ function Dashboard() {
       case 'leagues':       return <Ranking selectedLeague={selectedLeague} setSelectedLeague={setSelectedLeague} />
       case 'globalranking': return <GlobalRanking />
       case 'social':        return <Social />
+      case 'news':          return <News />
       case 'clanwar':       return <ClanWar />
       case 'profile':       return <Profile />
       default:              return null
