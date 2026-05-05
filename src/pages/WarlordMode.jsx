@@ -746,13 +746,26 @@ function WorldMap({ ownership, leagueColors, selectedFrom, selectedTo, adjacentC
 
   const handleClick = (code) => {
     if (!selectedFrom) {
-      // Solo seleccionar provincias propias como origen
       const own = ownership[code]
-      if (own?.league_id === myLeagueId) onSelectFrom(code)
+      if (own?.league_id === myLeagueId) {
+        // Provincia propia → origen para mover/atacar
+        onSelectFrom(code)
+      } else if (!own && myLeagueId) {
+        // Neutral → seleccionar para reclamar
+        onSelectFrom(code)
+      }
+      // Enemiga sin estar en modo destino → ignorar
     } else {
       if (code === selectedFrom) { onSelectFrom(null); return }
-      if (adjacentCodes.has(code)) onSelectTo(code)
-      else onSelectFrom(null)
+      if (adjacentCodes.has(code)) {
+        onSelectTo(code)
+      } else {
+        // Clic en otra provincia propia → cambiar origen
+        const own = ownership[code]
+        if (own?.league_id === myLeagueId) onSelectFrom(code)
+        else if (!own && myLeagueId) onSelectFrom(code) // neutral también
+        else onSelectFrom(null)
+      }
     }
   }
 
