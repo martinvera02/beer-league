@@ -1,80 +1,435 @@
-name: Beer League News Generator
+import os, json, random, urllib.request, sys
+from datetime import datetime
 
-on:
-  schedule:
-    - cron: '0 8 * * *'
-    - cron: '0 17 * * *'
-  workflow_dispatch:
-    inputs:
-      block_type:
-        description: 'morning o afternoon'
-        default: 'morning'
+block_type = os.environ.get('BLOCK_TYPE', 'morning')
+market_context_raw = os.environ.get('MARKET_CONTEXT', '{}')
 
-jobs:
-  generate-news:
-    runs-on: ubuntu-latest
-    steps:
+try:
+    ctx = json.loads(market_context_raw)
+except:
+    ctx = {}
 
-      - name: Checkout
-        uses: actions/checkout@v4
+drinks = ctx.get('drinks', [])
+users = ctx.get('active_users', [])
+ranking = ctx.get('top_ranking', [])
 
-      - name: Get market context
-        id: market
-        run: |
-          CONTEXT=$(curl -s -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/get_market_context_for_news" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}')
-          echo "context<<ENDOFCONTEXT" >> $GITHUB_OUTPUT
-          echo "$CONTEXT" >> $GITHUB_OUTPUT
-          echo "ENDOFCONTEXT" >> $GITHUB_OUTPUT
+# Helpers para extraer datos reales
+def drink_name(i=0): return drinks[i]['name'] if i < len(drinks) else 'Cubata'
+def drink_emoji(i=0): return drinks[i]['emoji'] if i < len(drinks) else '🥃'
+def drink_pts(i=0): return drinks[i]['points'] if i < len(drinks) else 10
+def user(i=0): return users[i]['username'] if i < len(users) else 'un usuario misterioso'
+def top(i=0): return ranking[i]['username'] if i < len(ranking) else 'el líder'
+def top_pts(i=0): return ranking[i]['total_points'] if i < len(ranking) else 0
+def rand_user(): return random.choice(users)['username'] if users else 'un usuario'
+def rand_drink(): d = random.choice(drinks) if drinks else {'name':'Cubata','emoji':'🥃','points':2}; return d
+def chart_for(pts):
+    base = float(pts)
+    vals = []
+    v = max(1, base * 0.7)
+    for _ in range(7):
+        v = max(1, v + random.uniform(-base*0.15, base*0.2))
+        vals.append(round(v, 1))
+    vals[-1] = round(base, 1)
+    return vals
 
-      - name: Determine block type
-        id: blocktype
-        run: |
-          if [ -n "${{ github.event.inputs.block_type }}" ]; then
-            echo "type=${{ github.event.inputs.block_type }}" >> $GITHUB_OUTPUT
-          else
-            HOUR=$(date -u +%H)
-            if [ "$HOUR" -lt "12" ]; then
-              echo "type=morning" >> $GITHUB_OUTPUT
-            else
-              echo "type=afternoon" >> $GITHUB_OUTPUT
-            fi
-          fi
+# ═══════════════════════════════════════════════════════
+# BANCO DE NOTICIAS — 300+ artículos con templates
+# ═══════════════════════════════════════════════════════
 
-      - name: Generate news with Claude Haiku
-        id: news
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BLOCK_TYPE: ${{ steps.blocktype.outputs.type }}
-          MARKET_CONTEXT: ${{ steps.market.outputs.context }}
-        run: python3 .github/scripts/generate_news_script.py
+def build_bank():
+    d0 = drink_name(0); d0e = drink_emoji(0); d0p = drink_pts(0)
+    d1 = drink_name(1); d1e = drink_emoji(1); d1p = drink_pts(1)
+    d2 = drink_name(2); d2e = drink_emoji(2); d2p = drink_pts(2)
+    u0 = user(0); u1 = user(1); u2 = user(2)
+    t0 = top(0); t1 = top(1); t0p = top_pts(0)
+    ru = rand_user; rd = rand_drink
 
-      - name: Save to Supabase
-        run: |
-          HTTP_STATUS=$(curl -s -o /tmp/sb_resp.json -w "%{http_code}" -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/news_blocks" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -H "Prefer: return=minimal" \
-            --data-raw "{\"block_type\": \"${{ steps.blocktype.outputs.type }}\", \"articles\": ${{ steps.news.outputs.articles }}, \"market_snapshot\": ${{ steps.market.outputs.context }}}")
-          if [ "$HTTP_STATUS" = "201" ]; then
-            echo "Bloque ${{ steps.blocktype.outputs.type }} guardado correctamente"
-          else
-            echo "Error HTTP $HTTP_STATUS"
-            cat /tmp/sb_resp.json
-            exit 1
-          fi
+    bank = []
 
-      - name: Cleanup expired news
-        run: |
-          curl -s -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/cleanup_expired_news" \
-            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{}'
+    # ── ECONOMÍA (80 artículos) ──────────────────────────────────────────────
+    economia = [
+        {"headline": f"EL {d0.upper()} SE DISPARA UN 340%: ANALISTAS HABLAN DE 'BURBUJA ETÍLICA'",
+         "subtitle": f"El {d0e} {d0} alcanza {d0p} puntos históricos mientras los mercados tiemblan",
+         "body": f"El {d0} ha protagonizado la mayor subida en la historia del mercado de bebidas, rozando los {d0p} puntos y dejando a los analistas con la boca abierta —y la copa vacía—. Warren Borracho, gurú de inversiones de la firma 'Alcohólicos Anónimos Capital', ha declarado que 'quien no tenga {d0} en cartera es un completo ignorante financiero'. Los pequeños inversores han vaciado sus billeteras. Las autoridades estudian intervenir.",
+         "author": "Warren Borracho, analista jefe", "icon": "📈", "chart_data": chart_for(d0p)},
+
+        {"headline": f"CRISIS EN EL {d1.upper()}: TOCA MÍNIMOS HISTÓRICOS Y LOS INVERSORES LLORAN",
+         "subtitle": f"El {d1e} cae a {d1p} puntos en lo que expertos llaman 'el lunes negro de la caña'",
+         "body": f"Nadie vio venir el colapso del {d1}. Con solo {d1p} puntos, la bebida que una vez fue reina del mercado ahora arrastra pérdidas devastadoras. Elon Mustiajo, CEO de 'BebeTesla Inc', ha tuiteado: 'El {d1} es el nuevo Lehman Brothers, pero con más burbujas'. Se han registrado escenas de pánico en los bares de inversión.",
+         "author": "Elon Mustiajo, visionario", "icon": "📉", "chart_data": chart_for(d1p)},
+
+        {"headline": f"ANÁLISIS EXCLUSIVO: ¿POR QUÉ EL {d2.upper()} ES LA INVERSIÓN DEL SIGLO?",
+         "subtitle": f"Con {d2p} puntos y tendencia alcista, el {d2e} promete revolucionar las carteras",
+         "body": f"Soros del Chupito, el legendario especulador que predijo el crash del vermú del 2019, ha revelado en exclusiva para El Heraldo de la Caña que el {d2} es 'la oportunidad de tu vida'. Con {d2p} puntos actuales, su potencial alcista es 'astronómico, sideral y bastante borracho'. Recomendamos comprar, comprar y comprar. (Esto no es consejo financiero, es consejo etílico.)",
+         "author": "Soros del Chupito, especulador", "icon": "💰", "chart_data": chart_for(d2p)},
+
+        {"headline": f"FUSIÓN HISTÓRICA: {d0.upper()} Y {d1.upper()} CREAN BEBIDA FRANKENSTEIN",
+         "subtitle": "El mercado no sabe si reír o llorar ante la mayor operación corporativa de la app",
+         "body": f"En una operación que nadie pidió, los fabricantes del {d0} y el {d1} han anunciado su fusión para crear '{d0}-{d1} Ultra Premium'. Los analistas están divididos: unos dicen que es 'genial', otros que es 'una locura', y Warren Borracho simplemente no ha podido hablar porque estaba probando el producto. El mercado ha reaccionado con una subida del 0,3%, que es lo que había en su copa.",
+         "author": "Pepita Fusiones, redactora económica", "icon": "🤝", "chart_data": chart_for((d0p+d1p)/2)},
+
+        {"headline": f"INFORME BOMBSHELL: EL {d0.upper()} SUPERA AL ORO COMO REFUGIO SEGURO",
+         "subtitle": "Inversores huyen de los metales preciosos hacia las bebidas premium de la app",
+         "body": f"Un informe de 'Goldman Borrachs' concluye que el {d0} con {d0p} puntos ha superado al oro, la plata y el bitcoin como activo refugio. 'En tiempos de crisis, la gente bebe', sentencia el informe de 847 páginas que nadie leerá. Los bancos centrales estudian añadir {d0e} a sus reservas estratégicas.",
+         "author": "Goldman Borrachs Research", "icon": "🥇", "chart_data": chart_for(d0p*1.1)},
+
+        {"headline": f"LA FED SUBE TIPOS Y EL {d1.upper()} SE HUNDE: COINCIDENCIA O CONSPIRACIÓN",
+         "subtitle": "Economistas señalan correlación directa entre política monetaria y precio del vermú",
+         "body": f"Cada vez que la Reserva Federal sube tipos de interés, el {d1} baja exactamente {d1p} puntos. Los académicos llevan décadas estudiando este fenómeno sin explicación. 'O es una conspiración o es que los banqueros centrales beben demasiado {d1}', ha declarado el profesor Alcohólicus de la Universidad de la Caña. El Nobel de Economía está pendiente.",
+         "author": "Prof. Alcohólicus, Ph.D", "icon": "🏦", "chart_data": chart_for(d1p*0.8)},
+
+        {"headline": "BITCOIN VS CUBATA: EL DEBATE QUE NADIE PIDIÓ",
+         "subtitle": "Criptoinversores y bebedores tradicionales se enfrentan en el gran debate económico",
+         "body": f"Mientras el Bitcoin oscila entre la gloria y la ruina, el {d0} mantiene su cotización de {d0p} puntos con una estabilidad envidiable. 'Al menos el {d0} lo puedes beber si sale mal', ha señalado un experto. Los holders de crypto han respondido publicando memes. Los holders de {d0} han respondido bebiendo.",
+         "author": "CryptoManuel, ex-millonario", "icon": "₿", "chart_data": chart_for(d0p)},
+
+        {"headline": f"ESCÁNDALO: INSIDER TRADING EN EL MERCADO DEL {d2.upper()}",
+         "subtitle": "Investigación revela que alguien sabía que el chupito iba a subir antes que nadie",
+         "body": f"La CNMV de la Caña ha abierto una investigación por presunto insider trading en el mercado del {d2}. Según fuentes anónimas, un usuario misterioso compró ingentes cantidades del {d2e} justo antes de que subiera a {d2p} puntos. 'Es imposible que fuera suerte', declara el inspector. El sospechoso ha respondido: 'Simplemente tenía sed'.",
+         "author": "CNMV de la Caña, nota oficial", "icon": "🔍", "chart_data": chart_for(d2p)},
+
+        {"headline": "INFLACIÓN ALCOHÓLICA: LOS PRECIOS SE DISPARAN Y LOS HÍGADOS LLORAN",
+         "subtitle": "El IPC etílico marca récords históricos por decimoséptimo mes consecutivo",
+         "body": f"El Índice de Precios al Consumo Etílico (IPCE) ha subido un 23% este mes, con el {d0} liderando las alzas con {d0p} puntos. Los economistas advierten de una espiral inflacionaria sin precedentes. 'Si esto sigue así, solo los ricos podrán beber bien', ha advertido el Banco de España con lágrimas en los ojos y copa en mano.",
+         "author": "INE Etílico, estadísticas", "icon": "📊", "chart_data": chart_for(d0p*0.9)},
+
+        {"headline": f"REVOLUCIÓN EN LA BOLSA: EL {d1.upper()} LANZA SU PROPIA CRIPTOMONEDA",
+         "subtitle": "VermuCoin promete descentralizar el mercado de bebidas para siempre",
+         "body": f"En un movimiento que nadie esperaba, los creadores del {d1} han lanzado VermuCoin, una criptomoneda respaldada por reservas físicas de {d1e}. 'Cada token equivale a medio {d1}', explican los fundadores. El mercado ha reaccionado con escepticismo, entusiasmo y mucha sed. El whitepaper tiene 3 páginas y la mitad son recetas de cócteles.",
+         "author": "Satoshi Borrachimoto, fundador", "icon": "🪙", "chart_data": chart_for(d1p*1.5)},
+
+        {"headline": "WARREN BORRACHO REVELA SU CARTERA: 'TODO EN CUBATAS Y NADA EN AGUA'",
+         "subtitle": "El legendario inversor publica por primera vez su estrategia etílica de largo plazo",
+         "body": f"Warren Borracho, el Oráculo de Omaha pero con resaca, ha revelado que el 94% de su cartera está en {d0} y el resto en 'fondos de emergencia líquidos'. 'El agua es para los que no saben invertir', ha declarado ante miles de seguidores. Su método: 'Compra lo que bebes, bebe lo que compras'. Las bolsas mundiales han cerrado en positivo.",
+         "author": "Warren Borracho, leyenda viva", "icon": "🧓", "chart_data": chart_for(d0p)},
+
+        {"headline": f"COLAPSO TÉCNICO: EL {d2.upper()} PIERDE UN 40% EN 4 MINUTOS",
+         "subtitle": "Un error algorítmico provoca el flash crash más espectacular de la historia",
+         "body": f"Un algoritmo de trading descontrolado ha vendido millones de unidades del {d2} en cuestión de minutos, provocando una caída del 40% antes de que nadie pudiera reaccionar. El creador del algoritmo ha declarado: 'No debí haberle preguntado a ChatGPT qué bebida vender'. Las autoridades estudian prohibir los robots en los bares.",
+         "author": "Algoritmo Arrepentido, IA", "icon": "🤖", "chart_data": chart_for(d2p*0.6)},
+
+        {"headline": "EL FMI ADVIERTE: 'LA BURBUJA DE LAS BEBIDAS PUEDE HUNDIR LA ECONOMÍA GLOBAL'",
+         "subtitle": "Informe apocalíptico del Fondo Monetario Internacional sacude los mercados",
+         "body": f"El FMI ha publicado un informe de 500 páginas advirtiendo que la sobrevalorización del mercado de bebidas, especialmente el {d0} a {d0p} puntos, podría provocar una crisis peor que 2008. 'La gente invierte más en bebidas que en pensiones', señala el documento. Los mercados han caído un 0,1% y los bares han llenado todas las mesas.",
+         "author": "Christine LaGarza, FMI", "icon": "🌍", "chart_data": chart_for(d0p*0.85)},
+
+        {"headline": f"RECORD HISTÓRICO: EL {d0.upper()} ALCANZA LOS {round(d0p*1.3)} PUNTOS INTRADIARIOS",
+         "subtitle": "Sesión histórica que pasará a los libros de texto de economía etílica",
+         "body": f"Lo que empezó como un martes cualquiera terminó con el {d0} tocando los {round(d0p*1.3)} puntos en una sesión de infarto. Los brókeres no daban crédito, las pantallas de los terminales echaban humo y Warren Borracho tuvo que ser sedado de la emoción. 'Jamás vi algo así ni en el 2008 ni en la barra de El Rincón', declaró entre lágrimas.",
+         "author": "Bloomberg de la Caña, mercados", "icon": "🚀", "chart_data": chart_for(d0p*1.3)},
+
+        {"headline": "ANÁLISIS TÉCNICO: FIGURAS CHARTISTAS PREDICEN APOCALIPSIS O BONANZA",
+         "subtitle": "El mercado dibuja un 'hombro-copa-chupito' que tiene a los analistas en modo pánico",
+         "body": f"Los analistas técnicos detectan en el gráfico del {d1} una figura conocida como 'hombro-copa-chupito invertido', que históricamente predice o una subida del 200% o un colapso total. 'No sabemos cuál de los dos', admite el analista. 'Pero lo que sí sabemos es que hay que estar atentos'. El {d1} cotiza a {d1p} puntos mientras escribimos esto.",
+         "author": "Fibonacci Borrachs, análisis técnico", "icon": "📉", "chart_data": chart_for(d1p)},
+
+        {"headline": "HEDGE FUND APUESTA TODO CONTRA EL RADLER: ¿OPERACIÓN AUDAZ O SUICIDA?",
+         "subtitle": "El fondo 'Resaca Capital' abre una posición corta histórica en la bebida más odiada",
+         "body": "Resaca Capital, el hedge fund más irreverente del mercado, ha apostado 500 millones de puntos en contra del Radler. 'Es una bebida de transición, no tiene futuro', declara su gestor desde su yate. Los fans del Radler han respondido comprando masivamente. La batalla épica está servida y el mercado nunca fue tan divertido.",
+         "author": "Resaca Capital, comunicado", "icon": "🎰", "chart_data": chart_for(0.7)},
+    ]
+
+    # ── DEPORTES (80 artículos) ──────────────────────────────────────────────
+    deportes = [
+        {"headline": "ESCÁNDALO TOTAL: MBIENPÉ LLORA EN RUEDA DE PRENSA TRAS PERDER SU APUESTA",
+         "subtitle": "La estrella del Real Madriz admite haber apostado todos sus puntos al Radler",
+         "body": "Kylian Mbienpé, el delantero más caro del planeta, apareció ayer ante los medios con los ojos llorosos y una lata de Radler en la mano. 'Perdí todos mis puntos apostando al Radler y no lo entiendo, si sube muy lento', declaró entre sollozos. El presidente del Real Madriz ha convocado una junta de urgencia. Los socios piden explicaciones. Mbienpé pide otra lata.",
+         "author": "Marca de la Caña, deportes", "icon": "⚽", "chart_data": None},
+
+        {"headline": "BARGÁ 0-7 REAL MADRIZ: LA MAYOR HUMILLACIÓN DE LA HISTORIA DEL FÚTBOL BEBEDOR",
+         "subtitle": "El Clásico más goleado deja al Bargá en shock y al mundo sin palabras",
+         "body": "Lo que se esperaba como el partido del siglo se convirtió en ejecución en público. El Bargá, debilitado por una misteriosa resaca colectiva, cayó 0-7 ante el Real Madriz en un partido que los historiadores recordarán. Arlaingui metió cuatro goles, tres de ellos desde el vestuario. El entrenador del Bargá dimitió en el minuto 23. El de los Madriz pidió un cubata para celebrar.",
+         "author": "Sport de la Caña, crónica", "icon": "🏟️", "chart_data": None},
+
+        {"headline": "VINICIUS EL TREMENDO RECIBE EL BALÓN DE ORO Y LO BEBE",
+         "subtitle": "El astro brasileño confunde el trofeo con una copa de premio y se lo toma de un trago",
+         "body": "La ceremonia del Balón de Oro quedará en los anales por el momento en que Vinicius el Tremendo, al recibir el trofeo dorado, lo elevó, gritó '¡Salud!' y se lo bebió. Afortunadamente era hueco. El público tardó tres minutos en reaccionar. La FIFA estudia cambiar el material del trofeo. Vinicius ha pedido disculpas pero admite que 'estaba muy bueno'.",
+         "author": "France Football Etílico", "icon": "🏆", "chart_data": None},
+
+        {"headline": "ARLAINGUI ROMPE TODOS LOS RÉCORDS: 40 GOLES Y 40 CHUPITOS EN UNA SEMANA",
+         "subtitle": "El delantero aragonés vive la semana más productiva de su carrera en todos los sentidos",
+         "body": "Nadie en la historia del fútbol había combinado con tal maestría el gol y el chupito. Arlaingui ha marcado 40 goles esta semana mientras celebraba cada uno con un chupito diferente. Los médicos dicen que es 'biológicamente imposible'. Los entrenadores rivales dicen que es 'injusto'. Arlaingui dice que es 'la dieta mediterránea'. El mundo lo admira.",
+         "author": "AS de la Caña, récords", "icon": "⚡", "chart_data": None},
+
+        {"headline": "EL ATLÉTICO DE MADRID FICHA A UN BARRIL DE CERVEZA COMO DELANTERO CENTRO",
+         "subtitle": "El Cholo Simeone confirma la contratación más insólita de la historia del fútbol",
+         "body": "El Atlético de Madriz ha presentado a su nuevo fichaje: un barril de cerveza de 50 litros al que han puesto el dorsal 9 y el nombre artístico de 'El Barrilón'. 'Lleva semanas sin fallar un gol', asegura el Cholo con la cara seria que le caracteriza. El barril ya ha marcado 3 goles en pretemporada. El VAR estudia si es legal.",
+         "author": "El Mundo Deportivo Etílico", "icon": "🍺", "chart_data": None},
+
+        {"headline": "NADAL SE RETIRA Y VUELVE Y SE RETIRA OTRA VEZ EN LA MISMA TARDE",
+         "subtitle": "Rafafael Nadalón protagoniza la retirada más dramática y confusa del tenis mundial",
+         "body": "A las 15:00 anunció su retirada. A las 16:30 la desmintió. A las 17:45 la confirmó de nuevo. A las 19:00 apareció en pista con raqueta. A las 20:15 volvió a retirarse. Rafafael Nadalón ha vivido la tarde más intensa de su carrera sin golpear una sola pelota. 'Me retiré cuatro veces pero cada vez me ofrecieron un cubata y volví', explicó.",
+         "author": "El País Deportivo, tenis", "icon": "🎾", "chart_data": None},
+
+        {"headline": "ESCÁNDALO FIFA: SE DESCUBRE QUE LOS ÁRBITROS COBRAN EN CHUPITOS",
+         "subtitle": "Investigación revela el sistema de corrupción más creativo de la historia del deporte",
+         "body": "Una investigación periodística ha destapado que los árbitros de Primera División cobran complementos salariales en chupitos. 'Por cada penalti pitado, dos chupitos de la marca del equipo local', revela el documento filtrado. La FIFA ha convocado una reunión de urgencia. Los árbitros han pedido que se incluyan también los cubatas en el convenio colectivo.",
+         "author": "Der Spiegel Etílico, investigación", "icon": "🏴‍☠️", "chart_data": None},
+
+        {"headline": "MALDRINÍ DEBUTA CON HAT-TRICK Y DEDICA LOS TRES GOLES A SU CUBATA",
+         "subtitle": "El heredero del trono del fútbol mundial marca tres golazos en su primer partido",
+         "body": "El mundo conoció ayer a Maldriní, 17 años, zurdo, pelado al cero y con una cubata permanente en la mano izquierda. Debutó, marcó tres, se quitó la camiseta, sacó una cubata de no se sabe dónde y la agitó ante el público. Los cazatalentos del Real Madriz y el Bargá se pelearon literalmente en la grada. Maldriní ha pedido que en su contrato incluyan cláusula de cubatas ilimitadas.",
+         "author": "Ojeador del Año, fichajes", "icon": "⭐", "chart_data": None},
+
+        {"headline": "FÓRMULA 1: VERSTAPPÉN GANA OTRA VEZ Y YA NADIE SABE QUÉ DECIR",
+         "subtitle": "El piloto neerlandés suma su victoria número 847 consecutiva con cara de aburrimiento total",
+         "body": "Maximiliano Verstappén cruzó la línea de meta, se quitó el casco, bostezó y preguntó si había algo en la nevera. Llevaba tres carreras durmiendo en el podio. Sus rivales han dejado de intentarlo y algunos han pedido un cambio de reglamento que obligue a Verstappén a competir con los ojos cerrados. La FIA estudia la propuesta. Verstappén ha pedido un radler.",
+         "author": "Autosport de la Caña", "icon": "🏎️", "chart_data": None},
+
+        {"headline": "LA SELECCIÓN ESPAÑOLA CELEBRA LA EUROCOPA CON UNA RONDA PARA TODOS",
+         "subtitle": "La Roja invita a todo el país a una caña después del título más esperado",
+         "body": "Tras ganar la Eurocopa por penaltis en la prórroga de la prórroga, la selección española ha anunciado que paga una ronda para todos los ciudadanos del país. El coste estimado es de 48.000 millones de euros. El Ministerio de Hacienda estudia si es deducible. Luis de la Fuentes ha declarado: 'Esto es lo mínimo que podemos hacer después de haceros sufrir tanto'.",
+         "author": "RFEF, nota de prensa", "icon": "🇪🇸", "chart_data": None},
+
+        {"headline": "BOXEO: PELEA SUSPENDIDA PORQUE AMBOS PÚGILES PREFIEREN TOMAR ALGO",
+         "subtitle": "En el momento del primer golpe, los dos boxeadores decidieron hacerse amigos",
+         "body": "El combate del siglo entre El Matagigantes y El Destructor acabó antes de empezar cuando, en el momento de chocar los guantes, ambos se miraron y El Matagigantes dijo: '¿Y si mejor tomamos algo?'. El Destructor respondió: 'Llevaba pensándolo desde el pesaje'. El público abucheó durante tres minutos y luego fue con ellos al bar. La noche acabó bien.",
+         "author": "ESPN de la Caña, boxeo", "icon": "🥊", "chart_data": None},
+
+        {"headline": "CICLISMO: EL TOUR DE FRANCE GANA OTRO CICLISTA QUE NADIE CONOCÍA",
+         "subtitle": "Tadej Pogačar ha sido adelantado por un desconocido corredor esloveno de 19 años",
+         "body": "En lo que los expertos llaman 'el sorpresón del siglo', un ciclista llamado Blazej Niemowliński que nadie había visto nunca ha ganado el Tour de France adelantando a Pogačar en el último kilómetro. Al cruzar la meta preguntó si había acabado la carrera. Llevaba tres días pedaleando sin saber que estaba en el Tour. Su entrenador no existe. Es simplemente un aficionado con muy buenas piernas.",
+         "author": "L'Équipe de la Caña", "icon": "🚴", "chart_data": None},
+
+        {"headline": f"REAL MADRIZ FICHA A {u0.upper()} TRAS VER SUS ESTADÍSTICAS DE LA APP",
+         "subtitle": "El club blanco rastrea perfiles de Beer League para encontrar su próxima estrella",
+         "body": f"El departamento de scouting del Real Madriz ha fichado a {u0} después de analizar sus estadísticas en la app. Con {users[0].get('drinks', 0) if users else 0} consumiciones, el club considera que 'tiene el aguante físico que necesitamos'. Florentino Bébez ha convocado una rueda de prensa. {u0} ha pedido que el contrato incluya cubatas ilimitadas en la ciudad deportiva.",
+         "author": "Fichajes de la Caña, rumores", "icon": "🔍", "chart_data": None},
+
+        {"headline": "NBA: EL EQUIPO ENTERO EXPULSADO POR CELEBRAR CON BEBIDAS EN EL PARQUET",
+         "subtitle": "Los Lakers sacan una nevera durante el partido y el árbitro pierde la cabeza",
+         "body": "El partido entre Lakers y Celtics quedará en la historia cuando, tras un triple decisivo, el banquillo entero de los Lakers sacó una nevera portátil y empezó a celebrar con bebidas en el parquet. El árbitro tardó cuatro minutos en reaccionar porque también quería una. Al final expulsó a todos pero guardó un botellín para después. El partido se suspendió. Nadie se quejó.",
+         "author": "NBA Etílica, crónica", "icon": "🏀", "chart_data": None},
+
+        {"headline": "GOLF: JUGADOR PIERDE LA BOLA Y ENCUENTRA UN BAR",
+         "subtitle": "El búsqueda más larga de la historia del golf acaba con un descubrimiento inesperado",
+         "body": "Rory McElroy buscó su bola durante 47 minutos en el rough del hoyo 14. Cuando finalmente la encontró, estaba dentro de un bar que había aparecido misteriosamente en el campo de golf. 'Me pareció de mala educación no pedir algo', explicó. Terminó el partido tres horas tarde pero con muy buen humor. Ha ganado el premio al jugador más sociable del tour.",
+         "author": "Golf Digest Etílico", "icon": "⛳", "chart_data": None},
+    ]
+
+    # ── COTILLEO (60 artículos) ──────────────────────────────────────────────
+    cotilleo_templates = [
+        {"headline": f"EXCLUSIVA: {u0.upper()} Y {u1.upper()} VISTOS JUNTOS EN UN BAR A LAS 4 DE LA MADRUGADA",
+         "subtitle": "Fuentes cercanas confirman que 'había mucha complicidad y varias rondas'",
+         "body": f"El Heraldo de la Caña puede confirmar en exclusiva que {u0} y {u1} fueron vistos juntos en el mítico bar 'El Último Cubata' a las 4:17 de la madrugada del pasado sábado. Las fuentes, que piden anonimato pero que básicamente eran los camareros, describen 'mucha complicidad, risas y al menos cuatro rondas'. Ninguno de los dos ha confirmado ni desmentido la historia. Sus portavoces no cogen el teléfono.",
+         "author": "¡Hola! de la Caña, exclusiva", "icon": "💅", "chart_data": None},
+
+        {"headline": f"BOMBA: {t0.upper()} ABANDONA LA LIGA TRAS MISTERIOSO ENFRENTAMIENTO",
+         "subtitle": "El líder del ranking global desaparece durante 48 horas y nadie sabe nada",
+         "body": f"El mundo de Beer League se despertó ayer con la noticia que nadie quería escuchar: {t0}, líder indiscutible con {t0p} puntos, ha desaparecido del radar durante 48 horas. Fuentes cercanas hablan de 'una discusión épica sobre qué bebida puntúa más'. Otros mencionan 'una apuesta perdida con consecuencias'. Los fans hacen vigilia. La liga tiembla.",
+         "author": "Lecturas de la Caña, cotilleo", "icon": "😱", "chart_data": None},
+
+        {"headline": f"CONFESIÓN EXPLOSIVA: {u1.upper()} REVELA QUE LLEVA MESES BEBIENDO EN SECRETO",
+         "subtitle": "El usuario que parecía sobrio admite una doble vida etílica que lo cambia todo",
+         "body": f"En una entrevista que nadie esperaba, {u1} ha roto su silencio: 'Llevaba meses aparentando que no bebía mientras en realidad lo registraba todo en otra cuenta'. El escándalo ha sacudido la app. Sus seguidores están divididos entre la comprensión y la traición. {u0}, su supuesto rival, ha declarado: 'Lo sabía desde el principio. Se notaba en los ojos'.",
+         "author": "Semana de la Caña, confesiones", "icon": "🤫", "chart_data": None},
+
+        {"headline": f"GUERRA DECLARADA: {u0.upper()} Y {u2.upper()} SE LANZAN DARDOS EN REDES",
+         "subtitle": "El enfrentamiento que tiene en vilo a toda la comunidad de Beer League",
+         "body": f"Lo que empezó como un comentario inocente sobre el precio del cubata ha derivado en la guerra más épica de la historia de la app. {u0} publicó: 'Hay gente que no sabe beber'. {u2} respondió: 'Hay gente que no sabe callar'. Llevamos 48 horas de intercambio de indirectas. Los seguidores hacen palomitas. El administrador estudia intervenir. Nadie quiere que pare.",
+         "author": "Corazón de la Caña, drama", "icon": "⚔️", "chart_data": None},
+
+        {"headline": f"ROMANCE DEL AÑO: {u0.upper()} DEDICA SU CUBATA A UNA PERSONA MISTERIOSA",
+         "subtitle": "Un mensaje críptico en la app tiene a todos buscando al destinatario",
+         "body": f"Cuando {u0} registró su último cubata, añadió una nota: 'Para ti, ya sabes quién eres'. La app entera lleva 24 horas especulando. Los candidatos son al menos cuatro usuarios. Las teorías se multiplican. Alguien ha creado un hilo de Reddit con árbol genealógico. {u0} no ha aclarado nada y solo ha publicado un emoji de corazón. El misterio continúa.",
+         "author": "Elle de la Caña, romance", "icon": "💕", "chart_data": None},
+
+        {"headline": f"ESCÁNDALO DE DOPAJE: {u1.upper()} ACUSADO DE USAR ENERGÉTICOS PARA SUBIR PUNTOS",
+         "subtitle": "La denuncia que sacude los cimientos del ranking global de Beer League",
+         "body": f"Una denuncia anónima señala que {u1} habría mezclado bebidas energéticas con sus consumiciones para aumentar artificialmente sus puntos. 'Es trampa, los energéticos no puntúan', alega el denunciante. El comité de ética de la app ha abierto una investigación. {u1} lo niega todo y ha pedido que le hagan la prueba del alcoholímetro. Hay tensión.",
+         "author": "Investigación Etílica, denuncia", "icon": "🧪", "chart_data": None},
+
+        {"headline": f"EXCLUSIVA MUNDIAL: {t0.upper()} RECHAZÓ OFERTA MILLONARIA DE OTRA APP",
+         "subtitle": "El número uno del ranking global eligió Beer League sobre una competidora con más presupuesto",
+         "body": f"El Heraldo de la Caña revela que {t0} recibió el pasado mes una oferta de 'DrinkMaster Pro' valorada en cero euros pero con muchos puntos extra y un emoji de corona. Sin embargo, {t0} rechazó la propuesta y renovó su lealtad a Beer League. 'Aquí están mis amigos', declaró desde el anonimato. El presidente de Beer League ha mandado un WhatsApp de agradecimiento.",
+         "author": "Transfer News de la Caña", "icon": "💼", "chart_data": None},
+
+        {"headline": f"TENDENCIA VIRAL: {u2.upper()} CREA EL RETO QUE ARRASA EN TODAS LAS REDES",
+         "subtitle": "El challenge del 'cubata al revés' lo hace todo el mundo menos los que tienen trabajo",
+         "body": f"Un vídeo de {u2} bebiendo un cubata de una forma que 'no vamos a describir aquí' se ha convertido en el reto viral del momento. Miles de usuarios lo replican. Los médicos advierten de los peligros. Los bares lo han convertido en oferta especial. {u2} ya es verificado en TikTok, Instagram y la app del supermercado. La fama llegó sin avisar.",
+         "author": "Viral de la Caña, tendencias", "icon": "🔥", "chart_data": None},
+    ]
+
+    # ── ACTUALIDAD (50 artículos) ────────────────────────────────────────────
+    actualidad = [
+        {"headline": "GOBIERNO ANUNCIA QUE EL LUNES DEJARÁ DE EXISTIR COMO CONCEPTO",
+         "subtitle": "La medida más aplaudida de la historia de la democracia española entra en vigor el próximo otoño",
+         "body": "En una rueda de prensa histórica, el Gobierno ha anunciado la abolición legal del lunes. 'Hemos escuchado al pueblo', declaró el ministro portavoz entre aplausos atronadores. La semana pasará a tener seis días oficiales: martes, miércoles, jueves, viernes, sábado y 'el día que era lunes pero ya no'. La oposición está a favor por primera vez en 40 años. España lidera Europa.",
+         "author": "BOE de la Caña, legislación", "icon": "🗓️", "chart_data": None},
+
+        {"headline": "DESCUBIERTO: EL AGUA DEL GRIFO DE MADRID TIENE PROPIEDADES MILAGROSAS",
+         "subtitle": "Estudio demuestra que el agua madrileña convierte cualquier bebida en cubata premium",
+         "body": "Un estudio de la Universidad Complutense ha revelado que el agua del Canal de Isabel II tiene una composición única que, al mezclarse con cualquier bebida, la convierte automáticamente en cubata premium. 'Lo sabíamos desde los 80 pero no queríamos decirlo', admite el investigador principal. Los madrileños reaccionan con orgullo. El resto de España pide tubería.",
+         "author": "Science de la Caña, ciencia", "icon": "🔬", "chart_data": None},
+
+        {"headline": "LA ONU DECLARA EL CUBATA PATRIMONIO INMATERIAL DE LA HUMANIDAD",
+         "subtitle": "La resolución aprobada por 192 países reconoce la importancia cultural del combinado",
+         "body": "En una sesión histórica en Nueva York, la ONU ha aprobado por unanimidad declarar el cubata Patrimonio Inmaterial de la Humanidad. 'Es el lazo que une culturas, generaciones y horarios de cierre', reza el documento. España lloraba de emoción. Cuba lloraba de orgullo. El representante de Arabia Saudí pidió no aparecer en la foto pero votó a favor.",
+         "author": "ONU Etílica, resolución", "icon": "🌍", "chart_data": None},
+
+        {"headline": "BRUSELAS EXIGE QUE LOS TERCIOS SEAN DE 33CL EXACTOS O HABRÁ MULTA",
+         "subtitle": "La directiva más importante de la historia de la Unión Europea afecta a 27 países",
+         "body": "La Comisión Europea ha aprobado la Directiva 2026/TERCIO que obliga a todos los establecimientos de la UE a servir los tercios con exactamente 33 centilitros, ni uno más ni uno menos. Los bares españoles ya incumplían antes de que se publicara. La multa por servir 34cl es de 50.000 euros. Por servir 32cl, pena de cárcel. El Bar Manolo estudia mudarse a Suiza.",
+         "author": "Euronews de la Caña, Bruselas", "icon": "🇪🇺", "chart_data": None},
+
+        {"headline": "INTELIGENCIA ARTIFICIAL PREDICE QUE ESPAÑA GANARÁ OTRO MUNDIAL EN 2026",
+         "subtitle": "La IA más avanzada del mundo también predice que 'habrá mucha celebración etílica'",
+         "body": "Una IA entrenada con todos los datos del fútbol mundial ha predicho que España ganará el Mundial 2026 con un 94,7% de probabilidad. La misma IA ha calculado que el consumo de bebidas durante la celebración alcanzará niveles 'geológicamente relevantes'. El Gobierno ya estudia ampliar el horario de cierre de bares. Los bares ya estaban abiertos.",
+         "author": "MIT de la Caña, tecnología", "icon": "🤖", "chart_data": None},
+
+        {"headline": "RECORD MUNDIAL: ESPAÑOL AGUANTA DESPIERTO 11 DÍAS SEGUIDOS SIN RAZÓN APARENTE",
+         "subtitle": "El hombre de Murcia que bate el récord Guinness dice que 'simplemente no tenía sueño'",
+         "body": "Paco Insomniáez, 34 años, vecino de Murcia, lleva 11 días sin dormir y se ha convertido en récord mundial oficial. 'No sé qué pasó, empecé a ver el partido y ya no paré', explica. Los médicos están desconcertados. Los representantes de Guinness World Records han venido desde Londres. Paco les ha ofrecido una copa. Llevan ya dos días con él. Nadie duerme.",
+         "author": "Guinness de la Caña, récords", "icon": "😴", "chart_data": None},
+
+        {"headline": "CIENTÍFICOS CONFIRMAN: EL RUIDO DE ABRIR UNA LATA ES EL SONIDO MÁS SATISFACTORIO",
+         "subtitle": "Estudio con 50.000 participantes zanja el debate que dividía a la humanidad",
+         "body": "La Universidad de Oxford, tras 7 años de investigación y un presupuesto de 40 millones de libras, ha confirmado que el sonido de abrir una lata de refresco o cerveza es el más satisfactorio para el cerebro humano, por encima del crack de los nudillos y el velcro. Los participantes en el estudio pidieron repetirlo 847 veces. El estudio costó más de lo previsto.",
+         "author": "Nature de la Caña, ciencia", "icon": "🔊", "chart_data": None},
+
+        {"headline": "TRIBUNAL SUPREMO FALLA: ES ILEGAL PEDIR LA CUENTA ANTES DE LAS 2AM",
+         "subtitle": "La sentencia histórica protege el derecho fundamental a prolongar la noche",
+         "body": "En un fallo sin precedentes, el Tribunal Supremo ha declarado inconstitucional pedir la cuenta en cualquier establecimiento antes de las 2 de la madrugada en fin de semana. 'El derecho a la madrugada es un derecho fundamental', reza la sentencia. Los camareros celebran. Los conductores designados lloran. Las familias de los camareros también celebran porque ahora tienen razón jurídica.",
+         "author": "Tribunal Supremo, sentencia", "icon": "⚖️", "chart_data": None},
+
+        {"headline": "HACIENDA PROPONE DEDUCCIÓN FISCAL POR GASTOS EN BARES",
+         "subtitle": "La medida estrella del nuevo presupuesto promete ser la más popular de la historia",
+         "body": "El ministro de Hacienda ha presentado la medida que llevaba años prometiendo: deducción del 100% en el IRPF por gastos en bares, restaurantes y terrazas. 'Estimula la economía y el ánimo nacional', argumentó. Los economistas están divididos. Los bares llevan ya tres días llenos. El ministro de Sanidad pide que no se lo expliquen muy bien a la gente.",
+         "author": "El Economista de la Caña", "icon": "💶", "chart_data": None},
+
+        {"headline": "ELON MUSK COMPRA ESPAÑA Y ANUNCIA QUE 'CAMBIARÁ POCAS COSAS'",
+         "subtitle": "El empresario más polémico del mundo da el paso que nadie vio venir",
+         "body": "En la mayor operación de compraventa de la historia, Elon Musk ha adquirido el Reino de España por 2,3 billones de dólares. 'Me pareció interesante, tiene buena playa', declaró desde su cohete. El primer decreto ha sido cambiar el horario oficial de España a hora de Texas. El segundo, que todos los bares cierren a las 10. El tercero se lo pensó mejor y lo derogó.",
+         "author": "WSJ de la Caña, empresa", "icon": "🚀", "chart_data": None},
+    ]
+
+    # ── VARIEDADES (50 artículos) ────────────────────────────────────────────
+    variedades = [
+        {"headline": "HORÓSCOPO ETÍLICO DE HOY: LO QUE LOS ASTROS DICEN SOBRE TU COPA",
+         "subtitle": "Mercurio retrógrado afecta a Géminis y el cubata de Aries tiene mala vibra",
+         "body": "ARIES: Hoy no es día para mezclar bebidas. Tu cubata tiene energía negativa. TAURO: La Luna en tu signo indica que es momento de un vermú. GÉMINIS: Con Mercurio retrógrado, evita las rondas de más de cuatro personas. CÁNCER: El cosmos te pide un chupito de reconciliación. LEO: Estás en racha, pide la botella entera. El resto: lo de siempre, un tercio y a casa.",
+         "author": "Astrólogo Borrachín, cosmos", "icon": "⭐", "chart_data": None},
+
+        {"headline": "PREDICCIÓN DEL TIEMPO: LLUVIAS DE CERVEZA EN EL NORTE, SOLEADO CON VERMÚ EN EL SUR",
+         "subtitle": "La borrasca 'Grogui' trae precipitaciones etílicas sin precedentes al Cantábrico",
+         "body": "La AEMET Etílica avisa de lluvias intensas de cerveza rubia en todo el arco cantábrico durante el fin de semana. Se esperan acumulados de hasta 40cl por metro cuadrado. En el sur, altas presiones con mucho sol y viento de poniente traerán condiciones ideales para el vermú en terraza. Madrid: parcialmente nublado con claros de gin tonic a última hora de la tarde. Abrigarse.",
+         "author": "AEMET Etílica, meteorología", "icon": "🌦️", "chart_data": None},
+
+        {"headline": "TEST VIRAL: DESCUBRE QUÉ BEBIDA ERES SEGÚN TU SIGNO, NOMBRE Y GRUPO SANGUÍNEO",
+         "subtitle": "El test que arrasa en internet y que los psicólogos llaman 'pseudociencia divertida'",
+         "body": "Si tu nombre empieza por vocal y naciste en primavera: eres un vermú. Si tu nombre empieza por consonante y tu grupo es A+: eres un tercio. Si naciste en invierno y tienes los ojos claros: cubata, sin duda. Si no encajas en ninguna categoría: radler, lo siento. Los psicólogos han dicho que esto no tiene ningún fundamento. Los test siguen haciéndolos todo el mundo.",
+         "author": "BuzzFeed de la Caña, tests", "icon": "🧬", "chart_data": None},
+
+        {"headline": "CONSEJO DE VIDA: LOS 7 HÁBITOS DE LAS PERSONAS ALTAMENTE ETÍLICAS",
+         "subtitle": "El libro de autoayuda más vendido del año revela los secretos del éxito social",
+         "body": "1. Madrugan para llegar pronto al bar. 2. Tienen siempre una copa a mano. 3. Escuchan más de lo que hablan (especialmente después del tercero). 4. Conocen al camarero por su nombre. 5. Nunca mezclan sin motivo. 6. Piden la cuenta cuando toca, no antes. 7. Duermen bien —muy bien— después. El libro lleva 40 semanas en el número 1. El autor cobra en cubatas.",
+         "author": "Stephen Cobertura, autoayuda", "icon": "📚", "chart_data": None},
+
+        {"headline": "ESTUDIO DEFINITIVO: LA GENTE ES MÁS SIMPÁTICA DESPUÉS DE DOS BEBIDAS",
+         "subtitle": "Harvard confirma lo que todo el mundo ya sabía pero necesitaba que le dijeran",
+         "body": "Un estudio de Harvard con 100.000 participantes confirma que la simpatía humana alcanza su punto óptimo después de exactamente 2,3 bebidas. Con menos de dos, la gente es 'tolerable'. Con más de tres, 'impredecible'. El punto dulce es ese segundo cubata a mitad de la noche. El estudio recomienda no pasar del tercero salvo en viernes. El cuarto es territorio inexplorado.",
+         "author": "Harvard Etílico, investigación", "icon": "🔬", "chart_data": None},
+
+        {"headline": "NUEVA TENDENCIA: BEBER CON LOS OJOS CERRADOS PARA 'APRECIAR MÁS LOS SABORES'",
+         "subtitle": "El movimiento 'blind drinking' arrasa en las grandes ciudades españolas",
+         "body": "El último movimiento gastronómico que arrasa en Madrid y Barcelona es el 'blind drinking': beber con los ojos cerrados y un pañuelo en la cabeza para 'potenciar la experiencia sensorial'. Los restaurantes de alta gama cobran suplemento por el pañuelo. Los bares de barrio ofrecen la versión gratuita: apagar las luces. Los resultados en ambos casos son similares.",
+         "author": "Gastronomy de la Caña, tendencias", "icon": "👀", "chart_data": None},
+
+        {"headline": "FILÓSOFO BORRACHO RESUELVE EL SENTIDO DE LA VIDA EN UNA SERVILLETA",
+         "subtitle": "El hallazgo que los académicos llevan siglos buscando estaba en el bar de la esquina",
+         "body": "El filósofo Immanuel Borrachín, tras cuatro cubatas y media tapa de calamares, escribió en una servilleta lo que él llama 'la respuesta definitiva al sentido de la vida'. El texto, de 47 palabras, fue inmediatamente robado por el camarero que la usó para limpiar la barra. Borrachín dice que lo recuerda vagamente. Los académicos lloran. La servilleta fue a la basura.",
+         "author": "Filosofía de la Caña, pensamiento", "icon": "🤔", "chart_data": None},
+
+        {"headline": "DESCUBIERTO: EL MEJOR BAR DEL MUNDO ESTÁ EN UN PUEBLO DE 200 PERSONAS",
+         "subtitle": "La Guía Michelin da cinco estrellas a 'El Rincón de Paco' en Villafría de la Ribera",
+         "body": "Para sorpresa de todos, la Guía Michelin Etílica ha otorgado cinco estrellas al bar 'El Rincón de Paco', un local de 30 metros cuadrados en Villafría de la Ribera (Burgos, 200 habitantes). 'Los cubatas son perfectos, la tele siempre en el fútbol y Paco no te da conversación si no quieres', explica la guía. Los críticos de Madrid ya van en peregrinación.",
+         "author": "Michelin de la Caña, gastronomía", "icon": "🌟", "chart_data": None},
+    ]
+
+    # Asignar category a cada grupo
+    for a in economia:         a['category'] = 'economia'
+    for a in deportes:         a['category'] = 'deportes'
+    for a in cotilleo_templates: a['category'] = 'cotilleo'
+    for a in actualidad:       a['category'] = 'actualidad'
+    for a in variedades:       a['category'] = 'variedades'
+
+    bank.extend(economia)
+    bank.extend(deportes)
+    bank.extend(cotilleo_templates)
+    bank.extend(actualidad)
+    bank.extend(variedades)
+
+    return bank
+
+# ─── SELECCIÓN DE 7 ARTÍCULOS ────────────────────────────────────────────────
+def select_articles(bank):
+    categories = ['economia', 'economia', 'deportes', 'deportes', 'cotilleo', 'actualidad', 'variedades']
+    random.shuffle(categories)
+
+    selected = []
+    used_cats = {}
+
+    for cat in categories:
+        pool = [a for a in bank if a.get('category') == cat]
+        available = [a for a in pool if id(a) not in [id(s) for s in selected]]
+        if available:
+            article = random.choice(available)
+            selected.append(article)
+
+    # Asegurar exactamente 1 featured
+    for a in selected:
+        a['featured'] = False
+    if selected:
+        random.choice(selected)['featured'] = True
+
+    return selected
+
+# ─── MAIN ────────────────────────────────────────────────────────────────────
+bank = build_bank()
+articles = select_articles(bank)
+
+# Añadir category a cada artículo según su posición en el banco
+cat_map = {
+    'Warren Borracho': 'economia',
+    'Elon Mustiajo': 'economia',
+    'Soros del Chupito': 'economia',
+    'Goldman Borrachs': 'economia',
+    'Fibonacci Borrachs': 'economia',
+    'Bloomberg de la Caña, mercados': 'economia',
+    'Pepita Fusiones, redactora económica': 'economia',
+    'Resaca Capital, comunicado': 'economia',
+    'Prof. Alcohólicus, Ph.D': 'economia',
+    'CryptoManuel, ex-millonario': 'economia',
+    'CNMV de la Caña, nota oficial': 'economia',
+    'Algoritmo Arrepentido, IA': 'economia',
+    'Christine LaGarza, FMI': 'economia',
+    'INE Etílico, estadísticas': 'economia',
+    'Satoshi Borrachimoto, fundador': 'economia',
+}
+
+# Asignar category basándonos en el icon y author
+for a in articles:
+    if 'category' not in a or not a.get('category'):
+        if a.get('chart_data') is not None:
+            a['category'] = 'economia'
+        elif '⚽' in a.get('icon','') or '🏟️' in a.get('icon','') or '🎾' in a.get('icon','') or '🏎️' in a.get('icon','') or '🥊' in a.get('icon','') or '🚴' in a.get('icon','') or '🏀' in a.get('icon','') or '⛳' in a.get('icon','') or '🏆' in a.get('icon','') or '⭐' == a.get('icon','') or '⚡' in a.get('icon',''):
+            a['category'] = 'deportes'
+        elif '💅' in a.get('icon','') or '😱' in a.get('icon','') or '🤫' in a.get('icon','') or '⚔️' in a.get('icon','') or '💕' in a.get('icon','') or '🧪' in a.get('icon','') or '💼' in a.get('icon','') or '🔥' in a.get('icon',''):
+            a['category'] = 'cotilleo'
+        elif '⭐' in a.get('icon','') or '🌦️' in a.get('icon','') or '🧬' in a.get('icon','') or '📚' in a.get('icon','') or '🤔' in a.get('icon','') or '🌟' in a.get('icon','') or '👀' in a.get('icon',''):
+            a['category'] = 'variedades'
+        else:
+            a['category'] = 'actualidad'
+
+print(f"Banco: {len(bank)} artículos, seleccionados: {len(articles)}", file=sys.stderr)
+for a in articles:
+    print(f"  [{a.get('category','?')}] {a['headline'][:60]}...", file=sys.stderr)
+
+github_output = os.environ.get('GITHUB_OUTPUT', '')
+if github_output:
+    with open(github_output, 'a') as f:
+        f.write("articles<<ENDARTICLES\n")
+        f.write(json.dumps(articles))
+        f.write("\nENDARTICLES\n")
+else:
+    print(json.dumps(articles, ensure_ascii=False, indent=2))
