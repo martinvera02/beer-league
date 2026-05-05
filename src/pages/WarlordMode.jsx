@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
-// ─── DATOS GEOGRÁFICOS REALES (SVG Simplemaps, MIT License) ──────────────────
 const WORLD_COUNTRIES = {
   AE:{n:"United Arab Emirates",c:"asia",cx:1292.3,cy:346.8,d:"M1296.2 336.7l1.3 5.1-2.8 0 0 4.2 1.1 0.9-2.4 1.3 0.2 2.6-1.3 2.6 0 2.6-1 1.4-16.9-3.2-2.7-6.6-0.3-1.4 0.9-0.4 0.4 1.8 4.2-1 4.6 0.2 3.4 0.2 3.3-4.4 3.7-4.1 3-4 1.3 2.2z"},
   AF:{n:"Afghanistan",c:"asia",cx:1353.4,cy:271.6,d:"M1383 261.6l1.5 1.8-2.9 0.8-2.4 1.1-5.9 0.8-5.3 1.3-2.4 2.8 1.9 2.7 1.4 3.2-2 2.7 0.8 2.5-0.9 2.3-5.2-0.2 3.1 4.2-3.1 1.7-1.4 3.8 1.1 3.9-1.8 1.8-2.1-0.6-4 0.9-0.2 1.7-4.1 0-2.3 3.7 0.8 5.4-6.6 2.7-3.9-0.6-0.9 1.4-3.4-0.8-5.3 1-9.6-3.3 3.9-5.8-1.1-4.1-4.3-1.1-1.2-4.1-2.7-5.1 1.6-3.5-2.5-1 0.5-4.7 0.6-8 5.9 2.5 3.9-0.9 0.4-2.9 4-0.9 2.6-2-0.2-5.1 4.2-1.3 0.3-2.2 2.9 1.7 1.6 0.2 3 0 4.3 1.4 1.8 0.7 3.4-2 2.1 1.2 0.9-2.9 3.2 0.1 0.6-0.9-0.2-2.6 1.7-2.2 3.3 1.4-0.1 2 1.7 0.3 0.9 5.4 2.7 2.1 1.5-1.4 2.2-0.6 2.5-2.9 3.8 0.5 5.4 0z"},
@@ -180,23 +179,493 @@ const WORLD_COUNTRIES = {
   ZW:{n:"Zimbabwe",c:"africa",cx:1151.9,cy:621.7,d:"M1159.4 644.7l-2.9-0.7-1.9 0.8-2.7-1.1-2.2 0-3.4-2.9-4.3-1-1.5-4.1 0.1-2.3-2.3-0.7-6.1-7-1.6-3.7-1.1-1.2-1.9-5.1 6.2 0.7 1.8 0.7 1.9-0.1 3.2-4.2 5.1-5.2 2-0.6 0.8-2.2 3.3-2.5 4.3-0.9 0.2 2.4 4.7-0.1 2.6 1.3 1.1 1.6 2.7 0.5 2.8 2-0.4 8.2-1.3 4.4-0.4 4.8 0.8 1.9-0.9 3.8-0.8 0.6-1.7 4.6-6.2 7.3z"},
 }
 
-const CONTINENT_COLORS = {
-  europe:   { base:'#2a4a8f', light:'#3a6abf', glow:'rgba(58,106,191,0.35)' },
-  asia:     { base:'#7a4f1a', light:'#c47c2a', glow:'rgba(196,124,42,0.35)' },
-  africa:   { base:'#2a6a22', light:'#3da832', glow:'rgba(61,168,50,0.35)'  },
-  americas: { base:'#7a2020', light:'#c43232', glow:'rgba(196,50,50,0.35)'  },
-  oceania:  { base:'#4a2080', light:'#7a38cc', glow:'rgba(122,56,204,0.35)' },
-  other:    { base:'#444',    light:'#666',    glow:'rgba(100,100,100,0.2)' },
+const ADJACENCY = {
+  AD: ["ES", "FR"],
+  AE: ["IR", "OM", "QA", "SA"],
+  AF: ["CN", "IR", "PK", "TJ", "TM", "UZ"],
+  AG: ["DM", "KN"],
+  AL: ["GR", "ME", "MK", "RS", "XK"],
+  AM: ["AZ", "GE", "IR", "TR"],
+  AO: ["CD", "CG", "NA", "ZM"],
+  AR: ["BO", "BR", "CL", "PY", "UY"],
+  AT: ["CH", "CZ", "DE", "HU", "IT", "LI", "SI", "SK"],
+  AU: ["ID", "NZ", "PG"],
+  AZ: ["AM", "GE", "IR", "RU", "TR"],
+  BA: ["HR", "ME", "RS"],
+  BB: ["LC", "TT", "VC"],
+  BD: ["IN", "MM"],
+  BE: ["DE", "FR", "LU", "NL"],
+  BF: ["BJ", "CI", "GH", "ML", "NE", "TG"],
+  BG: ["GR", "MK", "RO", "RS", "TR"],
+  BI: ["CD", "RW", "TZ"],
+  BJ: ["BF", "NE", "NG", "TG"],
+  BN: ["MY"],
+  BO: ["AR", "BR", "CL", "PE", "PY"],
+  BR: ["AR", "BO", "CO", "GF", "GY", "PE", "PY", "SR", "UY", "VE"],
+  BS: ["CU", "US"],
+  BT: ["CN", "IN"],
+  BW: ["NA", "ZA", "ZM", "ZW"],
+  BY: ["LT", "LV", "PL", "RU", "UA"],
+  BZ: ["GT", "MX"],
+  CA: ["US"],
+  CD: ["AO", "BI", "CF", "CG", "RW", "SD", "SS", "TZ", "UG", "ZM"],
+  CF: ["CD", "CG", "CM", "SD", "SS", "TD"],
+  CG: ["AO", "CD", "CF", "CM", "GA"],
+  CH: ["AT", "DE", "FR", "IT", "LI"],
+  CI: ["BF", "GH", "GN", "LR", "ML"],
+  CL: ["AR", "BO", "PE"],
+  CM: ["CF", "CG", "GA", "GQ", "NG", "TD"],
+  CN: ["AF", "BT", "IN", "KG", "KP", "KZ", "LA", "MM", "MN", "NP", "PK", "RU", "TJ", "TW", "VN"],
+  CO: ["BR", "EC", "PA", "PE", "VE"],
+  CR: ["NI", "PA"],
+  CU: ["BS", "HT", "JM", "MX", "US"],
+  CY: ["TR"],
+  CZ: ["AT", "DE", "PL", "SK"],
+  DE: ["AT", "BE", "CH", "CZ", "DK", "FR", "LU", "NL", "PL"],
+  DJ: ["ER", "ET", "SO"],
+  DK: ["DE", "SE"],
+  DM: ["AG", "LC"],
+  DO: ["HT", "PR"],
+  DZ: ["EH", "LY", "MA", "ML", "MR", "NE", "TN"],
+  EC: ["CO", "PE"],
+  EE: ["FI", "LV", "RU"],
+  EG: ["IL", "LY", "PS", "SD"],
+  EH: ["DZ", "MA", "MR"],
+  ER: ["DJ", "ET", "SD"],
+  ES: ["AD", "FR", "MA", "PT"],
+  ET: ["DJ", "ER", "KE", "SD", "SO", "SS"],
+  FI: ["EE", "NO", "RU", "SE"],
+  FJ: ["NZ", "TO", "TV", "VU", "WS"],
+  FM: ["MH", "NR", "PG", "PW"],
+  FR: ["AD", "BE", "CH", "DE", "ES", "IT", "LU", "MC"],
+  GA: ["CG", "CM", "GQ"],
+  GD: ["TT", "VC"],
+  GE: ["AM", "AZ", "RU", "TR"],
+  GF: ["BR", "SR"],
+  GH: ["BF", "CI", "TG"],
+  GM: ["MR", "SN"],
+  GN: ["CI", "GW", "LR", "ML", "SL", "SN"],
+  GQ: ["CM", "GA"],
+  GR: ["AL", "BG", "MK", "TR"],
+  GT: ["BZ", "HN", "MX", "SV"],
+  GW: ["GN", "SN"],
+  GY: ["BR", "SR", "VE"],
+  HN: ["GT", "NI", "SV"],
+  HR: ["BA", "HU", "IT", "ME", "RS", "SI"],
+  HT: ["CU", "DO", "JM"],
+  HU: ["AT", "HR", "RO", "RS", "SI", "SK", "UA"],
+  ID: ["AU", "MY", "PG", "PH", "TL"],
+  IL: ["EG", "JO", "LB", "PS", "SY"],
+  IN: ["BD", "BT", "CN", "LK", "MM", "MV", "NP", "PK"],
+  IQ: ["IR", "JO", "KW", "SA", "SY", "TR"],
+  IR: ["AE", "AF", "AM", "AZ", "IQ", "KW", "OM", "PK", "SA", "TM", "TR"],
+  IT: ["AT", "CH", "FR", "HR", "MC", "SI", "SM", "VA"],
+  JM: ["CU", "HT"],
+  JO: ["IL", "IQ", "SA", "SY"],
+  JP: ["KR", "RU"],
+  KE: ["ET", "SO", "SS", "TZ", "UG"],
+  KG: ["CN", "KZ", "TJ", "UZ"],
+  KH: ["LA", "TH", "VN"],
+  KI: ["MH", "TV"],
+  KN: ["AG"],
+  KP: ["CN", "KR", "RU"],
+  KR: ["JP", "KP"],
+  KW: ["IQ", "IR", "SA"],
+  KZ: ["CN", "KG", "RU", "TM", "UZ"],
+  LA: ["CN", "KH", "MM", "TH", "VN"],
+  LB: ["IL", "SY"],
+  LC: ["BB", "DM"],
+  LI: ["AT", "CH"],
+  LK: ["IN", "MV"],
+  LR: ["CI", "GN", "SL"],
+  LS: ["ZA"],
+  LT: ["BY", "LV", "PL", "RU"],
+  LU: ["BE", "DE", "FR"],
+  LV: ["BY", "EE", "LT", "RU"],
+  LY: ["DZ", "EG", "NE", "SD", "TD", "TN"],
+  MA: ["DZ", "EH", "ES", "MR"],
+  MC: ["FR", "IT"],
+  MD: ["RO", "UA"],
+  ME: ["AL", "BA", "HR", "RS", "XK"],
+  MG: ["MZ"],
+  MH: ["FM", "KI", "NR"],
+  MK: ["AL", "BG", "GR", "RS", "XK"],
+  ML: ["BF", "CI", "DZ", "GN", "MR", "NE", "SN"],
+  MM: ["BD", "CN", "IN", "LA", "TH"],
+  MN: ["CN", "RU"],
+  MR: ["DZ", "EH", "GM", "MA", "ML", "SN"],
+  MV: ["IN", "LK"],
+  MW: ["MZ", "TZ", "ZM"],
+  MX: ["BZ", "CU", "GT", "US"],
+  MY: ["BN", "ID", "SG", "TH"],
+  MZ: ["MG", "MW", "SZ", "TZ", "ZA", "ZM", "ZW"],
+  NA: ["AO", "BW", "ZA", "ZM"],
+  NE: ["BF", "BJ", "DZ", "LY", "ML", "NG", "TD"],
+  NG: ["BJ", "CM", "NE", "TD"],
+  NI: ["CR", "HN"],
+  NL: ["BE", "DE"],
+  NO: ["FI", "RU", "SE"],
+  NP: ["CN", "IN"],
+  NR: ["FM", "MH"],
+  NZ: ["AU", "FJ"],
+  OM: ["AE", "IR", "SA", "YE"],
+  PA: ["CO", "CR"],
+  PE: ["BO", "BR", "CL", "CO", "EC"],
+  PG: ["AU", "FM", "ID", "SB"],
+  PH: ["ID", "PW", "TW"],
+  PK: ["AF", "CN", "IN", "IR"],
+  PL: ["BY", "CZ", "DE", "LT", "RU", "SK", "UA"],
+  PR: ["DO"],
+  PS: ["EG", "IL"],
+  PT: ["ES"],
+  PW: ["FM", "PH"],
+  PY: ["AR", "BO", "BR"],
+  QA: ["AE", "SA"],
+  RO: ["BG", "HU", "MD", "RS", "UA"],
+  RS: ["AL", "BA", "BG", "HR", "HU", "ME", "MK", "RO", "XK"],
+  RU: ["AZ", "BY", "CN", "EE", "FI", "GE", "JP", "KP", "KZ", "LT", "LV", "MN", "NO", "PL", "UA"],
+  RW: ["BI", "CD", "TZ", "UG"],
+  SA: ["AE", "IQ", "IR", "JO", "KW", "OM", "QA", "YE"],
+  SB: ["PG", "VU"],
+  SD: ["CD", "CF", "EG", "ER", "ET", "LY", "SS", "TD"],
+  SE: ["DK", "FI", "NO"],
+  SG: ["MY"],
+  SI: ["AT", "HR", "HU", "IT"],
+  SK: ["AT", "CZ", "HU", "PL", "UA"],
+  SL: ["GN", "LR"],
+  SM: ["IT"],
+  SN: ["GM", "GN", "GW", "ML", "MR"],
+  SO: ["DJ", "ET", "KE"],
+  SR: ["BR", "GF", "GY"],
+  SS: ["CD", "CF", "ET", "KE", "SD", "UG"],
+  SV: ["GT", "HN"],
+  SY: ["IL", "IQ", "JO", "LB", "TR"],
+  SZ: ["MZ", "ZA"],
+  TD: ["CF", "CM", "LY", "NE", "NG", "SD"],
+  TG: ["BF", "BJ", "GH"],
+  TH: ["KH", "LA", "MM", "MY"],
+  TJ: ["AF", "CN", "KG", "UZ"],
+  TL: ["ID"],
+  TM: ["AF", "IR", "KZ", "UZ"],
+  TN: ["DZ", "LY"],
+  TO: ["FJ", "WS"],
+  TR: ["AM", "AZ", "BG", "CY", "GE", "GR", "IQ", "IR", "SY"],
+  TT: ["BB", "GD", "VE"],
+  TV: ["FJ", "KI"],
+  TW: ["CN", "PH"],
+  TZ: ["BI", "CD", "KE", "MW", "MZ", "RW", "UG", "ZM"],
+  UA: ["BY", "HU", "MD", "PL", "RO", "RU", "SK"],
+  UG: ["CD", "KE", "RW", "SS", "TZ"],
+  US: ["BS", "CA", "CU", "MX"],
+  UY: ["AR", "BR"],
+  UZ: ["AF", "KG", "KZ", "TJ", "TM"],
+  VA: ["IT"],
+  VC: ["BB", "GD"],
+  VE: ["BR", "CO", "GY", "TT"],
+  VN: ["CN", "KH", "LA"],
+  VU: ["FJ", "SB"],
+  WS: ["FJ", "TO"],
+  XK: ["AL", "ME", "MK", "RS"],
+  YE: ["OM", "SA"],
+  ZA: ["BW", "LS", "MZ", "NA", "SZ", "ZW"],
+  ZM: ["AO", "BW", "CD", "MW", "MZ", "NA", "TZ", "ZW"],
+  ZW: ["BW", "MZ", "ZA", "ZM"],
 }
 
 const CONTINENT_NAMES = {
   europe:'Europa', asia:'Asia', africa:'África', americas:'Américas', oceania:'Oceanía'
 }
 
+// ─── ANIMACIÓN DE BATALLA ─────────────────────────────────────────────────────
+function BattleModal({ battle, onClose }) {
+  const [phase, setPhase] = useState(0) // 0=intro 1=factores 2=combate 3=resultado
+  const [barProgress, setBarProgress] = useState(50)
+  const wins = battle.attacker_wins
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase(1), 600)
+    const t2 = setTimeout(() => setPhase(2), 2200)
+    const t3 = setTimeout(() => {
+      setPhase(3)
+      // Animar barra hacia el resultado
+      const target = wins ? battle.attacker_score : 100 - battle.defender_score
+      const duration = 1200
+      const start = Date.now()
+      const from = 50
+      const tick = () => {
+        const elapsed = Date.now() - start
+        const progress = Math.min(elapsed / duration, 1)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        setBarProgress(from + (target - from) * eased)
+        if (progress < 1) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    }, 3200)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [])
+
+  const factors = [
+    { key: 'factor_troops',   icon: '⚔️', label: 'Superioridad numérica', value: battle.factor_troops,   color: '#3b82f6' },
+    { key: 'factor_position', icon: '🗺️', label: 'Posicionamiento',       value: battle.factor_position, color: '#8b5cf6' },
+    { key: 'factor_morale',   icon: '💪', label: 'Moral de las tropas',   value: battle.factor_morale,   color: '#f59e0b' },
+    { key: 'factor_weather',  icon: '🌦️', label: 'Condiciones climáticas',value: battle.factor_weather,  color: '#06b6d4' },
+  ]
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-end justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}>
+
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', stiffness: 350, damping: 40 }}
+        className="w-full max-w-md rounded-t-3xl overflow-hidden"
+        style={{ background: 'linear-gradient(180deg, #0d1a2e 0%, #080f1e 100%)', border: '1px solid rgba(255,255,255,0.08)' }}>
+
+        {/* Header batalla */}
+        <div className="relative px-5 pt-6 pb-4 text-center overflow-hidden">
+          <motion.div className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.15), transparent 70%)' }}
+            animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 2, repeat: Infinity }} />
+          <motion.div className="text-4xl mb-2" animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 1, repeat: Infinity }}>⚔️</motion.div>
+          <p className="font-black text-white text-xl">¡BATALLA!</p>
+          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {battle.province_name || 'Provincia disputada'}
+          </p>
+        </div>
+
+        {/* Tropas enfrentadas */}
+        <div className="mx-5 mb-4 rounded-2xl p-4 flex items-center justify-between"
+          style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="text-center">
+            <p className="text-2xl font-black" style={{ color: battle.attacker_color || '#3b82f6' }}>{battle.soldiers_sent}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>⚔️ Atacantes</p>
+          </div>
+          <motion.div className="text-2xl" animate={{ rotate: [-5, 5, -5] }} transition={{ duration: 0.6, repeat: Infinity }}>⚡</motion.div>
+          <div className="text-center">
+            <p className="text-2xl font-black" style={{ color: battle.defender_color || '#ef4444' }}>{battle.defender_soldiers}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>🛡️ Defensores</p>
+          </div>
+        </div>
+
+        {/* Factores — aparecen uno a uno */}
+        <div className="px-5 mb-4 space-y-2">
+          {factors.map((f, idx) => (
+            <AnimatePresence key={f.key}>
+              {phase >= 1 && (
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.3 }}
+                  className="flex items-center gap-3">
+                  <span className="text-lg w-6 text-center flex-shrink-0">{f.icon}</span>
+                  <div className="flex-1">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{f.label}</span>
+                      <span className="text-xs font-black" style={{ color: f.color }}>{f.value}</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                      <motion.div className="h-full rounded-full"
+                        style={{ backgroundColor: f.color }}
+                        initial={{ width: 0 }}
+                        animate={{ width: phase >= 1 ? `${f.value}%` : '0%' }}
+                        transition={{ duration: 0.6, delay: idx * 0.3 + 0.1 }} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          ))}
+        </div>
+
+        {/* Barra de combate */}
+        <AnimatePresence>
+          {phase >= 2 && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              className="mx-5 mb-4">
+              <div className="flex justify-between mb-2">
+                <span className="text-xs font-black" style={{ color: battle.attacker_color || '#3b82f6' }}>ATAQUE {battle.attacker_score?.toFixed(0)}</span>
+                <span className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.3)' }}>vs</span>
+                <span className="text-xs font-black" style={{ color: battle.defender_color || '#ef4444' }}>{battle.defender_score?.toFixed(0)} DEFENSA</span>
+              </div>
+              <div className="relative w-full h-5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                {/* Barra atacante */}
+                <motion.div className="absolute inset-y-0 left-0 rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${battle.attacker_color || '#3b82f6'}, ${battle.attacker_color || '#60a5fa'})` }}
+                  animate={{ width: `${barProgress}%` }}
+                  transition={{ duration: 0.1 }} />
+                {/* Línea central */}
+                <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2" style={{ backgroundColor: 'rgba(255,255,255,0.3)', zIndex: 2 }} />
+                {/* Indicador móvil */}
+                <motion.div className="absolute inset-y-0 w-1 rounded-full bg-white shadow-lg"
+                  style={{ zIndex: 3 }}
+                  animate={{ left: `${barProgress - 0.5}%` }}
+                  transition={{ duration: 0.1 }} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Resultado */}
+        <AnimatePresence>
+          {phase >= 3 && (
+            <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+              className="mx-5 mb-5 rounded-2xl p-4 text-center"
+              style={{
+                background: wins
+                  ? 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.05))'
+                  : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))',
+                border: `1.5px solid ${wins ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
+              }}>
+              <motion.div className="text-4xl mb-2"
+                animate={{ rotate: wins ? [0,-10,10,-5,0] : [0,5,-5,0] }}
+                transition={{ duration: 0.6 }}>
+                {wins ? '🏆' : '💀'}
+              </motion.div>
+              <p className="font-black text-lg" style={{ color: wins ? '#10b981' : '#ef4444' }}>
+                {wins ? '¡Victoria!' : '¡Derrota!'}
+              </p>
+              <div className="flex justify-center gap-6 mt-3">
+                <div className="text-center">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Tus bajas</p>
+                  <p className="font-black text-red-400">{battle.attacker_losses}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Bajas enemigas</p>
+                  <p className="font-black" style={{ color: wins ? '#10b981' : 'rgba(255,255,255,0.6)' }}>{battle.defender_losses}</p>
+                </div>
+              </div>
+              {wins && <p className="text-xs mt-2 text-emerald-400">Provincia conquistada ✓</p>}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Botón cerrar */}
+        {phase >= 3 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-5 pb-8">
+            <motion.button whileTap={{ scale: 0.97 }} onClick={onClose}
+              className="w-full py-3.5 rounded-2xl font-black text-sm"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              Continuar →
+            </motion.button>
+          </motion.div>
+        )}
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// ─── PANEL MOVIMIENTO DE TROPAS ───────────────────────────────────────────────
+function MovePanel({ fromCode, toCode, fromOwnership, toOwnership, isAttack,
+                     onConfirmMove, onConfirmAttack, onCancel, myLeagueId, leagueColors }) {
+  const fromData = WORLD_COUNTRIES[fromCode]
+  const toData   = WORLD_COUNTRIES[toCode]
+  const fromOwn  = fromOwnership[fromCode]
+  const maxSend  = fromOwn ? Math.max(0, (fromOwn.soldiers || 0) - 1) : 0
+  const [soldiers, setSoldiers] = useState(Math.floor(maxSend / 2) || 1)
+
+  const myColor = leagueColors[myLeagueId] || '#3b82f6'
+
+  return (
+    <motion.div key={`${fromCode}-${toCode}`}
+      initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 35 }}
+      className="rounded-2xl overflow-hidden"
+      style={{ background: '#080f1e', border: `1.5px solid ${isAttack ? 'rgba(239,68,68,0.4)' : myColor + '50'}` }}>
+
+      {/* Header */}
+      <div className="px-4 py-3 flex items-center gap-3"
+        style={{ background: isAttack ? 'rgba(239,68,68,0.08)' : myColor + '12', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="text-xl">{isAttack ? '⚔️' : '🚶'}</div>
+        <div className="flex-1 min-w-0">
+          <p className="font-black text-sm text-white">{isAttack ? 'Atacar' : 'Mover tropas'}</p>
+          <p className="text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {fromData?.n} → {toData?.n}
+          </p>
+        </div>
+        <motion.button whileTap={{ scale: 0.88 }} onClick={onCancel}
+          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>✕</motion.button>
+      </div>
+
+      <div className="px-4 py-3 space-y-4">
+        {/* Info de ambas provincias */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl p-3 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+            <p className="text-xs font-black mb-1" style={{ color: myColor }}>Origen</p>
+            <p className="font-black text-white text-sm truncate">{fromData?.n}</p>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              ⚔️ {fromOwn?.soldiers || 0} soldados
+            </p>
+          </div>
+          <div className="rounded-xl p-3 text-center"
+            style={{ backgroundColor: isAttack ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)' }}>
+            <p className="text-xs font-black mb-1" style={{ color: isAttack ? '#ef4444' : 'rgba(255,255,255,0.5)' }}>
+              {isAttack ? '⚠️ Objetivo' : 'Destino'}
+            </p>
+            <p className="font-black text-white text-sm truncate">{toData?.n}</p>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              ⚔️ {toOwnership[toCode]?.soldiers || (isAttack ? 50 : 0)} soldados
+            </p>
+          </div>
+        </div>
+
+        {/* Slider de soldados */}
+        <div>
+          <div className="flex justify-between mb-2">
+            <p className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              {isAttack ? 'Soldados a enviar' : 'Soldados a mover'}
+            </p>
+            <div className="flex items-center gap-2">
+              <motion.button whileTap={{ scale: 0.85 }}
+                onClick={() => setSoldiers(s => Math.max(1, s - 10))}
+                className="w-7 h-7 rounded-lg font-black text-sm flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>−</motion.button>
+              <span className="font-black text-white text-lg w-12 text-center">{soldiers}</span>
+              <motion.button whileTap={{ scale: 0.85 }}
+                onClick={() => setSoldiers(s => Math.min(maxSend, s + 10))}
+                className="w-7 h-7 rounded-lg font-black text-sm flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>+</motion.button>
+            </div>
+          </div>
+          <input type="range" min={1} max={maxSend} value={soldiers}
+            onChange={e => setSoldiers(Number(e.target.value))}
+            className="w-full h-2 rounded-full appearance-none cursor-pointer"
+            style={{ accentColor: isAttack ? '#ef4444' : myColor, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+          <div className="flex justify-between mt-1">
+            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>1</span>
+            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>{maxSend} max</span>
+          </div>
+        </div>
+
+        {/* Botones */}
+        <div className="flex gap-2">
+          <motion.button whileTap={{ scale: 0.96 }} onClick={onCancel}
+            className="flex-1 py-3 rounded-xl font-bold text-sm"
+            style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)' }}>
+            Cancelar
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.96 }}
+            onClick={() => isAttack ? onConfirmAttack(soldiers) : onConfirmMove(soldiers)}
+            disabled={soldiers < 1 || maxSend < 1}
+            className="flex-1 py-3 rounded-xl font-black text-sm relative overflow-hidden"
+            style={{ background: isAttack ? 'linear-gradient(135deg,#7f1d1d,#ef4444)' : `linear-gradient(135deg,${myColor}cc,${myColor})`, color: '#fff' }}>
+            <motion.div className="absolute inset-0 pointer-events-none"
+              style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent)' }}
+              animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }} />
+            <span className="relative">{isAttack ? `⚔️ Atacar (${soldiers})` : `🚶 Mover (${soldiers})`}</span>
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 // ─── MAPA ─────────────────────────────────────────────────────────────────────
-function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId }) {
+function WorldMap({ ownership, leagueColors, selectedFrom, selectedTo, adjacentCodes,
+                    onSelectFrom, onSelectTo, myLeagueId }) {
   const containerRef = useRef(null)
-  const [tr, setTr] = useState({ k:1, x:0, y:0 })
+  const [tr, setTr] = useState({ k: 1, x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const [dragStart, setDragStart] = useState(null)
   const [lastDist, setLastDist] = useState(null)
@@ -204,7 +673,7 @@ function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId 
   const doZoom = (delta, cx, cy) =>
     setTr(t => {
       const k = Math.max(0.5, Math.min(10, t.k * delta))
-      return { k, x: cx - (cx - t.x) * (k/t.k), y: cy - (cy - t.y) * (k/t.k) }
+      return { k, x: cx - (cx - t.x) * (k / t.k), y: cy - (cy - t.y) * (k / t.k) }
     })
 
   const onWheel = (e) => {
@@ -212,260 +681,188 @@ function WorldMap({ ownership, leagueColors, selectedCode, onSelect, myLeagueId 
     const r = containerRef.current.getBoundingClientRect()
     doZoom(e.deltaY < 0 ? 1.22 : 0.82, e.clientX - r.left, e.clientY - r.top)
   }
-  const onMD = (e) => { if (e.button!==0) return; setDragging(true); setDragStart({x:e.clientX-tr.x,y:e.clientY-tr.y}) }
-  const onMM = (e) => { if (!dragging||!dragStart) return; setTr(t=>({...t,x:e.clientX-dragStart.x,y:e.clientY-dragStart.y})) }
+  const onMD = (e) => { if (e.button !== 0) return; setDragging(true); setDragStart({ x: e.clientX - tr.x, y: e.clientY - tr.y }) }
+  const onMM = (e) => { if (!dragging || !dragStart) return; setTr(t => ({ ...t, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y })) }
   const onMU = () => { setDragging(false); setDragStart(null) }
   const onTS = (e) => {
-    if (e.touches.length===1) setDragStart({x:e.touches[0].clientX-tr.x,y:e.touches[0].clientY-tr.y})
-    else if (e.touches.length===2) setLastDist(Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY))
+    if (e.touches.length === 1) setDragStart({ x: e.touches[0].clientX - tr.x, y: e.touches[0].clientY - tr.y })
+    else if (e.touches.length === 2) setLastDist(Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY))
   }
   const onTM = (e) => {
     e.preventDefault()
-    if (e.touches.length===1&&dragStart) setTr(t=>({...t,x:e.touches[0].clientX-dragStart.x,y:e.touches[0].clientY-dragStart.y}))
-    else if (e.touches.length===2&&lastDist) {
-      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY)
-      const r=containerRef.current.getBoundingClientRect()
-      doZoom(d/lastDist,(e.touches[0].clientX+e.touches[1].clientX)/2-r.left,(e.touches[0].clientY+e.touches[1].clientY)/2-r.top)
+    if (e.touches.length === 1 && dragStart) setTr(t => ({ ...t, x: e.touches[0].clientX - dragStart.x, y: e.touches[0].clientY - dragStart.y }))
+    else if (e.touches.length === 2 && lastDist) {
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      const r = containerRef.current.getBoundingClientRect()
+      doZoom(d / lastDist, (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left, (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top)
       setLastDist(d)
     }
   }
   const onTE = () => { setDragStart(null); setLastDist(null) }
-  const reset = () => setTr({k:1,x:0,y:0})
+  const reset = () => setTr({ k: 1, x: 0, y: 0 })
 
   useEffect(() => {
     const el = containerRef.current; if (!el) return
-    el.addEventListener('wheel', onWheel, {passive:false})
-    el.addEventListener('touchmove', onTM, {passive:false})
-    return () => { el.removeEventListener('wheel',onWheel); el.removeEventListener('touchmove',onTM) }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    el.addEventListener('touchmove', onTM, { passive: false })
+    return () => { el.removeEventListener('wheel', onWheel); el.removeEventListener('touchmove', onTM) }
   }, [tr, dragging, dragStart, lastDist])
 
-  const getStyle = (code) => {
+  const getFill = (code) => {
     const own = ownership[code]
-    const isSelected = code === selectedCode
-    const isOwned = !!own
-    const isMyTerr = own?.league_id === myLeagueId
+    if (!own) return '#1e2d45'
+    return leagueColors[own.league_id] || '#888'
+  }
 
-    // Neutral: color único oscuro — sin distinción de continente
-    const fill = isOwned ? (leagueColors[own.league_id] || '#888') : '#1e2d45'
+  const getStroke = (code) => {
+    if (code === selectedFrom) return '#f59e0b'
+    if (code === selectedTo) return '#ef4444'
+    if (adjacentCodes.has(code)) {
+      const own = ownership[code]
+      return own?.league_id === myLeagueId ? '#10b981' : '#ef4444'
+    }
+    return '#0a1628'
+  }
 
-    const stroke = isSelected ? '#fff' : isMyTerr ? '#f59e0b' : '#0a1628'
-    // vector-effect non-scaling-stroke maneja el grosor — aquí usamos valor fijo
-    const strokeWidth = isSelected ? 1.5 : isMyTerr ? 1 : 0.5
+  const getStrokeWidth = (code) => {
+    if (code === selectedFrom || code === selectedTo) return 2
+    if (adjacentCodes.has(code)) return 1.5
+    return 0.5
+  }
 
-    const filter = isSelected
-      ? 'brightness(1.6) drop-shadow(0 0 5px rgba(255,255,255,0.8))'
-      : isMyTerr ? 'brightness(1.3) drop-shadow(0 0 3px rgba(245,158,11,0.6))'
-      : isOwned ? 'brightness(1.1)' : 'none'
-    return { fill, stroke, strokeWidth, filter }
+  const getFilter = (code) => {
+    if (code === selectedFrom) return 'brightness(1.6) drop-shadow(0 0 5px rgba(245,158,11,0.8))'
+    if (code === selectedTo) return 'brightness(1.5) drop-shadow(0 0 5px rgba(239,68,68,0.8))'
+    if (adjacentCodes.has(code)) {
+      const own = ownership[code]
+      return own?.league_id === myLeagueId
+        ? 'brightness(1.3) drop-shadow(0 0 3px rgba(16,185,129,0.6))'
+        : 'brightness(1.2) drop-shadow(0 0 3px rgba(239,68,68,0.5))'
+    }
+    const own = ownership[code]
+    if (own?.league_id === myLeagueId) return 'brightness(1.15)'
+    return 'none'
+  }
+
+  const handleClick = (code) => {
+    if (!selectedFrom) {
+      // Solo seleccionar provincias propias como origen
+      const own = ownership[code]
+      if (own?.league_id === myLeagueId) onSelectFrom(code)
+    } else {
+      if (code === selectedFrom) { onSelectFrom(null); return }
+      if (adjacentCodes.has(code)) onSelectTo(code)
+      else onSelectFrom(null)
+    }
   }
 
   return (
     <div ref={containerRef}
       className="relative w-full overflow-hidden select-none"
-      style={{
-        height:'70vh', borderRadius:20,
-        background:'radial-gradient(ellipse at 45% 55%, #0a1e40 0%, #040c1c 100%)',
-        cursor: dragging ? 'grabbing' : 'grab',
-        boxShadow: 'inset 0 0 60px rgba(0,0,0,0.6)',
-        border: '1px solid rgba(255,255,255,0.06)',
-      }}
+      style={{ height: '70vh', borderRadius: 20, background: 'radial-gradient(ellipse at 45% 55%, #0a1e40 0%, #040c1c 100%)', cursor: dragging ? 'grabbing' : 'grab', boxShadow: 'inset 0 0 60px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.06)' }}
       onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU}
       onTouchStart={onTS} onTouchEnd={onTE}>
 
-      {/* Líneas oceánicas decorativas */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 2000 857" preserveAspectRatio="xMidYMid meet" style={{opacity:0.04}}>
-        {[100,200,300,400,500,600,700,800].map(y=>(
-          <line key={y} x1="0" y1={y} x2="2000" y2={y} stroke="#60a5fa" strokeWidth="1" strokeDasharray="8 12"/>
+      {/* Grid oceánico */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 2000 857" preserveAspectRatio="xMidYMid meet" style={{ opacity: 0.04 }}>
+        {[100, 200, 300, 400, 500, 600, 700, 800].map(y => (
+          <line key={y} x1="0" y1={y} x2="2000" y2={y} stroke="#60a5fa" strokeWidth="1" strokeDasharray="8 12" />
         ))}
-        {[250,500,750,1000,1250,1500,1750].map(x=>(
-          <line key={x} x1={x} y1="0" x2={x} y2="857" stroke="#60a5fa" strokeWidth="0.5" strokeDasharray="4 16"/>
+        {[250, 500, 750, 1000, 1250, 1500, 1750].map(x => (
+          <line key={x} x1={x} y1="0" x2={x} y2="857" stroke="#60a5fa" strokeWidth="0.5" strokeDasharray="4 16" />
         ))}
       </svg>
 
-      {/* Mapa SVG con paths reales */}
       <svg viewBox="0 0 2000 857" className="absolute inset-0 w-full h-full"
-        style={{transform:`translate(${tr.x}px,${tr.y}px) scale(${tr.k})`,transformOrigin:'0 0',willChange:'transform'}}>
-        <defs>
-          <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
-            <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="rgba(0,0,0,0.5)"/>
-          </filter>
-          <filter id="glow_selected">
-            <feGaussianBlur stdDeviation="3" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
+        style={{ transform: `translate(${tr.x}px,${tr.y}px) scale(${tr.k})`, transformOrigin: '0 0', willChange: 'transform' }}>
 
         {Object.entries(WORLD_COUNTRIES).map(([code, data]) => {
-          const s = getStyle(code)
-          const own = ownership[code]
-          const isSelected = code === selectedCode
-          const isOwned = !!own
+          const isAdj = adjacentCodes.has(code)
+          const ownLeague = ownership[code]?.league_id
+          const isAdjEnemy = isAdj && ownLeague !== myLeagueId
+          const isAdjFriendly = isAdj && ownLeague === myLeagueId
 
           return (
-            <g key={code} onClick={e => { e.stopPropagation(); onSelect(code) }} style={{cursor:'pointer'}}>
-              {/* Path del país */}
+            <g key={code} onClick={e => { e.stopPropagation(); handleClick(code) }} style={{ cursor: myLeagueId ? 'pointer' : 'default' }}>
               <path
                 d={data.d}
-                fill={s.fill}
-                stroke={s.stroke}
-                strokeWidth={s.strokeWidth}
+                fill={getFill(code)}
+                stroke={getStroke(code)}
+                strokeWidth={getStrokeWidth(code)}
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
-                style={{ filter: s.filter, transition: 'fill 0.35s ease', paintOrder: 'stroke fill' }}
+                style={{ filter: getFilter(code), transition: 'fill 0.3s', paintOrder: 'stroke fill' }}
               />
-              {/* Highlight cartoon sobre territorios propios */}
-              {isOwned && (
-                <path d={data.d} fill="rgba(255,255,255,0.08)" stroke="none" style={{pointerEvents:'none'}}/>
+              {/* Highlight owned */}
+              {ownership[code] && (
+                <path d={data.d} fill="rgba(255,255,255,0.07)" stroke="none" style={{ pointerEvents: 'none' }} />
               )}
-              {/* Etiqueta código — solo con zoom suficiente */}
-              {tr.k >= 2 && (
-                <text x={data.cx} y={data.cy}
-                  textAnchor="middle" dominantBaseline="middle"
-                  fontSize={Math.max(4, 9/tr.k)}
-                  fontWeight="700" fontFamily="system-ui,sans-serif"
-                  fill={isOwned ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.45)'}
-                  style={{pointerEvents:'none',userSelect:'none'}}>
-                  {code}
+              {/* Indicador de provincia adyacente */}
+              {isAdj && tr.k >= 0.8 && (
+                <text x={data.cx} y={data.cy} textAnchor="middle" dominantBaseline="middle"
+                  fontSize={Math.max(5, 10 / tr.k)} fill={isAdjEnemy ? '#fca5a5' : '#86efac'}
+                  style={{ pointerEvents: 'none', userSelect: 'none', fontWeight: 800 }}>
+                  {isAdjEnemy ? '⚔' : '→'}
                 </text>
               )}
-              {/* Estrella capital */}
-              {own?.is_capital && tr.k >= 1.5 && (
-                <text x={data.cx} y={data.cy - 8/tr.k}
-                  textAnchor="middle" fontSize={8/tr.k}
-                  fill="#FFD700" style={{pointerEvents:'none',userSelect:'none'}}>★</text>
+              {/* Label con soldados al hacer zoom */}
+              {tr.k >= 2 && ownership[code] && (
+                <text x={data.cx} y={data.cy + (isAdj ? 6/tr.k : 0)}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={Math.max(4, 8 / tr.k)} fontWeight="700" fontFamily="system-ui,sans-serif"
+                  fill="rgba(255,255,255,0.9)" style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                  {code} {ownership[code]?.soldiers ? `·${ownership[code].soldiers}` : ''}
+                </text>
               )}
             </g>
           )
         })}
       </svg>
 
-      {/* HUD zoom — botones grandes para móvil */}
+      {/* HUD zoom */}
       <div className="absolute bottom-3 right-3 flex flex-col gap-2 z-20">
-        <motion.button whileTap={{scale:0.88}} onClick={()=>doZoom(1.35,480,250)}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl"
-          style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.75)',border:'1px solid rgba(255,255,255,0.12)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
-          +
-        </motion.button>
-        <motion.button whileTap={{scale:0.88}} onClick={reset}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg"
-          style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.45)',border:'1px solid rgba(255,255,255,0.08)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
-          ⊙
-        </motion.button>
-        <motion.button whileTap={{scale:0.88}} onClick={()=>doZoom(0.74,480,250)}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl"
-          style={{background:'rgba(4,12,28,0.85)',color:'rgba(255,255,255,0.75)',border:'1px solid rgba(255,255,255,0.12)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
-          −
-        </motion.button>
-      </div>
-
-      {/* Botones de navegación rápida (mobile) — esquina inferior izquierda */}
-      <div className="absolute bottom-3 left-3 flex flex-col gap-2 z-20">
-        {[
-          {l:'🌍',tip:'Europa',cx:1020,cy:200},
-          {l:'🌎',tip:'Américas',cx:393,cy:300},
-          {l:'🌏',tip:'Asia',cx:1500,cy:280},
-        ].map(({l,tip,cx,cy})=>(
-          <motion.button key={l} whileTap={{scale:0.88}}
-            onClick={()=>{
-              const rect = containerRef.current?.getBoundingClientRect()
-              if (!rect) return
-              const k = 2.5
-              setTr({k, x: rect.width/2 - cx*k, y: rect.height/2 - cy*k})
-            }}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-base"
-            style={{background:'rgba(4,12,28,0.85)',border:'1px solid rgba(255,255,255,0.08)',backdropFilter:'blur(8px)',boxShadow:'0 4px 12px rgba(0,0,0,0.4)'}}>
+        {[{ l: '+', f: () => doZoom(1.35, 480, 250) }, { l: '⊙', f: reset }, { l: '−', f: () => doZoom(0.74, 480, 250) }].map(({ l, f }) => (
+          <motion.button key={l} whileTap={{ scale: 0.88 }} onClick={f}
+            className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl"
+            style={{ background: 'rgba(4,12,28,0.85)', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
             {l}
           </motion.button>
         ))}
       </div>
 
-      {/* Badge zoom level */}
-      <div className="absolute top-3 left-3 z-20 px-2 py-1 rounded-lg" style={{background:'rgba(4,12,28,0.75)',backdropFilter:'blur(6px)',border:'1px solid rgba(255,255,255,0.06)'}}>
-        <span style={{color:'rgba(255,255,255,0.35)',fontSize:10,fontWeight:700}}>{Math.round(tr.k*100)}%</span>
+      {/* Nav rápida */}
+      <div className="absolute bottom-3 left-3 flex flex-col gap-2 z-20">
+        {[{ l: '🌍', cx: 1020, cy: 200 }, { l: '🌎', cx: 393, cy: 300 }, { l: '🌏', cx: 1500, cy: 280 }].map(({ l, cx, cy }) => (
+          <motion.button key={l} whileTap={{ scale: 0.88 }}
+            onClick={() => {
+              const rect = containerRef.current?.getBoundingClientRect()
+              if (!rect) return
+              const k = 2.5
+              setTr({ k, x: rect.width / 2 - cx * k, y: rect.height / 2 - cy * k })
+            }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-base"
+            style={{ background: 'rgba(4,12,28,0.85)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
+            {l}
+          </motion.button>
+        ))}
       </div>
 
+      {/* Badge zoom */}
+      <div className="absolute top-3 left-3 z-20 px-2 py-1 rounded-lg"
+        style={{ background: 'rgba(4,12,28,0.75)', backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 700 }}>{Math.round(tr.k * 100)}%</span>
+      </div>
 
-    </div>
-  )
-}
-
-// ─── PANEL PROVINCIA ──────────────────────────────────────────────────────────
-function ProvincePanel({ code, ownership, leagueColors, leagueNames, myLeagueId, onClose, onClaim, canAct }) {
-  const data = WORLD_COUNTRIES[code]
-  if (!data) return null
-  const own = ownership[code]
-  const ownerColor = own ? (leagueColors[own.league_id]||'#888') : null
-  const ownerName  = own ? (leagueNames[own.league_id]||'?') : null
-  const isNeutral = !own
-  const isMyTerr = own?.league_id === myLeagueId
-  const palette = CONTINENT_COLORS[data.c] || CONTINENT_COLORS.other
-
-  return (
-    <motion.div key={code}
-      initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} exit={{opacity:0,y:10}}
-      transition={{type:'spring',stiffness:420,damping:35}}
-      className="rounded-2xl overflow-hidden"
-      style={{background:'#080f1e',border:`1.5px solid ${ownerColor||'rgba(255,255,255,0.08)'}`}}>
-
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between"
-        style={{background:(ownerColor||'rgba(30,45,69,0.8)')+'18',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-        <div>
-          <p className="font-black text-white text-base leading-tight">{data.n}</p>
-          <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>
-            {CONTINENT_NAMES[data.c]||data.c} · {code}
+      {/* Instrucción de selección */}
+      {myLeagueId && (
+        <div className="absolute top-3 right-3 z-20 px-2.5 py-1.5 rounded-xl"
+          style={{ background: 'rgba(4,12,28,0.82)', backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: 700 }}>
+            {!selectedFrom ? '👆 Toca tu provincia' : '👆 Toca destino'}
           </p>
         </div>
-        <motion.button whileTap={{scale:0.88}} onClick={onClose}
-          className="w-8 h-8 rounded-xl flex items-center justify-center ml-3 flex-shrink-0"
-          style={{backgroundColor:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)',fontSize:13}}>✕</motion.button>
-      </div>
-
-      <div className="px-4 py-3 space-y-3">
-        {/* Badge estado */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {isNeutral
-            ? <span className="text-xs font-bold px-3 py-1 rounded-full" style={{backgroundColor:'rgba(30,45,69,0.5)',color:'rgba(255,255,255,0.45)'}}>🌍 Territorio neutral</span>
-            : isMyTerr
-              ? <span className="text-xs font-black px-3 py-1 rounded-full" style={{backgroundColor:'rgba(245,158,11,0.15)',color:'#f59e0b'}}>⭐ Tu territorio</span>
-              : <span className="text-xs font-black px-3 py-1 rounded-full" style={{backgroundColor:ownerColor+'25',color:ownerColor}}>👑 {ownerName}</span>
-          }
-          {own?.soldiers > 0 && (
-            <span className="text-xs px-3 py-1 rounded-full" style={{backgroundColor:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.5)'}}>
-              ⚔️ {own.soldiers.toLocaleString()} soldados
-            </span>
-          )}
-        </div>
-
-        {/* Acciones */}
-        {isNeutral && myLeagueId && (
-          <motion.button whileTap={{scale:0.96}} onClick={()=>onClaim(code)} disabled={!canAct}
-            className="w-full py-3 rounded-xl font-black text-sm relative overflow-hidden"
-            style={{background:canAct?'linear-gradient(135deg,#1e40af,#3b82f6)':'rgba(255,255,255,0.04)',color:canAct?'#fff':'rgba(255,255,255,0.25)'}}>
-            {canAct&&<motion.div className="absolute inset-0 pointer-events-none"
-              style={{background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent)'}}
-              animate={{x:['-100%','200%']}} transition={{duration:1.8,repeat:Infinity,ease:'linear'}}/>}
-            <span className="relative">{canAct?'🏴 Reclamar territorio':'⏳ Sin acciones (espera recarga)'}</span>
-          </motion.button>
-        )}
-        {!isNeutral && !isMyTerr && myLeagueId && (
-          <div className="py-3 rounded-xl text-center text-xs font-black"
-            style={{background:'rgba(239,68,68,0.08)',color:'rgba(239,68,68,0.5)',border:'1px solid rgba(239,68,68,0.15)'}}>
-            ⚔️ Atacar — disponible en Fase 2
-          </div>
-        )}
-        {isMyTerr && (
-          <div className="grid grid-cols-2 gap-2">
-            {[{l:'🏗️ Construir',v:'Fase 3'},{l:'⚔️ Reclutar',v:'Fase 2'}].map(item=>(
-              <div key={item.l} className="py-3 rounded-xl text-center" style={{backgroundColor:'rgba(255,255,255,0.04)'}}>
-                <p className="text-xs font-bold text-white">{item.l}</p>
-                <p className="text-xs mt-0.5 text-amber-400">{item.v}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </motion.div>
+      )}
+    </div>
   )
 }
 
@@ -478,96 +875,186 @@ export default function WarlordMode() {
   const [participants, setParticipants] = useState([])
   const [myLeagues, setMyLeagues] = useState([])
   const [myParticipant, setMyParticipant] = useState(null)
-  const [selectedCode, setSelectedCode] = useState(null)
-  const [joining, setJoining] = useState(false)
-  const [actionsLeft, setActionsLeft] = useState(5)
-  const [nextReset, setNextReset] = useState(null)
   const [tab, setTab] = useState('map')
   const [showJoin, setShowJoin] = useState(false)
+  const [joining, setJoining] = useState(false)
+
+  // Selección en dos fases
+  const [selectedFrom, setSelectedFrom] = useState(null)
+  const [selectedTo, setSelectedTo] = useState(null)
+  const [adjacentCodes, setAdjacentCodes] = useState(new Set())
+
+  // Acciones
+  const [actionsLeft, setActionsLeft] = useState(5)
+  const [nextReset, setNextReset] = useState(null)
+
+  // Batalla
+  const [battleResult, setBattleResult] = useState(null)
+  const [battling, setBattling] = useState(false)
+
+  // Estado del mapa — código de cada panel
+  const [provinceMode, setProvinceMode] = useState('select') // select | move | battle
+
   const [, tick] = useState(0)
 
-  const leagueColors = Object.fromEntries(participants.map(p=>[p.league_id, p.color]))
-  const leagueNames  = Object.fromEntries(participants.map(p=>[p.league_id, p.leagues?.name||`Liga ${p.league_id}`]))
+  const leagueColors = Object.fromEntries(participants.map(p => [p.league_id, p.color]))
+  const leagueNames  = Object.fromEntries(participants.map(p => [p.league_id, p.leagues?.name || `Liga ${p.league_id}`]))
   const myLeagueId   = myParticipant?.league_id
 
-  useEffect(()=>{ const id=setInterval(()=>{ if(nextReset&&new Date(nextReset)<=Date.now()){setActionsLeft(5);setNextReset(null)} tick(n=>n+1) },1000); return ()=>clearInterval(id) },[nextReset])
-  useEffect(()=>{ fetchAll() },[])
-  useEffect(()=>{
+  // Countdown acciones
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (nextReset && new Date(nextReset) <= Date.now()) { setActionsLeft(5); setNextReset(null) }
+      tick(n => n + 1)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [nextReset])
+
+  useEffect(() => { fetchAll() }, [])
+
+  useEffect(() => {
     if (!gameData?.id) return
-    const ch = supabase.channel('warlord_live')
-      .on('postgres_changes',{event:'*',schema:'public',table:'warlord_ownership'},()=>fetchOwnership(gameData.id))
-      .on('postgres_changes',{event:'*',schema:'public',table:'warlord_participants'},()=>fetchAll())
+    const ch = supabase.channel('warlord_live_v2')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warlord_ownership' }, () => fetchOwnership(gameData.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warlord_participants' }, () => fetchAll())
       .subscribe()
-    return ()=>supabase.removeChannel(ch)
-  },[gameData?.id])
+    return () => supabase.removeChannel(ch)
+  }, [gameData?.id])
+
+  // Cuando cambia el origen, calcular adyacentes
+  useEffect(() => {
+    if (!selectedFrom) { setAdjacentCodes(new Set()); setSelectedTo(null); return }
+    const adj = new Set(ADJACENCY[selectedFrom] || [])
+    setAdjacentCodes(adj)
+  }, [selectedFrom])
 
   const fetchAll = async () => {
     setLoading(true)
-    const [{data:game},{data:myLgs}] = await Promise.all([
-      supabase.from('warlord_games').select('*').eq('status','active').order('id',{ascending:false}).limit(1).single(),
-      supabase.from('league_members').select('league_id,leagues(id,name)').eq('user_id',user.id),
+    const [{ data: game }, { data: myLgs }] = await Promise.all([
+      supabase.from('warlord_games').select('*').eq('status', 'active').order('id', { ascending: false }).limit(1).single(),
+      supabase.from('league_members').select('league_id, leagues(id,name)').eq('user_id', user.id),
     ])
-    const leagues=(myLgs||[]).map(m=>m.leagues).filter(Boolean)
+    const leagues = (myLgs || []).map(m => m.leagues).filter(Boolean)
     setMyLeagues(leagues)
     if (game) {
       setGameData(game)
-      const {data:parts} = await supabase.from('warlord_participants').select('*,leagues(name)').eq('game_id',game.id)
-      setParticipants(parts||[])
-      const myIds=leagues.map(l=>l?.id).filter(Boolean)
-      setMyParticipant((parts||[]).find(p=>myIds.includes(p.league_id))||null)
+      const { data: parts } = await supabase.from('warlord_participants').select('*, leagues(name)').eq('game_id', game.id)
+      setParticipants(parts || [])
+      const myIds = leagues.map(l => l?.id).filter(Boolean)
+      setMyParticipant((parts || []).find(p => myIds.includes(p.league_id)) || null)
       await fetchOwnership(game.id)
     }
     setLoading(false)
   }
 
   const fetchOwnership = async (gameId) => {
-    const {data} = await supabase.from('warlord_ownership').select('*,warlord_provinces(code)').eq('game_id',gameId)
-    const map={}
-    ;(data||[]).forEach(o=>{ if(o.warlord_provinces?.code) map[o.warlord_provinces.code]={league_id:o.league_id,soldiers:o.soldiers,is_capital:o.is_capital} })
+    const { data } = await supabase.from('warlord_ownership').select('*, warlord_provinces(code, id)').eq('game_id', gameId)
+    const map = {}
+    ;(data || []).forEach(o => {
+      const code = o.warlord_provinces?.code
+      if (code) map[code] = { league_id: o.league_id, soldiers: o.soldiers, is_capital: o.is_capital, province_id: o.warlord_provinces?.id }
+    })
     setOwnership(map)
   }
 
   const handleJoin = async (leagueId) => {
     setJoining(true)
-    const {data} = await supabase.rpc('join_warlord_game',{p_league_id:leagueId})
+    const { data } = await supabase.rpc('join_warlord_game', { p_league_id: leagueId })
     if (data?.success) { await fetchAll(); setShowJoin(false) }
     setJoining(false)
   }
 
+  const consumeAction = () => {
+    const nl = actionsLeft - 1
+    setActionsLeft(nl)
+    if (nl === 4) setNextReset(new Date(Date.now() + 30 * 60 * 1000).toISOString())
+  }
+
   const handleClaim = async (code) => {
-    if (!myLeagueId||!gameData||actionsLeft<=0) return
-    const {data:prov} = await supabase.from('warlord_provinces').select('id').eq('code',code).single()
+    if (!myLeagueId || !gameData || actionsLeft <= 0) return
+    const { data: prov } = await supabase.from('warlord_provinces').select('id').eq('code', code).single()
     if (!prov) return
-    const {error} = await supabase.from('warlord_ownership').insert({game_id:gameData.id,province_id:prov.id,league_id:myLeagueId,soldiers:100})
-    if (!error) {
-      const nl=actionsLeft-1; setActionsLeft(nl)
-      if (nl===4) setNextReset(new Date(Date.now()+30*60*1000).toISOString())
-      setSelectedCode(null); fetchOwnership(gameData.id)
+    const { error } = await supabase.from('warlord_ownership').insert({
+      game_id: gameData.id, province_id: prov.id, league_id: myLeagueId, soldiers: 100,
+    })
+    if (!error) { consumeAction(); setSelectedFrom(null); fetchOwnership(gameData.id) }
+  }
+
+  const handleMove = async (soldiers) => {
+    if (!myLeagueId || !gameData || actionsLeft <= 0) return
+    const fromId = ownership[selectedFrom]?.province_id
+    const toId   = ownership[selectedTo]?.province_id
+    if (!fromId || !toId) return
+    const { data } = await supabase.rpc('warlord_move_troops', {
+      p_game_id: gameData.id, p_league_id: myLeagueId,
+      p_from_province: fromId, p_to_province: toId,
+      p_soldiers: soldiers, p_user_id: user.id,
+    })
+    if (data?.success) {
+      consumeAction()
+      setSelectedFrom(null); setSelectedTo(null)
+      fetchOwnership(gameData.id)
     }
   }
 
-  const totalC = Object.keys(WORLD_COUNTRIES).length
+  const handleAttack = async (soldiers) => {
+    if (!myLeagueId || !gameData || actionsLeft <= 0) return
+    const fromId   = ownership[selectedFrom]?.province_id
+    const targetOwn = ownership[selectedTo]
+    let toId
+    if (targetOwn) {
+      toId = targetOwn.province_id
+    } else {
+      const { data: prov } = await supabase.from('warlord_provinces').select('id').eq('code', selectedTo).single()
+      toId = prov?.id
+    }
+    if (!fromId || !toId) return
+
+    setBattling(true)
+    const { data } = await supabase.rpc('warlord_attack', {
+      p_game_id: gameData.id, p_attacker_league: myLeagueId,
+      p_from_province: fromId, p_target_province: toId,
+      p_soldiers_sent: soldiers, p_user_id: user.id,
+    })
+    if (data?.success) {
+      consumeAction()
+      setBattleResult({
+        ...data,
+        attacker_color: leagueColors[myLeagueId],
+        defender_color: targetOwn ? leagueColors[targetOwn.league_id] : '#888',
+      })
+      setSelectedFrom(null); setSelectedTo(null)
+      fetchOwnership(gameData.id)
+    }
+    setBattling(false)
+  }
+
+  // Determinar si el destino es ataque o movimiento
+  const isAttack = selectedTo && ownership[selectedTo]?.league_id !== myLeagueId
+
+  const totalC     = Object.keys(WORLD_COUNTRIES).length
   const totalOwned = Object.keys(ownership).length
-  const rankingData = [...participants].map(p=>({...p,
-    territories: Object.values(ownership).filter(o=>o.league_id===p.league_id).length,
-    soldiers: Object.values(ownership).filter(o=>o.league_id===p.league_id).reduce((s,o)=>s+(o.soldiers||0),0),
-  })).sort((a,b)=>b.territories-a.territories)
+  const rankingData = [...participants].map(p => ({
+    ...p,
+    territories: Object.values(ownership).filter(o => o.league_id === p.league_id).length,
+    soldiers: Object.values(ownership).filter(o => o.league_id === p.league_id).reduce((s, o) => s + (o.soldiers || 0), 0),
+  })).sort((a, b) => b.territories - a.territories)
 
   const cdStr = () => {
     if (!nextReset) return null
-    const d=Math.max(0,new Date(nextReset)-Date.now())
-    return `${String(Math.floor(d/60000)).padStart(2,'0')}:${String(Math.floor((d%60000)/1000)).padStart(2,'0')}`
+    const d = Math.max(0, new Date(nextReset) - Date.now())
+    return `${String(Math.floor(d / 60000)).padStart(2, '0')}:${String(Math.floor((d % 60000) / 1000)).padStart(2, '0')}`
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{background:'radial-gradient(ellipse at 50% 40%,#0a1e40,#040c1c)'}}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'radial-gradient(ellipse at 50% 40%,#0a1e40,#040c1c)' }}>
       <div className="text-center">
-        <motion.div className="text-6xl mb-4" animate={{rotate:[0,8,-8,0],scale:[1,1.08,1]}} transition={{duration:2.5,repeat:Infinity}}>🌍</motion.div>
+        <motion.div className="text-6xl mb-4" animate={{ rotate: [0, 8, -8, 0], scale: [1, 1.08, 1] }} transition={{ duration: 2.5, repeat: Infinity }}>🌍</motion.div>
         <p className="font-black text-white text-lg">Cargando el mundo</p>
         <div className="flex justify-center gap-1.5 mt-3">
-          {[0,1,2].map(i=>(
-            <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{backgroundColor:'#3b82f6'}}
-              animate={{opacity:[0.2,1,0.2]}} transition={{duration:1,repeat:Infinity,delay:i*0.25}}/>
+          {[0, 1, 2].map(i => (
+            <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#3b82f6' }}
+              animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1, repeat: Infinity, delay: i * 0.25 }} />
           ))}
         </div>
       </div>
@@ -575,61 +1062,61 @@ export default function WarlordMode() {
   )
 
   return (
-    <div className="min-h-screen pb-24" style={{background:'linear-gradient(180deg,#070f20 0%,#040c1c 100%)',color:'#fff'}}>
+    <div className="min-h-screen pb-24" style={{ background: 'linear-gradient(180deg,#070f20 0%,#040c1c 100%)', color: '#fff' }}>
 
       {/* HEADER */}
-      <div className="relative px-4 pt-3 pb-3" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-        <div className="absolute inset-0 pointer-events-none" style={{background:'radial-gradient(ellipse at 25% 0%,rgba(37,99,235,0.1) 0%,transparent 65%)'}}/>
+      <div className="relative px-4 pt-3 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 25% 0%,rgba(37,99,235,0.1) 0%,transparent 65%)' }} />
 
-        <div className="relative flex items-start justify-between mb-4">
+        <div className="relative flex items-start justify-between mb-3">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.22)'}}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.22)' }}>
                 <span className="text-xs">⚔️</span>
                 <span className="text-xs font-black tracking-widest text-red-400">WARLORD</span>
               </div>
-              <motion.div animate={{opacity:[1,0.3,1]}} transition={{duration:1.5,repeat:Infinity}}
+              <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-full"
-                style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)'}}>
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
+                style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 <span className="text-xs font-black text-emerald-400">LIVE</span>
               </motion.div>
             </div>
-            <h1 className="text-2xl font-black leading-none">Conquista Global</h1>
-            <p className="text-xs mt-1" style={{color:'rgba(255,255,255,0.3)'}}>
-              {totalOwned}/{totalC} países conquistados · {participants.length} ligas en guerra
+            <h1 className="text-xl font-black leading-none">Conquista Global</h1>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              {totalOwned}/{totalC} países · {participants.length} ligas
             </p>
           </div>
 
           {myLeagueId ? (
-            <div className="flex flex-col items-end gap-1.5">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{background:leagueColors[myLeagueId]+'18',border:`1px solid ${leagueColors[myLeagueId]}35`}}>
-                <div className="w-2 h-2 rounded-full" style={{backgroundColor:leagueColors[myLeagueId]}}/>
-                <span className="text-xs font-bold truncate max-w-[6rem]" style={{color:leagueColors[myLeagueId]}}>{leagueNames[myLeagueId]}</span>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: leagueColors[myLeagueId] + '18', border: `1px solid ${leagueColors[myLeagueId]}35` }}>
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: leagueColors[myLeagueId] }} />
+                <span className="text-xs font-bold truncate max-w-[6rem]" style={{ color: leagueColors[myLeagueId] }}>{leagueNames[myLeagueId]}</span>
               </div>
               <div className="flex items-baseline gap-1">
-                <p className="font-black text-2xl" style={{color:leagueColors[myLeagueId]}}>
-                  {Object.values(ownership).filter(o=>o.league_id===myLeagueId).length}
+                <p className="font-black text-xl" style={{ color: leagueColors[myLeagueId] }}>
+                  {Object.values(ownership).filter(o => o.league_id === myLeagueId).length}
                 </p>
-                <span className="text-sm" style={{color:'rgba(255,255,255,0.3)'}}>🏴</span>
+                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>🏴</span>
               </div>
             </div>
           ) : (
-            <motion.button whileTap={{scale:0.94}} onClick={()=>setShowJoin(true)}
+            <motion.button whileTap={{ scale: 0.94 }} onClick={() => setShowJoin(true)}
               className="px-4 py-2.5 rounded-xl font-black text-sm"
-              style={{background:'linear-gradient(135deg,#d97706,#f59e0b)',color:'#000'}}>
+              style={{ background: 'linear-gradient(135deg,#d97706,#f59e0b)', color: '#000' }}>
               ⚔️ Unirse
             </motion.button>
           )}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 p-1 rounded-2xl" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
-          {[{id:'map',i:'🗺️',l:'Mapa'},{id:'ranking',i:'🏆',l:'Ranking'},{id:'info',i:'ℹ️',l:'Info'}].map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)}
+        <div className="flex gap-1 p-1 rounded-2xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          {[{ id: 'map', i: '🗺️', l: 'Mapa' }, { id: 'ranking', i: '🏆', l: 'Ranking' }, { id: 'info', i: 'ℹ️', l: 'Info' }].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
               className="relative flex-1 py-2.5 rounded-xl text-xs font-black z-10 flex items-center justify-center gap-1"
-              style={{color:tab===t.id?'#fff':'rgba(255,255,255,0.35)'}}>
-              {tab===t.id&&<motion.div layoutId="wt" className="absolute inset-0 rounded-xl" style={{background:'linear-gradient(135deg,#1e3a6e,#2563eb)',zIndex:-1}} transition={{type:'spring',stiffness:400,damping:30}}/>}
+              style={{ color: tab === t.id ? '#fff' : 'rgba(255,255,255,0.35)' }}>
+              {tab === t.id && <motion.div layoutId="wt" className="absolute inset-0 rounded-xl" style={{ background: 'linear-gradient(135deg,#1e3a6e,#2563eb)', zIndex: -1 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} />}
               <span>{t.i}</span><span>{t.l}</span>
             </button>
           ))}
@@ -637,22 +1124,22 @@ export default function WarlordMode() {
       </div>
 
       {/* ── MAPA ── */}
-      {tab==='map' && (
+      {tab === 'map' && (
         <div className="px-2 pt-2">
 
-          {/* Banner unirse */}
+          {/* Banner sin liga */}
           {!myLeagueId && (
-            <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}}
-              className="rounded-2xl p-4 mb-3 flex items-center gap-3"
-              style={{background:'linear-gradient(135deg,rgba(245,158,11,0.1),rgba(245,158,11,0.04))',border:'1px solid rgba(245,158,11,0.2)'}}>
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl p-4 mb-2 flex items-center gap-3"
+              style={{ background: 'linear-gradient(135deg,rgba(245,158,11,0.1),rgba(245,158,11,0.04))', border: '1px solid rgba(245,158,11,0.2)' }}>
               <div className="text-3xl">⚔️</div>
               <div className="flex-1">
                 <p className="font-black text-sm text-amber-400">¡Lleva tu liga a la conquista!</p>
-                <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,0.35)'}}>Únete y reclamad territorios para tu liga</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Únete y reclamad territorios</p>
               </div>
-              <motion.button whileTap={{scale:0.94}} onClick={()=>setShowJoin(true)}
+              <motion.button whileTap={{ scale: 0.94 }} onClick={() => setShowJoin(true)}
                 className="px-3 py-2 rounded-xl font-black text-xs flex-shrink-0"
-                style={{background:'linear-gradient(135deg,#d97706,#f59e0b)',color:'#000'}}>
+                style={{ background: 'linear-gradient(135deg,#d97706,#f59e0b)', color: '#000' }}>
                 Unirse
               </motion.button>
             </motion.div>
@@ -660,44 +1147,44 @@ export default function WarlordMode() {
 
           {/* Barra de acciones */}
           {myLeagueId && (
-            <div className="rounded-2xl px-4 py-3 mb-3 flex items-center gap-4"
-              style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)'}}>
+            <div className="rounded-2xl px-4 py-2.5 mb-2 flex items-center gap-4"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <div className="flex-1">
-                <p className="text-xs font-black mb-2" style={{color:'rgba(255,255,255,0.3)'}}>ACCIONES</p>
+                <p className="text-xs font-black mb-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>ACCIONES</p>
                 <div className="flex gap-1.5">
-                  {Array.from({length:5}).map((_,i)=>(
+                  {Array.from({ length: 5 }).map((_, i) => (
                     <motion.div key={i} className="flex-1 h-2 rounded-full"
-                      style={{backgroundColor:i<actionsLeft?leagueColors[myLeagueId]||'#3b82f6':'rgba(255,255,255,0.07)'}}
-                      animate={i<actionsLeft?{opacity:[0.6,1,0.6]}:{}}
-                      transition={{duration:2,repeat:Infinity,delay:i*0.15}}/>
+                      style={{ backgroundColor: i < actionsLeft ? leagueColors[myLeagueId] || '#3b82f6' : 'rgba(255,255,255,0.07)' }}
+                      animate={i < actionsLeft ? { opacity: [0.6, 1, 0.6] } : {}}
+                      transition={{ duration: 2, repeat: Infinity, delay: i * 0.15 }} />
                   ))}
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
                 {cdStr() ? (
                   <>
-                    <p className="text-xs" style={{color:'rgba(255,255,255,0.3)'}}>Recarga en</p>
-                    <p className="font-black" style={{color:leagueColors[myLeagueId]||'#3b82f6'}}>{cdStr()}</p>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Recarga en</p>
+                    <p className="font-black" style={{ color: leagueColors[myLeagueId] || '#3b82f6' }}>{cdStr()}</p>
                   </>
                 ) : (
                   <>
-                    <p className="font-black text-2xl" style={{color:leagueColors[myLeagueId]||'#3b82f6'}}>{actionsLeft}</p>
-                    <p className="text-xs" style={{color:'rgba(255,255,255,0.3)'}}>/ 5</p>
+                    <p className="font-black text-2xl" style={{ color: leagueColors[myLeagueId] || '#3b82f6' }}>{actionsLeft}</p>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>/ 5</p>
                   </>
                 )}
               </div>
             </div>
           )}
 
-          {/* Chips ligas participantes */}
+          {/* Chips participantes */}
           {rankingData.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
-              {rankingData.map(p=>(
+            <div className="flex gap-2 overflow-x-auto pb-1.5 mb-2">
+              {rankingData.map(p => (
                 <div key={p.league_id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl flex-shrink-0"
-                  style={{background:p.color+'14',border:`1px solid ${p.color}30`}}>
-                  <div className="w-2 h-2 rounded-full" style={{backgroundColor:p.color}}/>
-                  <span className="text-xs font-black" style={{color:p.color}}>{p.leagues?.name}</span>
-                  <span className="text-xs" style={{color:'rgba(255,255,255,0.3)'}}>{p.territories}🏴</span>
+                  style={{ background: p.color + '14', border: `1px solid ${p.color}30` }}>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                  <span className="text-xs font-black" style={{ color: p.color }}>{p.leagues?.name}</span>
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{p.territories}🏴</span>
                 </div>
               ))}
             </div>
@@ -707,25 +1194,49 @@ export default function WarlordMode() {
           <WorldMap
             ownership={ownership}
             leagueColors={leagueColors}
-            selectedCode={selectedCode}
-            onSelect={code=>setSelectedCode(prev=>prev===code?null:code)}
+            selectedFrom={selectedFrom}
+            selectedTo={selectedTo}
+            adjacentCodes={adjacentCodes}
+            onSelectFrom={(code) => { setSelectedFrom(code); setSelectedTo(null) }}
+            onSelectTo={setSelectedTo}
             myLeagueId={myLeagueId}
           />
 
-          {/* Panel provincia seleccionada */}
-          <AnimatePresence>
-            {selectedCode && (
-              <div className="mt-3">
-                <ProvincePanel
-                  code={selectedCode}
-                  ownership={ownership}
-                  leagueColors={leagueColors}
-                  leagueNames={leagueNames}
+          {/* Paneles de acción */}
+          <AnimatePresence mode="wait">
+            {selectedTo && (
+              <div className="mt-2">
+                <MovePanel
+                  fromCode={selectedFrom}
+                  toCode={selectedTo}
+                  fromOwnership={ownership}
+                  toOwnership={ownership}
+                  isAttack={isAttack}
+                  onConfirmMove={handleMove}
+                  onConfirmAttack={handleAttack}
+                  onCancel={() => { setSelectedTo(null) }}
                   myLeagueId={myLeagueId}
-                  onClose={()=>setSelectedCode(null)}
-                  onClaim={handleClaim}
-                  canAct={actionsLeft>0}
+                  leagueColors={leagueColors}
                 />
+              </div>
+            )}
+            {selectedFrom && !selectedTo && !ownership[selectedFrom] && (
+              <div className="mt-2">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl p-4 flex items-center gap-3"
+                  style={{ background: '#080f1e', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="text-2xl">🏴</div>
+                  <div className="flex-1">
+                    <p className="font-black text-sm">{WORLD_COUNTRIES[selectedFrom]?.n}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Territorio neutral · toca para reclamar</p>
+                  </div>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleClaim(selectedFrom)}
+                    disabled={actionsLeft <= 0}
+                    className="px-3 py-2 rounded-xl font-black text-xs flex-shrink-0"
+                    style={{ background: actionsLeft > 0 ? 'linear-gradient(135deg,#1e40af,#3b82f6)' : 'rgba(255,255,255,0.05)', color: actionsLeft > 0 ? '#fff' : 'rgba(255,255,255,0.25)' }}>
+                    {actionsLeft > 0 ? 'Reclamar' : 'Sin acciones'}
+                  </motion.button>
+                </motion.div>
               </div>
             )}
           </AnimatePresence>
@@ -733,29 +1244,31 @@ export default function WarlordMode() {
       )}
 
       {/* ── RANKING ── */}
-      {tab==='ranking' && (
+      {tab === 'ranking' && (
         <div className="px-4 pt-4 pb-6">
-          {rankingData.length===0 ? (
-            <div className="text-center py-16" style={{color:'rgba(255,255,255,0.25)'}}>
+          {rankingData.length === 0 ? (
+            <div className="text-center py-16" style={{ color: 'rgba(255,255,255,0.25)' }}>
               <div className="text-5xl mb-3">🌍</div>
               <p className="font-bold">Ninguna liga en combate todavía</p>
-              <p className="text-sm mt-1" style={{color:'rgba(255,255,255,0.15)'}}>Sé el primero en conquistar el mundo</p>
             </div>
           ) : (
             <>
-              {rankingData.length>=3&&(
+              {rankingData.length >= 3 && (
                 <div className="flex items-end justify-center gap-3 mb-6 pt-2">
-                  {[rankingData[1],rankingData[0],rankingData[2]].map((p,i)=>{
-                    const hs=[72,100,56],ms=['🥈','🥇','🥉']
+                  {[rankingData[1], rankingData[0], rankingData[2]].map((p, i) => {
+                    const hs = [72, 100, 56], ms = ['🥈', '🥇', '🥉']
                     return (
-                      <motion.div key={p.league_id} initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:i*0.1}}
+                      <motion.div key={p.league_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
                         className="flex flex-col items-center gap-1.5 flex-1">
                         <span className="text-2xl">{ms[i]}</span>
-                        <div className="w-3 h-3 rounded-full" style={{backgroundColor:p.color}}/>
-                        <p className="text-xs font-black text-center truncate w-full px-1" style={{color:p.color}}>{p.leagues?.name}</p>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color }} />
+                        <p className="text-xs font-black text-center truncate w-full px-1" style={{ color: p.color }}>{p.leagues?.name}</p>
                         <div className="w-full rounded-t-2xl flex items-center justify-center"
-                          style={{height:hs[i],backgroundColor:p.color+'18',border:`1px solid ${p.color}35`}}>
-                          <div className="text-center"><p className="font-black text-xl" style={{color:p.color}}>{p.territories}</p><p className="text-xs" style={{color:'rgba(255,255,255,0.3)'}}>países</p></div>
+                          style={{ height: hs[i], backgroundColor: p.color + '18', border: `1px solid ${p.color}35` }}>
+                          <div className="text-center">
+                            <p className="font-black text-xl" style={{ color: p.color }}>{p.territories}</p>
+                            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>países</p>
+                          </div>
                         </div>
                       </motion.div>
                     )
@@ -763,19 +1276,22 @@ export default function WarlordMode() {
                 </div>
               )}
               <div className="space-y-2">
-                {rankingData.map((p,idx)=>{
-                  const isMe=p.league_id===myLeagueId
+                {rankingData.map((p, idx) => {
+                  const isMe = p.league_id === myLeagueId
                   return (
-                    <motion.div key={p.league_id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} transition={{delay:idx*0.04}}
+                    <motion.div key={p.league_id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.04 }}
                       className="rounded-2xl p-3.5 flex items-center gap-3"
-                      style={{background:isMe?p.color+'0e':'rgba(255,255,255,0.03)',border:`1px solid ${isMe?p.color+'35':'rgba(255,255,255,0.05)'}`}}>
-                      <span className="text-sm w-6 text-center" style={{color:'rgba(255,255,255,0.3)'}}>{idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':`#${idx+1}`}</span>
-                      <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{backgroundColor:p.color}}/>
+                      style={{ background: isMe ? p.color + '0e' : 'rgba(255,255,255,0.03)', border: `1px solid ${isMe ? p.color + '35' : 'rgba(255,255,255,0.05)'}` }}>
+                      <span className="text-sm w-6 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}</span>
+                      <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
                       <div className="flex-1 min-w-0">
-                        <p className="font-black text-sm truncate" style={{color:isMe?p.color:'#fff'}}>{p.leagues?.name}{isMe?' ★':''}</p>
-                        <p className="text-xs" style={{color:'rgba(255,255,255,0.3)'}}>⚔️ {p.soldiers.toLocaleString()} soldados</p>
+                        <p className="font-black text-sm truncate" style={{ color: isMe ? p.color : '#fff' }}>{p.leagues?.name}{isMe ? ' ★' : ''}</p>
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>⚔️ {p.soldiers.toLocaleString()} soldados</p>
                       </div>
-                      <div className="text-right"><p className="font-black" style={{color:p.color}}>{p.territories}</p><p className="text-xs" style={{color:'rgba(255,255,255,0.25)'}}>países</p></div>
+                      <div className="text-right">
+                        <p className="font-black" style={{ color: p.color }}>{p.territories}</p>
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>países</p>
+                      </div>
                     </motion.div>
                   )
                 })}
@@ -786,33 +1302,32 @@ export default function WarlordMode() {
       )}
 
       {/* ── INFO ── */}
-      {tab==='info' && (
+      {tab === 'info' && (
         <div className="px-4 pt-4 pb-6 space-y-3">
           {[
-            {title:'🌍 Objetivo',items:['Conquista el mayor número de países del mapa.','Los neutrales se reclaman con acciones (5 cada 30 min).','Los rivales se atacan — combate automático en Fase 2.']},
-            {title:'⚔️ Soldados',items:['Los puntos de liga se convierten en soldados iniciales.','Cada consumición aporta tropas al ejército.','Recluta de la población local de cada provincia (Fase 2).']},
-            {title:'🏰 Economía',items:['Construye granjas, cuarteles y mercados (Fase 3).','Explota recursos únicos de cada territorio.','Comercia con otras ligas o declara guerras económicas.']},
-            {title:'🤝 Diplomacia',items:['Tratados de paz y alianzas entre ligas (Fase 4).','Elige tu forma de gobierno: democracia, monarquía, dictadura...','Eventos globales: plagas, bonanzas, erupciones volcánicas.']},
-          ].map(s=>(
-            <div key={s.title} className="rounded-2xl p-4" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)'}}>
+            { title: '🗺️ Cómo moverse', items: ['Toca una de tus provincias (se resaltará en dorado).', 'Las provincias adyacentes se iluminarán: verde = tuya, rojo = enemiga o neutral.', 'Toca el destino para mover tropas o atacar.', 'Cada acción consume 1 de los 5 turnos por 30 minutos.'] },
+            { title: '⚔️ Combate', items: ['El combate es automático al enviar tropas a territorio enemigo.', '4 factores deciden el resultado: tropas, posición, moral y clima.', 'Los defensores tienen +10 de ventaja.', 'Las bajas se calculan proporcionalmente al resultado.'] },
+            { title: '📊 Factores', items: ['⚔️ Tropas (45%): ventaja numérica de tus soldados.', '🗺️ Posición (25%): ventaja estratégica del terreno.', '💪 Moral (15%): victorias recientes suben la moral.', '🌦️ Clima (15%): condiciones aleatorias por región.'] },
+          ].map(s => (
+            <div key={s.title} className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <p className="font-black text-sm text-amber-400 mb-3">{s.title}</p>
               <div className="space-y-2">
-                {s.items.map((item,i)=>(
+                {s.items.map((item, i) => (
                   <div key={i} className="flex gap-2.5">
-                    <div className="w-1 h-1 rounded-full flex-shrink-0 mt-2" style={{backgroundColor:'rgba(245,158,11,0.5)'}}/>
-                    <p className="text-xs leading-relaxed" style={{color:'rgba(255,255,255,0.45)'}}>{item}</p>
+                    <div className="w-1 h-1 rounded-full flex-shrink-0 mt-2" style={{ backgroundColor: 'rgba(245,158,11,0.5)' }} />
+                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>{item}</p>
                   </div>
                 ))}
               </div>
             </div>
           ))}
-          <div className="rounded-2xl p-4" style={{background:'linear-gradient(135deg,rgba(37,99,235,0.1),rgba(37,99,235,0.04))',border:'1px solid rgba(37,99,235,0.18)'}}>
+          <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg,rgba(37,99,235,0.1),rgba(37,99,235,0.04))', border: '1px solid rgba(37,99,235,0.18)' }}>
             <p className="font-black text-sm text-blue-400 mb-3">📊 Estado global</p>
             <div className="grid grid-cols-3 gap-2">
-              {[{l:'Países',v:totalC,c:'#fff'},{l:'Conquistados',v:totalOwned,c:'#f59e0b'},{l:'Neutrales',v:totalC-totalOwned,c:'#60a5fa'}].map(s=>(
-                <div key={s.l} className="text-center rounded-xl py-3" style={{backgroundColor:'rgba(255,255,255,0.04)'}}>
-                  <p className="font-black text-xl" style={{color:s.c}}>{s.v}</p>
-                  <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{s.l}</p>
+              {[{ l: 'Países', v: totalC, c: '#fff' }, { l: 'Conquistados', v: totalOwned, c: '#f59e0b' }, { l: 'Neutrales', v: totalC - totalOwned, c: '#60a5fa' }].map(s => (
+                <div key={s.l} className="text-center rounded-xl py-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                  <p className="font-black text-xl" style={{ color: s.c }}>{s.v}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{s.l}</p>
                 </div>
               ))}
             </div>
@@ -822,46 +1337,56 @@ export default function WarlordMode() {
 
       {/* MODAL UNIRSE */}
       <AnimatePresence>
-        {showJoin&&(
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-            className="fixed inset-0 z-50 flex items-end justify-center" style={{backgroundColor:'rgba(0,0,0,0.88)'}}
-            onClick={()=>setShowJoin(false)}>
-            <motion.div initial={{y:'100%'}} animate={{y:0}} exit={{y:'100%'}}
-              transition={{type:'spring',stiffness:400,damping:40}}
-              onClick={e=>e.stopPropagation()}
+        {showJoin && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.88)' }}
+            onClick={() => setShowJoin(false)}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+              onClick={e => e.stopPropagation()}
               className="w-full max-w-md rounded-t-3xl p-6"
-              style={{background:'#080f1e',border:'1px solid rgba(255,255,255,0.07)'}}>
-              <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{backgroundColor:'rgba(255,255,255,0.12)'}}/>
+              style={{ background: '#080f1e', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ backgroundColor: 'rgba(255,255,255,0.12)' }} />
               <div className="text-center mb-6">
                 <div className="text-5xl mb-3">🌍</div>
                 <h2 className="font-black text-xl">Elige tu liga</h2>
-                <p className="text-sm mt-1" style={{color:'rgba(255,255,255,0.4)'}}>¿Con qué liga vas a conquistar el mundo?</p>
+                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>¿Con qué liga vas a conquistar el mundo?</p>
               </div>
               <div className="space-y-2 mb-4">
-                {myLeagues.map(lg=>(
-                  <motion.button key={lg.id} whileTap={{scale:0.97}}
-                    onClick={()=>handleJoin(lg.id)} disabled={joining}
+                {myLeagues.map(lg => (
+                  <motion.button key={lg.id} whileTap={{ scale: 0.97 }}
+                    onClick={() => handleJoin(lg.id)} disabled={joining}
                     className="w-full p-4 rounded-2xl flex items-center gap-3 text-left"
-                    style={{background:'linear-gradient(135deg,rgba(37,99,235,0.15),rgba(37,99,235,0.05))',border:'1px solid rgba(37,99,235,0.2)'}}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{backgroundColor:'rgba(37,99,235,0.15)'}}>⚔️</div>
+                    style={{ background: 'linear-gradient(135deg,rgba(37,99,235,0.15),rgba(37,99,235,0.05))', border: '1px solid rgba(37,99,235,0.2)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ backgroundColor: 'rgba(37,99,235,0.15)' }}>⚔️</div>
                     <div className="flex-1">
                       <p className="font-black text-sm">{lg.name}</p>
-                      <p className="text-xs mt-0.5" style={{color:'rgba(255,255,255,0.35)'}}>{joining?'Uniéndose...':'Pulsa para entrar en la partida'}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{joining ? 'Uniéndose...' : 'Pulsa para entrar en la partida'}</p>
                     </div>
                     <span className="text-blue-400">→</span>
                   </motion.button>
                 ))}
-                {myLeagues.length===0&&(
-                  <p className="text-center text-sm py-4" style={{color:'rgba(255,255,255,0.35)'}}>Únete a una liga desde la sección 🏆 primero</p>
+                {myLeagues.length === 0 && (
+                  <p className="text-center text-sm py-4" style={{ color: 'rgba(255,255,255,0.35)' }}>Únete a una liga desde la sección 🏆 primero</p>
                 )}
               </div>
-              <motion.button whileTap={{scale:0.97}} onClick={()=>setShowJoin(false)}
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setShowJoin(false)}
                 className="w-full py-3 rounded-xl text-sm font-bold"
-                style={{backgroundColor:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.35)'}}>
+                style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.35)' }}>
                 Cancelar
               </motion.button>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL BATALLA */}
+      <AnimatePresence>
+        {battleResult && (
+          <BattleModal
+            battle={battleResult}
+            onClose={() => { setBattleResult(null) }}
+          />
         )}
       </AnimatePresence>
     </div>
