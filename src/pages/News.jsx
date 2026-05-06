@@ -324,6 +324,223 @@ function BlockSelector({ blocks, selectedId, onSelect }) {
   )
 }
 
+
+const isOperacionBarbacoa = () => {
+  const madrid = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
+  return madrid.getDate() === 9 && madrid.getMonth() === 4
+}
+
+const SOVIET = {
+  red: '#CC0000', darkRed: '#8B0000', gold: '#FFD700',
+  cream: '#F5E6C8', bg: '#0D0000',
+}
+
+function SovietStar() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" style={{ display: 'inline' }}>
+      <polygon points="10,1 12.4,7.4 19.5,7.4 13.8,11.5 16.2,18 10,13.8 3.8,18 6.2,11.5 0.5,7.4 7.6,7.4" fill={SOVIET.gold} />
+    </svg>
+  )
+}
+
+function SovietHeader({ block }) {
+  const isMorning = block?.block_type === 'morning'
+  const date = block ? new Date(block.generated_at) : new Date()
+  const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
+  return (
+    <div style={{ background: SOVIET.bg, borderBottom: `3px solid ${SOVIET.gold}` }}>
+      <div style={{ background: `linear-gradient(90deg, ${SOVIET.darkRed}, ${SOVIET.red}, ${SOVIET.darkRed})`, padding: '4px 16px', textAlign: 'center' }}>
+        <span style={{ color: SOVIET.gold, fontSize: 10, fontWeight: 900, letterSpacing: '0.3em', fontFamily: 'Georgia, serif' }}>
+          ★ ÓRGANO OFICIAL DE LA LIGA DE BEBEDORES POPULARES ★
+        </span>
+      </div>
+      <div style={{ padding: '20px 16px 12px', textAlign: 'center', position: 'relative' }}>
+        <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', opacity: 0.3 }}>
+          <SovietStar /><SovietStar /><SovietStar />
+        </div>
+        <div style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', opacity: 0.3 }}>
+          <SovietStar /><SovietStar /><SovietStar />
+        </div>
+        <p style={{ color: SOVIET.gold, fontSize: 9, letterSpacing: '0.4em', marginBottom: 4, fontFamily: 'Georgia, serif' }}>PRAVDA DE LA CAÑA</p>
+        <h1 style={{ color: SOVIET.cream, fontSize: 32, fontWeight: 900, fontFamily: 'Georgia, serif', letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 4, textShadow: `2px 2px 0px ${SOVIET.darkRed}` }}>
+          ПРАВДА ПИВА
+        </h1>
+        <p style={{ color: SOVIET.gold, fontSize: 9, letterSpacing: '0.3em', fontFamily: 'Georgia, serif' }}>(LA VERDAD DE LA CERVEZA)</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 6px' }}>
+          <div style={{ flex: 1, height: 1, background: SOVIET.gold, opacity: 0.4 }} />
+          <SovietStar />
+          <div style={{ flex: 1, height: 1, background: SOVIET.gold, opacity: 0.4 }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <p style={{ color: SOVIET.gold, fontSize: 9, opacity: 0.7, fontFamily: 'Georgia, serif' }}>{isMorning ? 'EDICIÓN MATUTINA' : 'EDICIÓN VESPERTINA'}</p>
+          <p style={{ color: SOVIET.gold, fontSize: 9, opacity: 0.7, fontFamily: 'Georgia, serif' }}>{dateStr}</p>
+          <p style={{ color: SOVIET.gold, fontSize: 9, opacity: 0.7, fontFamily: 'Georgia, serif' }}>AÑO DEL CAMARADA</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SovietTicker({ marketSnapshot }) {
+  const drinks = marketSnapshot?.drinks || []
+  if (!drinks.length) return null
+  const items = drinks.map(d => {
+    const seed = d.name.length + Math.floor(d.points)
+    const change = (((seed * 7 + Date.now() / 86400000) % 20) - 10).toFixed(2)
+    return { name: d.name, emoji: d.emoji, pts: d.points, change: parseFloat(change) }
+  })
+  return (
+    <div style={{ background: SOVIET.red, borderBottom: `2px solid ${SOVIET.gold}`, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ flexShrink: 0, padding: '6px 12px', background: SOVIET.gold, color: SOVIET.darkRed, fontSize: 10, fontWeight: 900, letterSpacing: '0.15em', fontFamily: 'Georgia, serif' }}>★ BOLSA</div>
+        <div style={{ overflow: 'hidden', flex: 1 }}>
+          <motion.div style={{ display: 'flex', gap: 32, padding: '6px 16px', whiteSpace: 'nowrap' }}
+            animate={{ x: [0, -items.length * 160] }}
+            transition={{ duration: items.length * 3, repeat: Infinity, ease: 'linear' }}>
+            {[...items, ...items, ...items].map((item, i) => (
+              <span key={i} style={{ fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Georgia, serif' }}>
+                <span style={{ color: SOVIET.gold }}>{item.emoji} {item.name.toUpperCase()}</span>
+                <span style={{ color: SOVIET.cream, opacity: 0.7 }}>{item.pts}pts</span>
+                <span style={{ color: item.change >= 0 ? '#90EE90' : '#FF6B6B' }}>{item.change >= 0 ? '▲' : '▼'} {Math.abs(item.change)}%</span>
+              </span>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SovietFeaturedCard({ article, onClick }) {
+  const catLabels = { economia: '★ ECONOMÍA POPULAR', deportes: '★ DEPORTES DEL PUEBLO', cotilleo: '★ ASUNTOS SOCIALES', actualidad: '★ NOTICIAS DEL ESTADO', variedades: '★ CULTURA Y CIENCIA' }
+  return (
+    <motion.div whileTap={{ scale: 0.98 }} onClick={() => onClick(article)}
+      style={{ background: `linear-gradient(135deg, ${SOVIET.darkRed}22, ${SOVIET.bg})`, border: `2px solid ${SOVIET.gold}`, borderRadius: 0, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 2 }}>
+      <div style={{ position: 'absolute', right: -20, top: -20, fontSize: 120, opacity: 0.03, color: SOVIET.gold, fontFamily: 'Georgia, serif', lineHeight: 1, pointerEvents: 'none' }}>★</div>
+      <div style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'inline-block', padding: '2px 8px', marginBottom: 10, background: SOVIET.red, color: SOVIET.gold, fontSize: 9, fontWeight: 900, letterSpacing: '0.2em', fontFamily: 'Georgia, serif' }}>
+          {catLabels[article.category] || '★ NOTICIAS'}
+        </div>
+        <h2 style={{ color: SOVIET.cream, fontSize: 20, fontWeight: 900, fontFamily: 'Georgia, serif', lineHeight: 1.2, marginBottom: 8, textTransform: 'uppercase' }}>{article.headline}</h2>
+        <p style={{ color: SOVIET.gold, fontSize: 12, fontStyle: 'italic', marginBottom: 10, opacity: 0.8 }}>{article.subtitle}</p>
+        {article.chart_data && (
+          <div style={{ marginBottom: 10, padding: 8, background: 'rgba(255,215,0,0.05)', border: `1px solid ${SOVIET.gold}33` }}>
+            <Sparkline data={article.chart_data} height={40} />
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${SOVIET.gold}33`, paddingTop: 8 }}>
+          <span style={{ color: SOVIET.gold, fontSize: 10, fontFamily: 'Georgia, serif' }}>Camarada {article.author}</span>
+          <span style={{ color: SOVIET.red, fontSize: 10, fontFamily: 'Georgia, serif' }}>LEER INFORME →</span>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function SovietSmallCard({ article, index, onClick }) {
+  const catLabels = { economia: '★ ECONOMÍA', deportes: '★ DEPORTES', cotilleo: '★ SOCIAL', actualidad: '★ ESTADO', variedades: '★ CULTURA' }
+  return (
+    <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }}
+      whileTap={{ scale: 0.97 }} onClick={() => onClick(article)}
+      style={{ display: 'flex', gap: 12, cursor: 'pointer', padding: '12px 0', borderBottom: `1px solid ${SOVIET.gold}22` }}>
+      <div style={{ flexShrink: 0, width: 28, height: 28, background: SOVIET.red, color: SOVIET.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, fontFamily: 'Georgia, serif' }}>{index + 1}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 8, color: SOVIET.red, fontWeight: 900, letterSpacing: '0.2em', marginBottom: 3, fontFamily: 'Georgia, serif' }}>{catLabels[article.category] || '★ NOTICIAS'}</div>
+        <p style={{ color: SOVIET.cream, fontSize: 13, fontWeight: 700, fontFamily: 'Georgia, serif', lineHeight: 1.3, textTransform: 'uppercase', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{article.headline}</p>
+        <p style={{ color: SOVIET.gold, fontSize: 10, opacity: 0.6, marginTop: 2, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>{article.author}</p>
+      </div>
+      {article.chart_data && <div style={{ flexShrink: 0 }}><Sparkline data={article.chart_data} height={28} /></div>}
+    </motion.div>
+  )
+}
+
+function SovietModal({ article, onClose }) {
+  if (!article) return null
+  const catLabels = { economia: '★ ECONOMÍA POPULAR', deportes: '★ DEPORTES DEL PUEBLO', cotilleo: '★ ASUNTOS SOCIALES', actualidad: '★ NOTICIAS DEL ESTADO', variedades: '★ CULTURA Y CIENCIA' }
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end', background: 'rgba(0,0,0,0.95)' }}
+      onClick={onClose}>
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', stiffness: 380, damping: 40 }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 480, margin: '0 auto', background: SOVIET.bg, maxHeight: '88vh', overflowY: 'auto', border: `2px solid ${SOVIET.gold}`, borderBottom: 'none' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: SOVIET.bg, borderBottom: `2px solid ${SOVIET.gold}`, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ padding: '2px 8px', background: SOVIET.red, color: SOVIET.gold, fontSize: 9, fontWeight: 900, letterSpacing: '0.2em', fontFamily: 'Georgia, serif' }}>{catLabels[article.category]}</div>
+            <motion.button whileTap={{ scale: 0.88 }} onClick={onClose}
+              style={{ width: 28, height: 28, background: SOVIET.red, color: SOVIET.gold, border: 'none', fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>✕</motion.button>
+          </div>
+          <h1 style={{ color: SOVIET.cream, fontSize: 18, fontWeight: 900, fontFamily: 'Georgia, serif', textTransform: 'uppercase', lineHeight: 1.2 }}>{article.headline}</h1>
+          <p style={{ color: SOVIET.gold, fontSize: 11, fontStyle: 'italic', marginTop: 4, opacity: 0.8, fontFamily: 'Georgia, serif' }}>{article.subtitle}</p>
+        </div>
+        <div style={{ padding: 16 }}>
+          {article.chart_data && (
+            <div style={{ marginBottom: 16, padding: 12, background: `${SOVIET.red}11`, border: `1px solid ${SOVIET.gold}44` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ color: SOVIET.gold, fontSize: 9, fontWeight: 900, letterSpacing: '0.2em', fontFamily: 'Georgia, serif' }}>★ INFORME ECONÓMICO</span>
+                <span style={{ color: article.chart_data[article.chart_data.length-1] >= article.chart_data[0] ? '#90EE90' : '#FF6B6B', fontSize: 10, fontWeight: 900 }}>
+                  {article.chart_data[article.chart_data.length-1] >= article.chart_data[0] ? '▲' : '▼'} {Math.abs(article.chart_data[article.chart_data.length-1] - article.chart_data[0]).toFixed(1)} pts
+                </span>
+              </div>
+              <Sparkline data={article.chart_data} height={56} />
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ flex: 1, height: 1, background: `${SOVIET.gold}33` }} /><SovietStar /><div style={{ flex: 1, height: 1, background: `${SOVIET.gold}33` }} />
+          </div>
+          <p style={{ color: SOVIET.cream, fontSize: 14, lineHeight: 1.8, fontFamily: 'Georgia, serif', opacity: 0.85 }}>{article.body}</p>
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${SOVIET.gold}33`, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 32, height: 32, background: SOVIET.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: SOVIET.gold }}>★</div>
+            <div>
+              <p style={{ color: SOVIET.gold, fontSize: 11, fontWeight: 900, fontFamily: 'Georgia, serif' }}>Camarada {article.author}</p>
+              <p style={{ color: SOVIET.gold, fontSize: 9, opacity: 0.5, fontFamily: 'Georgia, serif' }}>ПРАВДА ДЕ ЛА КАНЯ</p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+function SovietBlockSelector({ blocks, selectedId, onSelect }) {
+  if (!blocks.length) return null
+  return (
+    <div style={{ display: 'flex', gap: 2, padding: '8px 16px', background: SOVIET.darkRed, borderBottom: `2px solid ${SOVIET.gold}` }}>
+      {blocks.map(block => {
+        const isMorning = block.block_type === 'morning'
+        const date = new Date(block.generated_at)
+        const label = date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' }).toUpperCase()
+        const isSelected = block.id === selectedId
+        return (
+          <motion.button key={block.id} whileTap={{ scale: 0.94 }} onClick={() => onSelect(block.id)}
+            style={{ padding: '6px 12px', fontSize: 9, fontWeight: 900, letterSpacing: '0.15em', fontFamily: 'Georgia, serif', cursor: 'pointer', border: 'none', background: isSelected ? SOVIET.gold : 'transparent', color: isSelected ? SOVIET.darkRed : SOVIET.gold }}>
+            {isMorning ? '☀ MAÑANA' : '☾ TARDE'} · {label}
+          </motion.button>
+        )
+      })}
+    </div>
+  )
+}
+
+function SovietCatFilter({ filterCat, setFilterCat }) {
+  const filters = [
+    { id: 'all', label: '★ TODO' }, { id: 'economia', label: '★ ECONOMÍA' },
+    { id: 'deportes', label: '★ DEPORTES' }, { id: 'cotilleo', label: '★ SOCIAL' },
+    { id: 'actualidad', label: '★ ESTADO' }, { id: 'variedades', label: '★ CULTURA' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 0, overflowX: 'auto', borderBottom: `2px solid ${SOVIET.gold}` }}>
+      {filters.map(f => (
+        <motion.button key={f.id} whileTap={{ scale: 0.94 }} onClick={() => setFilterCat(f.id)}
+          style={{ flexShrink: 0, padding: '8px 12px', fontSize: 9, fontWeight: 900, letterSpacing: '0.15em', fontFamily: 'Georgia, serif', cursor: 'pointer', border: 'none', borderRight: `1px solid ${SOVIET.gold}33`, background: filterCat === f.id ? SOVIET.gold : 'transparent', color: filterCat === f.id ? SOVIET.darkRed : SOVIET.gold }}>
+          {f.label}
+        </motion.button>
+      ))}
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 export default function News() {
   const [blocks, setBlocks] = useState([])
@@ -405,6 +622,45 @@ export default function News() {
       </p>
     </div>
   )
+
+  const isBarbacoa = isOperacionBarbacoa()
+
+  if (isBarbacoa) {
+    return (
+      <div style={{ minHeight: '100vh', paddingBottom: 96, background: SOVIET.bg, color: SOVIET.cream }}>
+        <SovietHeader block={selectedBlock} />
+        {selectedBlock?.market_snapshot && <SovietTicker marketSnapshot={selectedBlock.market_snapshot} />}
+        <SovietBlockSelector blocks={blocks} selectedId={selectedBlock?.id} onSelect={selectBlock} />
+        <SovietCatFilter filterCat={filterCat} setFilterCat={setFilterCat} />
+        <div style={{ padding: '16px' }}>
+          {filterCat === 'all' && featured && <SovietFeaturedCard article={featured} onClick={setSelectedArticle} />}
+          {filterCat === 'all' && filtered.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 0 8px' }}>
+              <div style={{ flex: 1, height: 1, background: `${SOVIET.gold}44` }} />
+              <span style={{ color: SOVIET.gold, fontSize: 9, fontWeight: 900, letterSpacing: '0.3em', fontFamily: 'Georgia, serif' }}>★ MÁS INFORMES ★</span>
+              <div style={{ flex: 1, height: 1, background: `${SOVIET.gold}44` }} />
+            </div>
+          )}
+          {filtered.map((article, i) => (
+            <SovietSmallCard key={i} article={article} index={i} onClick={setSelectedArticle} />
+          ))}
+          {filtered.length === 0 && filterCat !== 'all' && (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: `${SOVIET.gold}66` }}>
+              <p style={{ fontSize: 24, marginBottom: 8 }}>★</p>
+              <p style={{ fontFamily: 'Georgia, serif', fontSize: 13 }}>Sin informes en esta sección</p>
+            </div>
+          )}
+          <div style={{ textAlign: 'center', marginTop: 24, paddingTop: 16, borderTop: `1px solid ${SOVIET.gold}33` }}>
+            <p style={{ color: SOVIET.gold, fontSize: 9, fontWeight: 900, letterSpacing: '0.3em', fontFamily: 'Georgia, serif' }}>★ ПРАВДА ДЕ ЛА КАНЯ ★</p>
+            <p style={{ color: SOVIET.gold, fontSize: 9, opacity: 0.4, marginTop: 4, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>"En el nombre del Partido y de la Caña"</p>
+          </div>
+        </div>
+        <AnimatePresence>
+          {selectedArticle && <SovietModal article={selectedArticle} onClose={() => setSelectedArticle(null)} />}
+        </AnimatePresence>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen pb-28" style={{ background: '#0a0a0a', color: '#fff' }}>
