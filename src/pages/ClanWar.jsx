@@ -695,85 +695,151 @@ export default function ClanWar() {
           <div className="px-4 space-y-4 mt-4 pb-8">
 
             {/* ── MISIÓN DEL DÍA ── */}
-            {todayBattle && (
-              <div className="rounded-2xl overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, #0f0005, #1a000a)', border: '1px solid rgba(239,68,68,0.25)' }}>
-                {/* Header misión */}
-                <div className="px-4 py-3 flex items-center gap-2 border-b"
-                  style={{ borderColor: 'rgba(239,68,68,0.15)', background: 'rgba(239,68,68,0.08)' }}>
-                  <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
-                    className="text-lg">🎯</motion.span>
-                  <div>
-                    <p className="text-xs font-black text-red-400 tracking-widest uppercase">Misión — Día {today}</p>
-                    <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                      {todayBattle.description || BATTLE_TYPES[todayBattle.battle_type]?.label}
-                    </p>
-                  </div>
-                </div>
+            {todayBattle && (() => {
+              const { myPct, myCurrent, myTarget } = getTodayProgress(todayBattle)
+              const enemyPct = enemyProgress ? Math.min(100, Math.round((enemyProgress.current / enemyProgress.target) * 100)) : null
+              const won = todayBattle.winner_league_id === myLeagueId
+              const lost = todayBattle.winner_league_id && todayBattle.winner_league_id !== myLeagueId
+              const battleTypeInfo = BATTLE_TYPES[todayBattle.battle_type]
+              return (
+                <div className="rounded-2xl overflow-hidden"
+                  style={{ background: 'linear-gradient(160deg, #0f0005 0%, #1a000a 50%, #0a000f 100%)', border: '1px solid rgba(239,68,68,0.3)', boxShadow: '0 0 40px rgba(239,68,68,0.08)' }}>
 
-                <div className="px-4 py-4">
-                  {(() => {
-                    const { myPct, myCurrent, myTarget } = getTodayProgress(todayBattle)
-                    const won = todayBattle.winner_league_id === myLeagueId
-                    const lost = todayBattle.winner_league_id && todayBattle.winner_league_id !== myLeagueId
-                    return (
+                  {/* Header con tipo de batalla */}
+                  <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                        style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                        {battleTypeInfo?.emoji || '🎯'}
+                      </div>
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            {myLeagueName}
-                          </span>
-                          <span className="text-sm font-black" style={{ color: won ? '#10b981' : '#ef4444' }}>
-                            {myCurrent} / {myTarget}
-                          </span>
-                        </div>
-                        {/* Barra de asedio */}
-                        <div className="w-full h-5 rounded-full overflow-hidden relative"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                          <motion.div className="h-full rounded-full flex items-center justify-end pr-2"
-                            style={{ background: won ? 'linear-gradient(90deg, #059669, #10b981)' : 'linear-gradient(90deg, #7f1d1d, #ef4444)' }}
-                            animate={{ width: `${myPct}%` }} transition={{ duration: 0.8, type: 'spring' }}>
-                            {myPct > 15 && (
-                              <span className="text-xs font-black text-white">{myPct}%</span>
-                            )}
-                          </motion.div>
-                          {/* Marcador del objetivo */}
-                          <div className="absolute top-0 bottom-0 right-0 w-0.5 opacity-40"
-                            style={{ backgroundColor: '#fff' }} />
-                        </div>
+                        <p className="text-xs font-black tracking-widest uppercase mb-0.5" style={{ color: 'rgba(239,68,68,0.7)' }}>
+                          DÍA {today} DE {activeWar.duration_days} · MISIÓN
+                        </p>
+                        <p className="text-sm font-black" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                          {todayBattle.description || battleTypeInfo?.label}
+                        </p>
+                      </div>
+                    </div>
+                    {won && (
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400 }}
+                        className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-black"
+                        style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)' }}>
+                        🏆 GANADA
+                      </motion.div>
+                    )}
+                    {lost && (
+                      <div className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-black"
+                        style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                        💀 PERDIDA
+                      </div>
+                    )}
+                  </div>
 
-                        {won && (
-                          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                            className="mt-2 text-center">
-                            <span className="text-xs font-black text-emerald-400">🏆 ¡OBJETIVO COMPLETADO!</span>
-                          </motion.div>
-                        )}
+                  {/* Confrontación visual de barras */}
+                  <div className="px-4 pb-4 space-y-3">
 
-                        {/* Progreso espía */}
-                        {enemyProgress && (
-                          <div className="mt-4 pt-3 border-t" style={{ borderColor: 'rgba(245,158,11,0.15)' }}>
-                            <div className="flex items-center gap-1.5 mb-2">
-                              <span className="text-sm">🕵️</span>
-                              <span className="text-xs font-bold text-amber-400">Intel rival — {enemyLeagueName}</span>
-                            </div>
-                            <div className="flex items-center justify-between mb-1.5">
-                              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Progreso enemigo</span>
-                              <span className="text-xs font-black text-amber-400">{enemyProgress.current}/{enemyProgress.target}</span>
-                            </div>
-                            <div className="w-full h-3 rounded-full overflow-hidden"
-                              style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                              <motion.div className="h-full rounded-full"
-                                style={{ background: 'linear-gradient(90deg, #92400e, #f59e0b)' }}
-                                animate={{ width: `${Math.min(100, Math.round((enemyProgress.current / enemyProgress.target) * 100))}%` }}
-                                transition={{ duration: 0.6 }} />
-                            </div>
-                          </div>
+                    {/* Mi equipo */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs">⚔️</span>
+                          <span className="text-xs font-black" style={{ color: '#ef4444' }}>{myLeagueName}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-black tabular-nums" style={{ color: won ? '#10b981' : 'rgba(255,255,255,0.9)' }}>
+                            {myCurrent}
+                          </span>
+                          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>/ {myTarget}</span>
+                        </div>
+                      </div>
+                      <div className="relative h-6 rounded-lg overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                        <motion.div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2"
+                          style={{ background: won ? 'linear-gradient(90deg, #065f46, #10b981)' : 'linear-gradient(90deg, #7f1d1d, #dc2626, #ef4444)', borderRadius: '0.5rem' }}
+                          animate={{ width: `${myPct}%` }} transition={{ duration: 1.2, type: 'spring', stiffness: 60 }}>
+                          {myPct > 20 && <span className="text-xs font-black text-white">{myPct}%</span>}
+                        </motion.div>
+                        {/* Pulso si está en progreso */}
+                        {!won && !lost && myPct > 0 && (
+                          <motion.div className="absolute inset-y-0 left-0 rounded-lg"
+                            style={{ width: `${myPct}%`, background: 'linear-gradient(90deg, transparent, rgba(239,68,68,0.4))' }}
+                            animate={{ opacity: [0, 0.6, 0] }} transition={{ duration: 2, repeat: Infinity }} />
                         )}
                       </div>
-                    )
-                  })()}
+                    </div>
+
+                    {/* Rival (siempre visible) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs">🛡️</span>
+                          <span className="text-xs font-black" style={{ color: '#818cf8' }}>{enemyLeagueName}</span>
+                          {!enemyProgress && (
+                            <span className="text-xs px-1.5 py-0.5 rounded font-black"
+                              style={{ background: 'rgba(245,158,11,0.1)', color: 'rgba(245,158,11,0.5)', fontSize: 9 }}>
+                              🔒 CIFRADO
+                            </span>
+                          )}
+                        </div>
+                        {enemyProgress ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-black tabular-nums text-amber-400">{enemyProgress.current}</span>
+                            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>/ {enemyProgress.target}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-black" style={{ color: 'rgba(255,255,255,0.2)' }}>???</span>
+                        )}
+                      </div>
+                      <div className="relative h-6 rounded-lg overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(99,102,241,0.15)' }}>
+                        {enemyProgress ? (
+                          <motion.div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2"
+                            style={{ background: 'linear-gradient(90deg, #312e81, #6366f1)', borderRadius: '0.5rem' }}
+                            animate={{ width: `${enemyPct}%` }} transition={{ duration: 1.2, type: 'spring', stiffness: 60 }}>
+                            {enemyPct > 20 && <span className="text-xs font-black text-white">{enemyPct}%</span>}
+                          </motion.div>
+                        ) : (
+                          /* Barra censurada animada */
+                          <motion.div className="absolute inset-0 rounded-lg"
+                            style={{ background: 'repeating-linear-gradient(45deg, rgba(99,102,241,0.1) 0px, rgba(99,102,241,0.1) 8px, transparent 8px, transparent 16px)' }}
+                            animate={{ backgroundPosition: ['0px 0px', '32px 32px'] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
+                        )}
+                      </div>
+                      {!enemyProgress && (
+                        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                          🕵️ Asigna un espía para revelar el progreso rival
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Ventaja visual */}
+                    {!won && !lost && enemyProgress && (
+                      <div className="pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                        {(() => {
+                          const diff = myPct - enemyPct
+                          if (Math.abs(diff) < 5) return (
+                            <p className="text-xs text-center font-black" style={{ color: '#f59e0b' }}>
+                              ⚡ IGUALADOS — cada consumición cuenta
+                            </p>
+                          )
+                          return diff > 0 ? (
+                            <p className="text-xs text-center font-black text-emerald-400">
+                              ↑ {diff}% de ventaja — ¡mantén el ritmo!
+                            </p>
+                          ) : (
+                            <p className="text-xs text-center font-black text-red-400">
+                              ↓ {Math.abs(diff)}% de desventaja — ¡a beber!
+                            </p>
+                          )
+                        })()}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── HISTORIAL DE BATALLAS ── */}
             {battles.length > 0 && (
@@ -786,49 +852,108 @@ export default function ClanWar() {
                     const won = battle.winner_league_id === myLeagueId
                     const lost = battle.winner_league_id && battle.winner_league_id !== myLeagueId
                     const inProgress = !battle.winner_league_id && battle.day <= today
+                    const myCurr = isChallenger ? battle.challenger_current : battle.defender_current
+                    const myTgt = isChallenger ? battle.challenger_target : battle.defender_target
+                    const pct = myTgt > 0 ? Math.min(100, Math.round((myCurr / myTgt) * 100)) : 0
+                    const isFuture = battle.day > today
                     return (
                       <motion.div key={battle.id}
+                        initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: battle.day * 0.05 }}
                         className="rounded-xl overflow-hidden"
                         style={{
                           background: isToday
-                            ? 'linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.04))'
-                            : 'rgba(255,255,255,0.03)',
-                          border: isToday ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(255,255,255,0.06)',
-                          opacity: battle.day > today ? 0.4 : 1,
+                            ? 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.03))'
+                            : won ? 'rgba(16,185,129,0.04)'
+                            : lost ? 'rgba(239,68,68,0.04)'
+                            : 'rgba(255,255,255,0.02)',
+                          border: isToday ? '1px solid rgba(239,68,68,0.35)'
+                            : won ? '1px solid rgba(16,185,129,0.2)'
+                            : lost ? '1px solid rgba(239,68,68,0.15)'
+                            : '1px solid rgba(255,255,255,0.05)',
+                          opacity: isFuture ? 0.35 : 1,
                         }}>
                         <div className="flex items-center gap-3 px-3 py-2.5">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0"
-                            style={{ backgroundColor: won ? 'rgba(16,185,129,0.15)' : lost ? 'rgba(239,68,68,0.15)' : inProgress ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)' }}>
-                            {won ? '🏆' : lost ? '💀' : inProgress ? '⚔️' : '🔒'}
+                          {/* Icono resultado */}
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0 relative"
+                            style={{
+                              background: won ? 'rgba(16,185,129,0.15)' : lost ? 'rgba(239,68,68,0.15)' : inProgress ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.04)',
+                              border: isToday ? '1px solid rgba(239,68,68,0.4)' : 'none'
+                            }}>
+                            {isFuture ? '🔒' : won ? '🏆' : lost ? '💀' : inProgress ? '⚔️' : '—'}
+                            {isToday && (
+                              <motion.div className="absolute inset-0 rounded-lg"
+                                style={{ border: '1px solid rgba(239,68,68,0.6)' }}
+                                animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
+                            )}
                           </div>
+
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>Día {battle.day}</span>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-black" style={{ color: isToday ? '#ef4444' : 'rgba(255,255,255,0.7)' }}>
+                                Día {battle.day}
+                              </span>
                               {isToday && (
-                                <span className="text-xs px-1.5 py-0.5 rounded font-black text-red-400"
-                                  style={{ backgroundColor: 'rgba(239,68,68,0.15)' }}>HOY</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded-full font-black"
+                                  style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444', fontSize: 9 }}>EN CURSO</span>
                               )}
+                              {won && <span className="text-xs font-black text-emerald-400">Victoria</span>}
+                              {lost && <span className="text-xs font-black text-red-400">Derrota</span>}
                             </div>
-                            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                            <p className="text-xs truncate mb-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
                               {BATTLE_TYPES[battle.battle_type]?.emoji} {battle.description || BATTLE_TYPES[battle.battle_type]?.label}
                             </p>
+                            {/* Mini barra de progreso inline */}
+                            {!isFuture && (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1.5 rounded-full overflow-hidden"
+                                  style={{ background: 'rgba(255,255,255,0.06)' }}>
+                                  <motion.div className="h-full rounded-full"
+                                    style={{ background: won ? '#10b981' : inProgress ? '#ef4444' : '#6b7280' }}
+                                    animate={{ width: `${pct}%` }} transition={{ duration: 0.8 }} />
+                                </div>
+                                <span className="text-xs font-black flex-shrink-0"
+                                  style={{ color: won ? '#10b981' : inProgress ? '#ef4444' : 'rgba(255,255,255,0.3)', minWidth: 48 }}>
+                                  {myCurr}/{myTgt}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                          {battle.day <= today && (
-                            <div className="text-right flex-shrink-0">
-                              <p className="text-xs font-black"
-                                style={{ color: won ? '#10b981' : lost ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
-                                {won ? 'Victoria' : lost ? 'Derrota' : 'En curso'}
-                              </p>
-                              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                                {isChallenger ? battle.challenger_current : battle.defender_current}/
-                                {isChallenger ? battle.challenger_target : battle.defender_target}
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </motion.div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* ── MI CONTRIBUCIÓN ── */}
+            {myParticipation && (
+              <div className="rounded-2xl overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.06), rgba(245,158,11,0.02))', border: '1px solid rgba(245,158,11,0.15)' }}>
+                <div className="px-4 py-3 flex items-center justify-between border-b"
+                  style={{ borderColor: 'rgba(245,158,11,0.1)' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🪙</span>
+                    <p className="text-xs font-black text-amber-400 tracking-widest uppercase">Tu contribución</p>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full font-black"
+                    style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    {myParticipation.role === 'spy' ? '🕵️ Espía' : myParticipation.role === 'saboteur' ? '💣 Saboteador' : '⚔️ Combatiente'}
+                  </span>
+                </div>
+                <div className="px-4 py-3 grid grid-cols-3 gap-0 divide-x" style={{ borderColor: 'rgba(245,158,11,0.08)' }}>
+                  {[
+                    { label: 'BATALLAS', value: myParticipation.battles_left ?? '—', sub: 'restantes', color: '#f59e0b' },
+                    { label: 'ROL', value: myParticipation.role ? (myParticipation.role === 'spy' ? '🕵️' : '💣') : '⚔️', sub: myParticipation.role || 'combatiente', color: 'rgba(255,255,255,0.7)' },
+                    { label: 'ESTADO', value: myParticipation.is_captain ? '👑' : '⚔️', sub: myParticipation.is_captain ? 'capitán' : 'soldado', color: myParticipation.is_captain ? '#f59e0b' : 'rgba(255,255,255,0.5)' },
+                  ].map((stat, i) => (
+                    <div key={i} className="px-3 py-1 text-center" style={{ borderColor: 'rgba(245,158,11,0.08)' }}>
+                      <p className="text-xs font-black mb-0.5" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9 }}>{stat.label}</p>
+                      <p className="text-lg font-black" style={{ color: stat.color }}>{stat.value}</p>
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9 }}>{stat.sub}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -838,28 +963,39 @@ export default function ClanWar() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-black tracking-widest uppercase"
-                    style={{ color: 'rgba(255,255,255,0.3)' }}>👥 Tropas</p>
-                  {iAmCaptain && (
+                    style={{ color: 'rgba(255,255,255,0.3)' }}>👥 Tropas desplegadas</p>
+                  <div className="flex items-center gap-2">
                     <span className="text-xs px-2 py-1 rounded-full font-black"
-                      style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
-                      👑 Capitán
+                      style={{ background: 'rgba(239,68,68,0.1)', color: 'rgba(239,68,68,0.7)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      ⚔️ {myTeam.length}
                     </span>
-                  )}
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>vs</span>
+                    <span className="text-xs px-2 py-1 rounded-full font-black"
+                      style={{ background: 'rgba(99,102,241,0.1)', color: 'rgba(99,102,241,0.7)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                      🛡️ {enemyTeam.length}
+                    </span>
+                    {iAmCaptain && (
+                      <span className="text-xs px-2 py-1 rounded-full font-black"
+                        style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
+                        👑 Capitán
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Info roles */}
-                <div className="rounded-xl p-3 mb-3"
-                  style={{ backgroundColor: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm">🕵️</span>
-                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Espía — ve intel rival</span>
+                {/* Leyenda de roles compacta */}
+                <div className="flex gap-2 mb-3">
+                  {[
+                    { emoji: '⚔️', label: 'Combatiente', color: 'rgba(255,255,255,0.2)' },
+                    { emoji: '🕵️', label: 'Espía', color: 'rgba(245,158,11,0.6)' },
+                    { emoji: '💣', label: 'Saboteador', color: 'rgba(239,68,68,0.6)' },
+                  ].map(r => (
+                    <div key={r.label} className="flex items-center gap-1 px-2 py-1 rounded-lg"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ fontSize: 11 }}>{r.emoji}</span>
+                      <span className="text-xs font-black" style={{ color: r.color, fontSize: 9 }}>{r.label}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm">💣</span>
-                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Sabo — freeze gratis</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
                 {/* Dos columnas enfrentadas */}
