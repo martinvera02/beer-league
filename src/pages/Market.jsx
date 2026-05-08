@@ -241,7 +241,7 @@ export default function Market() {
     const now = new Date()
     const madrid = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }))
     const h = madrid.getHours()
-    return h >= 22 || h < 2
+    return (h >= 12 && h < 15) || h >= 22 || h < 2
   }
   const marketOpen = isMarketOpen()
 
@@ -549,7 +549,11 @@ export default function Market() {
                 transition={{ repeat: Infinity, duration: 1.5 }}
                 style={{ backgroundColor: marketOpen ? '#10b981' : '#ef4444' }} />
               <p className="text-xs" style={{ color: marketOpen ? '#10b981' : '#ef4444' }}>
-                {marketOpen ? 'Abierto · cierra a las 02:00h 🌙' : 'Cerrado · abre a las 22:00h'}
+                {(() => {
+                  const h = new Date(new Date().toLocaleString('en-US',{timeZone:'Europe/Madrid'})).getHours()
+                  if (marketOpen) return h >= 12 && h < 15 ? 'Abierto · cierra a las 15:00h ☀️' : 'Abierto · cierra a las 02:00h 🌙'
+                  return h >= 2 && h < 12 ? 'Cerrado · abre a las 12:00h ☀️' : h >= 15 && h < 22 ? 'Cerrado · abre a las 22:00h 🌙' : 'Cerrado'
+                })()}
               </p>
             </div>
             {nextTick && (
@@ -612,7 +616,11 @@ export default function Market() {
               {marketOpen ? 'ABIERTO' : 'CERRADO'}
             </p>
             <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9 }}>
-              {marketOpen ? 'cierra 02:00h' : 'abre 22:00h'}
+              {(() => {
+                const h = new Date(new Date().toLocaleString('en-US',{timeZone:'Europe/Madrid'})).getHours()
+                if (marketOpen) return h >= 12 && h < 15 ? 'cierra 15:00h ☀️' : 'cierra 02:00h 🌙'
+                return h >= 2 && h < 12 ? 'abre 12:00h ☀️' : 'abre 22:00h 🌙'
+              })()}
             </p>
           </div>
         </div>
@@ -1450,7 +1458,7 @@ export default function Market() {
                 {!marketOpen && (
                   <div className="rounded-xl p-3 mb-4 text-center" style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)' }}>
                     <p className="text-sm font-bold text-indigo-400">🌙 Mercado cerrado</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Solo puedes operar de 22:00 a 02:00h</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-hint)' }}>Sesiones: 12:00-15:00h ☀️ y 22:00-02:00h 🌙</p>
                   </div>
                 )}
                 {opsRemaining === 0 && marketOpen && (
