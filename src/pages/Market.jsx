@@ -243,7 +243,12 @@ export default function Market() {
     const h = madrid.getHours()
     return (h >= 12 && h < 15) || h >= 22 || h < 2
   }
-  const marketOpen = isMarketOpen()
+  const [marketOpen, setMarketOpen] = useState(isMarketOpen())
+  useEffect(() => {
+    setMarketOpen(isMarketOpen())
+    const interval = setInterval(() => setMarketOpen(isMarketOpen()), 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   const getPowerupCooldown = () => {
     if (!lastPowerupTime) return 0
