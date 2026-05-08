@@ -376,7 +376,7 @@ export default function ClanWar() {
   const myTeam = participants.filter(p => p.league_id === myLeagueId)
   const enemyTeam = participants.filter(p => p.league_id === enemyLeagueId)
 
-  const iAmCaptain = myParticipation?.is_captain === true
+  const iAmCaptain = myParticipation?.is_captain === true || (myLeagueId === activeWar?.challenger_league_id && isChallengerAdmin) || (myLeagueId === activeWar?.defender_league_id && isDefenderAdmin)
   const isDefenderAdmin = myRole[activeWar?.defender_league_id] === 'owner' || myRole[activeWar?.defender_league_id] === 'admin'
   const isChallengerAdmin = myRole[activeWar?.challenger_league_id] === 'owner' || myRole[activeWar?.challenger_league_id] === 'admin'
   const canManageLeagues = myLeagues.some(l => myRole[l.id] === 'owner' || myRole[l.id] === 'admin')
