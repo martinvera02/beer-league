@@ -356,7 +356,13 @@ export default function ClanWar() {
     return d > 0 ? `${d}d ${h % 24}h` : `${h}h`
   }
 
-  const myLeagueId = myParticipation?.league_id
+  // Calcular myLeagueId desde myLeagues directamente, sin depender de myParticipation
+  const myLeagueId = (() => {
+    if (!activeWar) return null
+    if (myLeagues.some(l => l.id === activeWar.challenger_league_id)) return activeWar.challenger_league_id
+    if (myLeagues.some(l => l.id === activeWar.defender_league_id)) return activeWar.defender_league_id
+    return myParticipation?.league_id || null
+  })()
   const isChallenger = myLeagueId === activeWar?.challenger_league_id
   const myLeagueName = isChallenger ? activeWar?.challenger?.name : activeWar?.defender?.name
   const enemyLeagueName = isChallenger ? activeWar?.defender?.name : activeWar?.challenger?.name
@@ -828,7 +834,7 @@ export default function ClanWar() {
             )}
 
             {/* ── EQUIPOS ENFRENTADOS ── */}
-            {participants.length > 0 && (
+            {participants.length > 0 && myLeagueId && (
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-black tracking-widest uppercase"
